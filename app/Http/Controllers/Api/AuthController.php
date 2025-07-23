@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\LoginRequest;
+use App\Http\Resources\AuthResponseResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -23,12 +25,16 @@ class AuthController extends Controller
             ]);
         }
 
-        $tokenName = $request->device_name ?? $request->userAgent() ?? 'api-token';
-        $token = $user->createToken($tokenName)->plainTextToken;
+        return $this->generateToken($user, $request->device_name);
+    }
+
+    public function generateToken(User $user, string $device_name): JsonResponse
+    {
+        $token = $user->createToken($device_name)->plainTextToken;
 
         return response()->json([
-            ...Helper::getUserAuthInfo($user),
-            "token" => $token,
+            'token' => $token,
+            'user' => new AuthResponseResource($user),
         ]);
     }
 

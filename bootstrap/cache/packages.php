@@ -1,34 +1,4 @@
 <?php return array (
-  'barryvdh/laravel-dompdf' => 
-  array (
-    'aliases' => 
-    array (
-      'PDF' => 'Barryvdh\\DomPDF\\Facade\\Pdf',
-      'Pdf' => 'Barryvdh\\DomPDF\\Facade\\Pdf',
-    ),
-    'providers' => 
-    array (
-      0 => 'Barryvdh\\DomPDF\\ServiceProvider',
-    ),
-  ),
-  'beyondcode/laravel-websockets' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'BeyondCode\\LaravelWebSockets\\WebSocketsServiceProvider',
-    ),
-    'aliases' => 
-    array (
-      'WebSocketRouter' => 'BeyondCode\\LaravelWebSockets\\Facades\\WebSocketRouter',
-    ),
-  ),
-  'fruitcake/laravel-cors' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Fruitcake\\Cors\\CorsServiceProvider',
-    ),
-  ),
   'intervention/image' => 
   array (
     'aliases' => 

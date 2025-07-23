@@ -37,7 +37,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Public routes
-Route::post('login', [AuthController::class, 'login'])->name('api.login');
+Route::post('login', [AuthController::class, 'login']);
 Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::get('commons', [HomeController::class, 'getCommonData']);
     Route::prefix('user')->group(function () {

@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -204,7 +205,7 @@ class EmployeeController extends Controller
 
             $user = Auth::user();
 
-            ActivityLog::add($user->employee->name . 'update the personal details for ' . $employee->name,
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the personal details for ' . $employee->name,
                 'updated', [''], 'job-details')
                 ->to($employee)
                 ->as($user);
@@ -213,6 +214,8 @@ class EmployeeController extends Controller
 
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
+
+            Log::info('Employee update failed', [$exception]);
             return response()->json([
                 'message' => $exception->getMessage()
             ], 400);
