@@ -2,11 +2,6 @@
 
 set -e
 
-# Load Laravel .env (if not already loaded into environment)
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs -d '\n')
-fi
-
 # Wait until MySQL is ready
 until php -r "
 try {
