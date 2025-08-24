@@ -20,14 +20,15 @@ class QualificationResource extends JsonResource
         return [
             'id' => $this->id,
             'employee_id' => $this->employee_id,
-            'employee-dashboard' => new EmployeeResource($this->employee),
+//            'employee' => new EmployeeResource($this->employee),
             'education_level_id' => $this->education_level_id,
             'education_level' => $this->educationLevel,
             'institution' => $this->institution,
             'qualification' => $this->qualification,
+            'cert_number' => $this->cert_number,
             'date' => $this->date,
-            'photo' => new PhotoResource($this->photo),
-            'certificate' => $this->photo ? '/storage/docs/qualifications/' . $this->photo->file_name : null,
+//            'photo' => new PhotoResource($this->photo),
+//            'certificate' => $this->photo ? '/storage/docs/qualifications/' . $this->photo->file_name : null,
             'info_update' => $this->informationUpdate,
         ];
     }

@@ -39,36 +39,50 @@ class EmployeeController extends Controller
     public function index(Request $request)
     {
         $employeesQuery = Employee::query();
-        $employeesQuery->when($request->has('department_id') &&
-            $request->department_id !== 'all', function ($q) use ($request) {
-            return $q->where('department_id', $request->department_id);
-        });
 
-        $employeesQuery->when($request->has('rank_id') &&
-            $request->rank_id !== 'all', function ($q) use ($request) {
-            return $q->where('rank_id', $request->rank_id);
-        });
+        // Filter by department
+        if ($request->filled('department') && $request->department !== 'all') {
+            $employeesQuery->where('department_id', $request->department);
+        }
 
-        $employeesQuery->when($request->has('job_category_id') &&
-            $request->job_category_id !== 'all', function ($q) use ($request) {
-            return $q->whereRelation('jobDetail', static function ($jQuery) use ($request) {
-                return $jQuery->where('job_category_id', $request->job_category_id);
+        // Search by name fields
+        if ($request->filled('search')) {
+            $search = $request->query('search');
+            $employeesQuery->where(function ($query) use ($search) {
+                $query->where('first_name', 'LIKE', "%{$search}%")
+                    ->orWhere('last_name', 'LIKE', "%{$search}%")
+                    ->orWhere('middle_name', 'LIKE', "%{$search}%");
             });
-        });
-
-
-        if ($request->has('export') && $request->export === 'true') {
-            return Excel::download(new EmployeeExport(EmployeeResource::collection($employeesQuery->get())),
-                'Expenses.xlsx');
         }
 
-        if ($request->has('print') && $request->print === 'true') {
-            return $this->pdf('print.employee.all', EmployeeResource::collection($employeesQuery->get()), 'Expenses',
-                'landscape');
+        // Filter by rank
+        if ($request->filled('rank_id') && $request->rank_id !== 'all') {
+            $employeesQuery->where('rank_id', $request->rank_id);
         }
 
+        // Filter by job category via relation
+        if ($request->filled('job_category_id') && $request->job_category_id !== 'all') {
+            $employeesQuery->whereHas('jobDetail', function ($query) use ($request) {
+                $query->where('job_category_id', $request->job_category_id);
+            });
+        }
+
+        // Export to Excel
+        if ($request->boolean('export')) {
+            $employees = $employeesQuery->get();
+            return Excel::download(new EmployeeExport(EmployeeResource::collection($employees)), 'employees.xlsx');
+        }
+
+        // Print to PDF
+        if ($request->boolean('print')) {
+            $employees = $employeesQuery->get();
+            return $this->pdf('print.employee.all', EmployeeResource::collection($employees), 'employees', 'landscape');
+        }
+
+        // Paginated response
         return EmployeeResource::collection($employeesQuery->paginate(10));
     }
+
 
     /**
      * Store a newly created resource in storage.
@@ -79,8 +93,10 @@ class EmployeeController extends Controller
      */
     public function store(StoreEmployeeRequest $request)
     {
+
         DB::beginTransaction();
         try {
+            $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
             $employee = Employee::create($request->all());
             $employee->contactDetail()->create();
             $employee->jobDetail()->create();
@@ -181,13 +197,21 @@ class EmployeeController extends Controller
      */
     public function update(UpdateEmployeeRequest $request, $id): EmployeeResource|JsonResponse
     {
+
         DB::beginTransaction();
         try {
+            $user = Auth::user();
+
             $employee = Employee::findOrFail($id);
             $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
 
-            $this->infoDifference($employee, $request->all());
-            $this->requestUpdate($employee);
+            if ($this->isHrAdmin()) {
+                $employee->update($request->all());
+                $employee->save();
+            } else {
+                $this->infoDifference($employee, $request->all());
+                $this->requestUpdate($employee);
+            }
 
             if ($request->has('file') && $request->file !== "null") {
                 $saveFile = new SaveFile($employee, $request->file('file'), $this->docPath, $this->allowedFiles);
@@ -203,10 +227,8 @@ class EmployeeController extends Controller
                 'user_id' => Auth::id()
             ]);
 
-            $user = Auth::user();
-
             ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the personal details for ' . $employee->name,
-                'updated', [''], 'job-details')
+                'updated personal detail', [''], 'personal-details')
                 ->to($employee)
                 ->as($user);
 

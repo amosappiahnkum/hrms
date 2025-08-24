@@ -3,20 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\CelebrationResource;
+use App\Models\Department;
 use App\Models\EducationLevel;
 use App\Models\Employee;
 use App\Models\JobCategory;
 use App\Models\Position;
 use App\Models\Rank;
-use App\Models\Department;
 use App\Models\SubUnit;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Spatie\Permission\Models\Permission;
 
 class Controller extends BaseController
@@ -83,13 +83,22 @@ class Controller extends BaseController
         ]);
     }
 
-
     public function formatData(Builder $builder): array
     {
         return [
             'series' => $builder->pluck('name'),
             'values' => $builder->pluck('employees_count')
         ];
+    }
+
+
+    public static function formatDate($date, string $format = 'Y-m-d'): ?string
+    {
+        if ($date == "" || $date == null) {
+            return null;
+        }
+
+        return Carbon::parse($date)->format($format);
     }
 
     public function getRoles()
@@ -111,5 +120,11 @@ class Controller extends BaseController
     public function isSupervisor(): bool
     {
         return $this->can('approve-leave-request') || $this->can('decline-leave-request');
+    }
+
+    public function isHrAdmin(): bool
+    {
+        $user = Auth::user();
+        return $user->hasRole('super-admin') || $user->hasRole('hr');
     }
 }

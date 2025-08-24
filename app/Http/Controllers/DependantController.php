@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreDependantRequest;
 use App\Http\Requests\UpdateDependantRequest;
 use App\Http\Resources\DependantResource;
+use App\Models\ActivityLog;
 use App\Models\Dependant;
 use App\Models\Employee;
 use App\Traits\InformationUpdate;
@@ -44,16 +45,28 @@ class DependantController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
+
             $employee = Employee::findOrFail($request->employee_id);
 
             $request['dob'] = $request->dob != null ? Carbon::parse($request->dob)->format('Y-m-d') : null;
 
-            $dependant = $employee->departments()->create([
-                'user_id' => Auth::id()
-            ]);
+            if ($this->isHrAdmin()) {
+                $request['user_id'] = $user->id;
+                $dependant = $employee->departments()->create($request->all());
+            } else {
+                $dependant = $employee->departments()->create([
+                    'user_id' => $user->id
+                ]);
 
-            $this->infoDifference($dependant, $request->all());
-            $this->requestUpdate($dependant);
+                $this->infoDifference($dependant, $request->all());
+                $this->requestUpdate($dependant);
+            }
+
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added a dependant for ' . $employee->name,
+                'updated dependant', [''], 'dependant')
+                ->to($employee)
+                ->as($user);
 
             DB::commit();
 
@@ -76,11 +89,24 @@ class DependantController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
+
             $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
+
             $dependant = Dependant::findOrFail($id);
 
-            $this->infoDifference($dependant, $request->all());
-            $this->requestUpdate($dependant);
+            if ($this->isHrAdmin()) {
+                $dependant->update($request->all());
+                $dependant->save();
+            } else {
+                $this->infoDifference($dependant, $request->all());
+                $this->requestUpdate($dependant);
+            }
+
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated dependant for ' . $dependant->employee->name,
+                'updated dependant', [''], 'dependant')
+                ->to($dependant->employee)
+                ->as($user);
 
             DB::commit();
 
@@ -102,11 +128,19 @@ class DependantController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
+
             $dependant = Dependant::findOrFail($id);
             $dependant->informationUpdate()->delete();
             $dependant->delete();
 
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' deleted dependant for ' . $dependant->employee->name,
+                'delete', [''], 'dependant')
+                ->to($dependant->employee)
+                ->as($user);
+
             DB::commit();
+
             return response()->json([
                 'message' => 'Emergency Contact Deleted'
             ]);

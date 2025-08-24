@@ -4,24 +4,31 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreDepartmentRequest;
 use App\Http\Requests\UpdateDepartmentRequest;
+use App\Http\Resources\DepartmentResource;
 use App\Models\Department;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 
 class DepartmentController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @param Request $request
+     * @return AnonymousResourceCollection
      */
-    public function index()
+    public function index(Request $request): AnonymousResourceCollection
     {
-        //
+        $departments = Department::query();
+
+        return DepartmentResource::collection($departments->paginate($request->per_page ?? 10));
     }
 
     /**
      * Show the form for creating a new resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function create()
     {
@@ -31,8 +38,8 @@ class DepartmentController extends Controller
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \App\Http\Requests\StoreDepartmentRequest  $request
-     * @return \Illuminate\Http\Response
+     * @param StoreDepartmentRequest $request
+     * @return Response
      */
     public function store(StoreDepartmentRequest $request)
     {
@@ -42,8 +49,8 @@ class DepartmentController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param  \App\Models\Department  $department
-     * @return \Illuminate\Http\Response
+     * @param Department $department
+     * @return Response
      */
     public function show(Department $department)
     {
@@ -53,8 +60,8 @@ class DepartmentController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  \App\Models\Department  $department
-     * @return \Illuminate\Http\Response
+     * @param Department $department
+     * @return Response
      */
     public function edit(Department $department)
     {
@@ -64,9 +71,9 @@ class DepartmentController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param  \App\Http\Requests\UpdateDepartmentRequest  $request
-     * @param  \App\Models\Department  $department
-     * @return \Illuminate\Http\Response
+     * @param UpdateDepartmentRequest $request
+     * @param Department $department
+     * @return Response
      */
     public function update(UpdateDepartmentRequest $request, Department $department)
     {
@@ -76,8 +83,8 @@ class DepartmentController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @param  \App\Models\Department  $department
-     * @return \Illuminate\Http\Response
+     * @param Department $department
+     * @return Response
      */
     public function destroy(Department $department)
     {

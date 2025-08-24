@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Helpers\SaveFile;
 use App\Http\Requests\StoreQualificationRequest;
 use App\Http\Requests\UpdateQualificationRequest;
 use App\Http\Resources\QualificationResource;
+use App\Models\ActivityLog;
 use App\Models\Education;
 use App\Models\Employee;
 use App\Traits\InformationUpdate;
@@ -68,18 +68,29 @@ class QualificationController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
             $employee = Employee::findOrFail($request->employee_id);
-
-            $qualification = $employee->qualifications()->create([
-                'user_id' => Auth::id()
-            ]);
 
             $request['date'] = Carbon::parse($request->date)->format('Y-m-d');
 
-            $this->infoDifference($qualification, $request->all());
-            $this->requestUpdate($qualification);
+            if ($this->isHrAdmin()) {
+                $request['user_id'] = $user->id;
+                $qualification = $employee->qualifications()->create($request->all());
+            } else {
+                $qualification = $employee->qualifications()->create(['user_id' => $user->id]);
 
-            if ($qualification && $request->has('file') && $request->file !== "null") {
+                $request['date'] = Carbon::parse($request->date)->format('Y-m-d');
+
+                $this->infoDifference($qualification, $request->all());
+                $this->requestUpdate($qualification);
+            }
+
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added emergency contact for ' . $employee->name,
+                'created', [''], 'qualification')
+                ->to($employee)
+                ->as($user);
+
+            /*if ($qualification && $request->has('file') && $request->file !== "null") {
                 $saveFile = new SaveFile($qualification, $request->file('file'), $this->docPath, $this->allowedFiles);
                 $photo = $saveFile->save();
 
@@ -88,7 +99,7 @@ class QualificationController extends Controller
                 ]);
 
                 $this->requestUpdate($photo);
-            }
+            }*/
 
             DB::commit();
             return new QualificationResource($qualification);
@@ -112,13 +123,24 @@ class QualificationController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
+
             $qualification = Education::findOrFail($id);
             $request['date'] = Carbon::parse($request->date)->format('Y-m-d');
 
-            $this->infoDifference($qualification, $request->all());
-            $this->requestUpdate($qualification);
+            if ($this->isHrAdmin()) {
+                $qualification->update($request->all());
+                $qualification->save();
+            } else {
+                $this->infoDifference($qualification, $request->all());
+                $this->requestUpdate($qualification);
+            }
 
-            if ($request->has('file') && $request->file !== "null") {
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the qualification for ' . $qualification->employee->name,
+                'updated', [''], 'qualification')
+                ->to($qualification->employee)
+                ->as($user);
+            /*if ($request->has('file') && $request->file !== "null") {
                 $saveFile = new SaveFile($qualification, $request->file('file'), $this->docPath, $this->allowedFiles);
                 $photo = $saveFile->save($qualification->photo->file_name ?? null);
 
@@ -127,7 +149,7 @@ class QualificationController extends Controller
                 ]);
 
                 $this->requestUpdate($photo);
-            }
+            }*/
             DB::commit();
             return new QualificationResource($qualification);
         } catch (Exception $exception) {

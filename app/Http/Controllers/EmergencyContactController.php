@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreEmergencyContactRequest;
 use App\Http\Requests\UpdateEmergencyContactRequest;
 use App\Http\Resources\EmergencyContactResource;
+use App\Models\ActivityLog;
 use App\Models\EmergencyContact;
 use App\Models\Employee;
 use App\Traits\InformationUpdate;
@@ -42,14 +43,24 @@ class EmergencyContactController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
             $employee = Employee::findOrFail($request->employee_id);
 
-            $contact = $employee->emergencyContacts()->create([
-                'user_id' => Auth::id()
-            ]);
+            if ($this->isHrAdmin()) {
+                $request['user_id'] = $user->id;
+                $contact = $employee->emergencyContacts()->create($request->all());
+            } else {
+                $contact = $employee->emergencyContacts()->create([
+                    'user_id' => $user->id
+                ]);
+                $this->infoDifference($contact, $request->all());
+                $this->requestUpdate($contact);
+            }
 
-            $this->infoDifference($contact, $request->all());
-            $this->requestUpdate($contact);
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added emergency contact for ' . $employee->name,
+                'updated', [''], 'emergency-contact')
+                ->to($employee)
+                ->as($user);
 
             DB::commit();
 
@@ -72,11 +83,21 @@ class EmergencyContactController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
+
             $emergencyContact = EmergencyContact::findOrFail($id);
+            if ($this->isHrAdmin()) {
+                $emergencyContact->update($request->all());
+                $emergencyContact->save();
+            } else {
+                $this->infoDifference($emergencyContact, $request->all());
+                $this->requestUpdate($emergencyContact);
+            }
 
-            $this->infoDifference($emergencyContact, $request->all());
-            $this->requestUpdate($emergencyContact);
-
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the emergency contact for ' . $emergencyContact->employee->name,
+                'updated', [''], 'emergency-contact')
+                ->to($emergencyContact->employee)
+                ->as($user);
             DB::commit();
             return new EmergencyContactResource($emergencyContact);
         } catch (Exception $exception) {

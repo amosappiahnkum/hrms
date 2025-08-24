@@ -206,6 +206,11 @@ class Employee extends ApplicationModel
         return $this->hasMany(Publication::class);
     }
 
+    public function experiences(): HasMany
+    {
+        return $this->hasMany(Experience::class);
+    }
+
     public function grantAndFunds()
     {
         return $this->hasMany(GrantAndFund::class);

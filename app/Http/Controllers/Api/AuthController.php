@@ -8,40 +8,64 @@ use App\Http\Requests\Api\LoginRequest;
 use App\Http\Resources\AuthResponseResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = User::where('email', $request->email)->first();
+        $credentials = $request->only('email', 'password');
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!Auth::attempt($credentials)) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
 
-        return $this->generateToken($user, $request->device_name);
-    }
-
-    public function generateToken(User $user, string $device_name): JsonResponse
-    {
-        $token = $user->createToken($device_name)->plainTextToken;
+        $request->session()->regenerate();
 
         return response()->json([
-            'token' => $token,
-            'user' => new AuthResponseResource($user),
+            'message' => 'Logged in successfully',
+            'user' => new AuthResponseResource(Auth::user()),
         ]);
     }
 
-    public function logout()
+    public function setCookie(User $user, string $device_name): string
     {
-        auth()->user()->currentAccessToken()->delete();
+        $token = $user->createToken($device_name)->plainTextToken;
+        Cookie::queue(
+            Cookie::make(
+                'auth_token',
+                $token,
+                60 * 24, // 1 day
+                null,
+                null,
+                true, // Secure
+                true, // HttpOnly
+                false,
+                'Strict'
+            )
+        );
 
+        return '';
+    }
+
+    public function logout(Request $request): JsonResponse
+    {
+        Auth::guard('web')->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        Cookie::queue(Cookie::forget('auth_token'));
+        Cookie::queue(Cookie::forget('XSRF-TOKEN'));
         return response()->json([
             'message' => 'Token revoked successfully'
         ]);
@@ -50,6 +74,21 @@ class AuthController extends Controller
     public function me()
     {
         return response()->json(auth()->user());
+    }
+
+    public function validateAuth(): JsonResponse
+    {
+        try {
+            return response()->json([
+                'message' => 'Logged in successfully',
+                'user' => new AuthResponseResource(Auth::user()),
+            ]);
+        } catch (\Exception $exception) {
+            Log::error($exception->getMessage());
+            return response()->json([
+                'message' => "Unauthorized",
+            ], 400);
+        }
     }
 
     public function tokens()
