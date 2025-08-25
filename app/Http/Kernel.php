@@ -2,6 +2,7 @@
 
 namespace App\Http;
 
+use App\Http\Middleware\DebugHeaders;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
 
 class Kernel extends HttpKernel
@@ -20,6 +21,7 @@ class Kernel extends HttpKernel
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Http\Middleware\HandleCors::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        DebugHeaders::class
     ];
 
     /**
