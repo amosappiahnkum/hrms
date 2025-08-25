@@ -68,6 +68,8 @@ class SocialAuthController
             return redirect($frontendURL . '/google-auth-success');
 
         } catch (Exception $e) {
+
+            Log::error('Login failed: ', [$e]);
             return redirect($frontendURL . '/login?error=google_login_failed');
         }
     }
