@@ -87,7 +87,7 @@ class AuthController extends Controller
             Log::error($exception->getMessage());
             return response()->json([
                 'message' => "Unauthorized",
-            ], 400);
+            ], 401);
         }
     }
 
