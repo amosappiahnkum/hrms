@@ -2,6 +2,7 @@
 
 namespace App\Traits;
 
+use App\Notifications\InfoUpdateNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
@@ -12,6 +13,9 @@ trait InformationUpdate
 {
 
     use SoftDeletes;
+
+    protected $infoUpdate;
+
     private array $newUpdate;
 
     /**
@@ -35,12 +39,13 @@ trait InformationUpdate
         $this->newUpdate = $difference;
     }
 
-    public function requestUpdate(Model $model): void
+    public function requestUpdate(Model $model)
     {
         if (count($this->newUpdate) > 0) {
 
             $reflection = new \ReflectionClass($model);
-            $model->informationUpdate()->updateOrCreate([
+
+            return $this->infoUpdate = $model->informationUpdate()->updateOrCreate([
                 'information_type' => $reflection->getShortName(),
                 'information_id' => $model->id,
                 'status' => 'pending'
@@ -49,6 +54,25 @@ trait InformationUpdate
                 'new_info' => $this->newUpdate,
                 'requested_by' => Auth::id()
             ]);
+        }
+
+        return null;
+    }
+
+    public function notify($data, $employeeId, array $modelInfo): void
+    {
+        Log::info('here');
+        if ($this->infoUpdate) {
+            $info = [
+                "title" => $data['title'],
+                "message" => $data['message'],
+                'data' => 'info_update',
+                'data_id' => $this->infoUpdate->id,
+                "employee" => $employeeId,
+            ];
+
+            Log::info('inside');
+            $this->notifyRole("hr", InfoUpdateNotification::class, $info, $modelInfo);
         }
     }
 }

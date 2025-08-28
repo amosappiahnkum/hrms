@@ -8,6 +8,7 @@ use App\Models\ActivityLog;
 use App\Models\ContactDetail;
 use App\Models\Employee;
 use App\Traits\InformationUpdate;
+use App\Traits\Notifier;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -16,7 +17,7 @@ use Illuminate\Support\Facades\Log;
 
 class ContactDetailController extends Controller
 {
-    use InformationUpdate;
+    use InformationUpdate, Notifier;
 
     /**
      * Display the specified resource.
@@ -40,6 +41,7 @@ class ContactDetailController extends Controller
     public function update(UpdateContactDetailRequest $request, $id): JsonResponse|ContactDetailResource
     {
         DB::beginTransaction();
+
         try {
             $user = Auth::user();
 
@@ -50,7 +52,18 @@ class ContactDetailController extends Controller
                 $contactDetail->save();
             } else {
                 $this->infoDifference($contactDetail, $request->all());
-                $this->requestUpdate($contactDetail);
+                $update = $this->requestUpdate($contactDetail);
+
+                /*$data = [
+                    "title" => "Change in Contact information",
+                    "message" => $contactDetail->employee->name . " made a request to change the Contact information"
+                ];
+
+                $this->notify($data, $contactDetail->employee_id, [
+                    'type' => 'ContactDetail',
+                    'model_type' => 'InformationUpdate',
+                    'model_id' => $update->id
+                ]);*/
             }
 
             ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the contact details for ' . $contactDetail->employee->name,
@@ -61,6 +74,9 @@ class ContactDetailController extends Controller
             DB::commit();
             return new ContactDetailResource($contactDetail);
         } catch (Exception $exception) {
+            DB::rollBack();
+
+            Log::error($exception);
             return response()->json([
                 'message' => $exception->getMessage()
             ], 400);

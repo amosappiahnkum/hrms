@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -21,3 +22,16 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 Broadcast::channel('chat', function ($user) {
     return $user;
 },['middleware' => ['auth:sanctum']]);
+
+
+Broadcast::channel('notify-user.{role}', function (User $user, string $role) {
+    return $user->hasRole($role);
+});
+
+Broadcast::channel('read-notification', function (User $user) {
+    return true;
+});
+
+Broadcast::channel('system-maintenance', function () {
+    return true;
+});

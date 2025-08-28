@@ -147,14 +147,16 @@ class EmployeeController extends Controller
         }
     }
 
-    public function searchEmployees($query): AnonymousResourceCollection
+    public function searchEmployees(Request $request): AnonymousResourceCollection
     {
+
+        $query = $request->query('query');
         $employees = Employee::query()
             ->where('last_name', 'like', '%' . $query . '%')
             ->orWhere('middle_name', 'like', '%' . $query . '%')
-            ->orWhere('first_name', 'like', '%' . $query . '%')->get();
+            ->orWhere('first_name', 'like', '%' . $query . '%');
 
-        return EmployeeResource::collection($employees);
+        return EmployeeResource::collection($employees->paginate(10));
     }
 
     public function getPeople(): AnonymousResourceCollection

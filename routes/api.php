@@ -54,9 +54,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
 
     Route::apiResource('/users', UserController::class);
 
-    Route::prefix('employees')->group(function () {
-        Route::get('/search/{query}', [EmployeeController::class, 'searchEmployees']);
-    });
+    Route::get('employees/search', [EmployeeController::class, 'searchEmployees']);
 
     Route::get('/stats/employee-management', [CommonController::class, 'getEmployeeManagementStats']);
     Route::resource('/employees', EmployeeController::class);
@@ -73,16 +71,16 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::apiResource('/community-services', CommunityServiceController::class);
     Route::apiResource('/previous-ranks', PreviousRankController::class);
     Route::apiResource('/previous-positions', PreviousPositionController::class);
-    Route::prefix('leave-request')->group(function () {
+    Route::prefix('leave-requests')->group(function () {
         Route::get('holidays', [LeaveRequestController::class, 'getHolidays']);
         Route::get('types', [LeaveRequestController::class, 'getLeaveTypes']);
         Route::post('status/change', [LeaveRequestController::class, 'changeLeaveStatus']);
     });
-    Route::apiResource('/leave-request', LeaveRequestController::class);
+    Route::apiResource('/leave-requests', LeaveRequestController::class);
     Route::prefix('leave-management')->group(function () {
         Route::get('/filter-params', [LeaveManagementController::class, 'getFilterParams']);
-        Route::get('/leave-request', [LeaveManagementController::class, 'getLeaveRequests']);
-        Route::post('/leave-request/status/hr/change', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
+        Route::get('/leave-requests', [LeaveManagementController::class, 'getLeaveRequests']);
+        Route::post('/leave-requests/status/hr/change', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
     });
 
     Route::apiResource('/leave-types', LeaveTypeController::class);
