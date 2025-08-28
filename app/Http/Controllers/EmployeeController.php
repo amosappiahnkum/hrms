@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -199,7 +200,6 @@ class EmployeeController extends Controller
      */
     public function update(UpdateEmployeeRequest $request, $id): EmployeeResource|JsonResponse
     {
-
         DB::beginTransaction();
         try {
             $user = Auth::user();
@@ -233,6 +233,11 @@ class EmployeeController extends Controller
                 'updated personal detail', [''], 'personal-details')
                 ->to($employee)
                 ->as($user);
+
+            Http::withHeader('token', env('TTU_API_TOKEN'))
+                ->post(env('TTU_API_URL') . '/staff/bio-data', [
+                    'staff_id' => $request->staff_id,
+                ]);
 
             DB::commit();
 
