@@ -46,13 +46,25 @@ class EmployeeController extends Controller
             $employeesQuery->where('department_id', $request->department);
         }
 
+        // Filter by department
+        if ($request->filled('gender') && $request->gender !== 'all') {
+            $employeesQuery->where('gender', $request->gender);
+        }
+
+
+        // Filter by department
+        if ($request->filled('marital_status') && $request->marital_status !== 'all') {
+            $employeesQuery->where('marital_status', $request->marital_status);
+        }
+
         // Search by name fields
         if ($request->filled('search')) {
             $search = $request->query('search');
             $employeesQuery->where(function ($query) use ($search) {
                 $query->where('first_name', 'LIKE', "%{$search}%")
                     ->orWhere('last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('middle_name', 'LIKE', "%{$search}%");
+                    ->orWhere('middle_name', 'LIKE', "%{$search}%")
+                    ->orWhere('staff_id', 'LIKE', "%{$search}%");
             });
         }
 
