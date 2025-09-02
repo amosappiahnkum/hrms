@@ -6,7 +6,6 @@ use App\Notifications\InfoUpdateNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use JsonException;
 
 trait InformationUpdate
@@ -42,7 +41,6 @@ trait InformationUpdate
     public function requestUpdate(Model $model)
     {
         if (count($this->newUpdate) > 0) {
-
             $reflection = new \ReflectionClass($model);
 
             return $this->infoUpdate = $model->informationUpdate()->updateOrCreate([
@@ -61,7 +59,6 @@ trait InformationUpdate
 
     public function notify($data, $employeeId, array $modelInfo): void
     {
-        Log::info('here');
         if ($this->infoUpdate) {
             $info = [
                 "title" => $data['title'],
@@ -71,7 +68,6 @@ trait InformationUpdate
                 "employee" => $employeeId,
             ];
 
-            Log::info('inside');
             $this->notifyRole("hr", InfoUpdateNotification::class, $info, $modelInfo);
         }
     }

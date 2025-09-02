@@ -196,7 +196,7 @@ class EmployeeController extends Controller
         return response()->json($employee);
     }
 
-    public function updateStaffMail(Request $request)
+    public function updateStaffMail(Request $request): JsonResponse
     {
         ContactDetail::find($request->id)->update($request->only(['work_email']));
 
