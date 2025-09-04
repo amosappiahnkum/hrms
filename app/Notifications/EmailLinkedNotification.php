@@ -38,6 +38,7 @@ class EmailLinkedNotification extends Notification implements ShouldQueue
     {
         return (new MailMessage)
             ->subject('Account Linked')
+            ->cc(['itsupport@ttu.edu.gh'])
             ->greeting('Dear ' . $this->name . '!')
             ->line('Your account has been linked successfully.')
             ->line('Visit hrms.ttuportal.com.')
