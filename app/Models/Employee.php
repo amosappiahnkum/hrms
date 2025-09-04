@@ -30,6 +30,8 @@ class Employee extends ApplicationModel
         'middle_name',
         'last_name',
         'staff_id',
+        'job_title',
+        'job_type',
         'dob',
         'gender',
         'marital_status',

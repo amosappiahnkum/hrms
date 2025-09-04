@@ -11,6 +11,7 @@ use App\Models\ActivityLog;
 use App\Models\ContactDetail;
 use App\Models\Employee;
 use App\Models\PreviousRank;
+use App\Notifications\EmailLinkedNotification;
 use App\Traits\InformationUpdate;
 use App\Traits\UsePrint;
 use Carbon\Carbon;
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -198,7 +200,13 @@ class EmployeeController extends Controller
 
     public function updateStaffMail(Request $request): JsonResponse
     {
-        ContactDetail::find($request->id)->update($request->only(['work_email']));
+        $contact = ContactDetail::find($request->id);
+
+        $employeeName = $contact->employee->first_name;
+
+        $contact->update($request->only(['work_email']));
+
+        Notification::route('mail', $request->work_email)->notify(new EmailLinkedNotification($employeeName));
 
         return response()->json(["message" => "Email updated successfully"]);
     }
