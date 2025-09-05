@@ -240,14 +240,14 @@ class EmployeeController extends Controller
                 $saveFile->save();
             }
 
-            PreviousRank::updateOrCreate([
+            /*PreviousRank::updateOrCreate([
                 'rank_id' => $employee->rank_id,
                 'employee_id' => $employee->id
             ], [
                 'rank_id' => $employee->rank_id,
                 'employee_id' => $employee->id,
                 'user_id' => Auth::id()
-            ]);
+            ]);*/
 
             ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the personal details for ' . $employee->name,
                 'updated personal detail', [''], 'personal-details')
@@ -266,7 +266,7 @@ class EmployeeController extends Controller
 
             Log::info('Employee update failed', [$exception]);
             return response()->json([
-                'message' => $exception->getMessage()
+                'message' => "Something went wrong"
             ], 400);
         }
     }

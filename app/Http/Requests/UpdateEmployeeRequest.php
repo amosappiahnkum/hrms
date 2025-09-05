@@ -35,4 +35,14 @@ class UpdateEmployeeRequest extends FormRequest
             'department_id' => 'required|integer|exists:departments,id',
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'department_id.required' => 'Department is required.',
+            'telephone.unique' => 'Telephone number is already taken.',
+            'staff_id.required' => 'Staff is required.',
+            'rank_id.required' => 'Rank is required.',
+        ];
+    }
 }
