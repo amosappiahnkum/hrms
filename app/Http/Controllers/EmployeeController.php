@@ -6,11 +6,11 @@ use App\Exports\EmployeeExport;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
+use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Models\ActivityLog;
 use App\Models\ContactDetail;
 use App\Models\Employee;
-use App\Models\PreviousRank;
 use App\Notifications\EmailLinkedNotification;
 use App\Traits\InformationUpdate;
 use App\Traits\UsePrint;
@@ -19,6 +19,7 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -37,7 +38,7 @@ class EmployeeController extends Controller
     /**
      * Display a listing of the resource.
      *
-     * @return AnonymousResourceCollection|\Illuminate\Http\Response|BinaryFileResponse
+     * @return AnonymousResourceCollection|Response|BinaryFileResponse
      */
     public function index(Request $request)
     {
@@ -95,7 +96,30 @@ class EmployeeController extends Controller
         }
 
         // Paginated response
-        return EmployeeResource::collection($employeesQuery->paginate(10));
+        return EmployeeResource::collection($employeesQuery->paginate($request->perPage ?? 10));
+    }
+
+    /**
+     * Display a listing of the resource.
+     *
+     * @param Request $request
+     * @return AnonymousResourceCollection
+     */
+    public function getEmployeeDirectory(Request $request): AnonymousResourceCollection
+    {
+        $employeesQuery = Employee::query();
+
+        if ($request->filled('search')) {
+            $search = $request->query('search');
+            $employeesQuery->where(function ($query) use ($search) {
+                $query->where('first_name', 'LIKE', "%{$search}%")
+                    ->orWhere('last_name', 'LIKE', "%{$search}%")
+                    ->orWhere('middle_name', 'LIKE', "%{$search}%")
+                    ->orWhere('staff_id', 'LIKE', "%{$search}%");
+            });
+        }
+
+        return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->perPage ?? 10));
     }
 
 

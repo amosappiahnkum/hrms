@@ -57,6 +57,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::get('employees/search', [EmployeeController::class, 'searchEmployees']);
 
     Route::get('/stats/employee-management', [CommonController::class, 'getEmployeeManagementStats']);
+    Route::get('/employees/directory', [EmployeeController::class, 'getEmployeeDirectory']);
     Route::resource('/employees', EmployeeController::class);
     Route::get('/people', [EmployeeController::class, 'getPeople']);
 
