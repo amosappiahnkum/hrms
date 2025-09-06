@@ -28,9 +28,12 @@ class EmergencyContactController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $emergencyContacts = EmergencyContact::where('employee_id', $request->employeeId)->paginate(10);
+        $emergencyContacts = EmergencyContact::query();
 
-        return EmergencyContactResource::collection($emergencyContacts);
+        $employee = Employee::query()->where('uuid', $request->employeeId)->first();
+        $emergencyContacts->where('employee_id', $employee->id);
+
+        return EmergencyContactResource::collection($emergencyContacts->paginate($request->perPage ?? 10));
     }
 
     /**
@@ -44,7 +47,7 @@ class EmergencyContactController extends Controller
         DB::beginTransaction();
         try {
             $user = Auth::user();
-            $employee = Employee::findOrFail($request->employee_id);
+            $employee = Employee::query()->where('uuid', $request->employee_id)->first();
 
             if ($this->isHrAdmin()) {
                 $request['user_id'] = $user->id;

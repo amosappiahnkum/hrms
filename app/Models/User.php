@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\HasActivityLogs;
+use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -13,7 +14,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, HasApiTokens, Notifiable, SoftDeletes, HasRoles, HasActivityLogs;
+    use HasFactory, HasApiTokens, Notifiable, SoftDeletes, HasRoles, HasActivityLogs, HasUuid;
 
     /**
      * The attributes that are mass assignable.

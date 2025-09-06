@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends ApplicationModel
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasUuid;
 
     /**
      * @var string[]
@@ -134,7 +135,7 @@ class Employee extends ApplicationModel
     /**
      * @return HasMany
      */
-    public function departments(): hasMany
+    public function dependants(): hasMany
     {
         return $this->hasMany(Dependant::class);
     }

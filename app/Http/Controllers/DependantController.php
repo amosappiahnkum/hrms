@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DependantController extends Controller
 {
@@ -30,9 +31,13 @@ class DependantController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $dependants = Dependant::where('employee_id', $request->employeeId)->paginate(10);
+        $dependants = Dependant::query();
 
-        return DependantResource::collection($dependants);
+        $employee = Employee::query()->where('uuid', $request->employeeId)->first();
+
+        $dependants->where('employee_id', $employee->id);
+
+        return DependantResource::collection($dependants->paginate($request->perPage ?? 10));
     }
 
     /**
@@ -47,15 +52,15 @@ class DependantController extends Controller
         try {
             $user = Auth::user();
 
-            $employee = Employee::findOrFail($request->employee_id);
+            $employee = Employee::query()->where('uuid', $request->employee_id)->first();
 
             $request['dob'] = $request->dob != null ? Carbon::parse($request->dob)->format('Y-m-d') : null;
 
             if ($this->isHrAdmin()) {
                 $request['user_id'] = $user->id;
-                $dependant = $employee->departments()->create($request->all());
+                $dependant = $employee->dependants()->create($request->all());
             } else {
-                $dependant = $employee->departments()->create([
+                $dependant = $employee->dependants()->create([
                     'user_id' => $user->id
                 ]);
 

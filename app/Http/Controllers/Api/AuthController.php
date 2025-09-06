@@ -71,9 +71,20 @@ class AuthController extends Controller
         ]);
     }
 
-    public function me()
+    public function me(): JsonResponse
     {
-        return response()->json(auth()->user());
+        $user = Auth::user();
+
+        return response()->json([
+            "id" => $user->id,
+            "uuid" => $user->uuid,
+            "name" => $user->name,
+            "username" => $user->username,
+            "email" => $user->email,
+            "phone_number" => $user->phone_number,
+            "password_changed" => $user->password_changed,
+            "employee_id" => $user?->employee?->uuid ?? null
+        ]);
     }
 
     public function validateAuth(): JsonResponse
@@ -91,14 +102,14 @@ class AuthController extends Controller
         }
     }
 
-    public function tokens()
+    public function tokens(): JsonResponse
     {
         return response()->json([
             'tokens' => auth()->user()->tokens
         ]);
     }
 
-    public function revokeToken(string $tokenId)
+    public function revokeToken(string $tokenId): JsonResponse
     {
         auth()->user()->tokens()->where('id', $tokenId)->delete();
 
@@ -107,7 +118,7 @@ class AuthController extends Controller
         ]);
     }
 
-    public function revokeAllTokens()
+    public function revokeAllTokens(): JsonResponse
     {
         auth()->user()->tokens()->delete();
 

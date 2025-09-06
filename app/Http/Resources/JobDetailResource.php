@@ -18,6 +18,7 @@ class JobDetailResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'uuid' => $this->uuid,
             'position_id' => $this->position_id,
             'job_title' => $this->position?->name,
             'status' => $this->status,

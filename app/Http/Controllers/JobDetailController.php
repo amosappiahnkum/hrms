@@ -34,7 +34,7 @@ class JobDetailController extends Controller
      */
     public function show($employeeId): JobDetailResource
     {
-        $employee = Employee::findOrFail($employeeId);
+        $employee = Employee::query()->where('uuid', $employeeId)->first();
 
         return new JobDetailResource($employee->jobDetail);
     }

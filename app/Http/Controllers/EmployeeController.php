@@ -128,12 +128,14 @@ class EmployeeController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param Employee $employee
+     * @param string $employeeId
      *
      * @return EmployeeResource
      */
-    public function show(Employee $employee): EmployeeResource
+    public function show(string $employeeId): EmployeeResource
     {
+        $employee = Employee::query()->where('uuid', $employeeId)->first();
+
         return new EmployeeResource($employee);
     }
 
@@ -185,7 +187,7 @@ class EmployeeController extends Controller
         return EmployeeResource::collection($employeesQuery->paginate(10));
     }
 
-    public function getStaff(Request $request)
+    public function getStaff(Request $request): JsonResponse
     {
         $employee = Employee::query()->with('contactDetail')->where('staff_id', $request->staffId)->first();
 
@@ -224,6 +226,7 @@ class EmployeeController extends Controller
         try {
             $user = Auth::user();
 
+            Log::info('ss', $request->all());
             $employee = Employee::findOrFail($id);
             $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
 

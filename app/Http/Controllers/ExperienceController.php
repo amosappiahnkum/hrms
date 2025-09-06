@@ -30,23 +30,12 @@ class ExperienceController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $educations = Experience::query();
+        $experiences = Experience::query();
 
+        $employee = Employee::query()->where('uuid', $request->employeeId)->first();
+        $experiences->where('employee_id', $employee->id);
 
-
-        $educations->where('employee_id', $request->employeeId);
-
-        return ExperienceResource::collection($educations->paginate(10));
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return Response
-     */
-    public function create()
-    {
-        //
+        return ExperienceResource::collection($experiences->paginate($request->perPage ?? 10));
     }
 
     /**
@@ -60,7 +49,7 @@ class ExperienceController extends Controller
         DB::beginTransaction();
         try {
             $user = Auth::user();
-            $employee = Employee::findOrFail($request->employee_id);
+            $employee = Employee::query()->where('uuid', $request->employee_id)->first();
             $request['to'] = self::formatDate($request['to']);
             $request['from'] = self::formatDate($request['from']);
 

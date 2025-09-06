@@ -27,7 +27,7 @@ class ContactDetailController extends Controller
      */
     public function show($employeeId): ContactDetailResource
     {
-        $employee = Employee::findOrFail($employeeId);
+        $employee = Employee::query()->where('uuid', $employeeId)->first();
         return new ContactDetailResource($employee->contactDetail);
     }
 

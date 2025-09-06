@@ -24,6 +24,10 @@ class UpdateJobDetailRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'position_id' => 'required|exists:positions,id',
+            'job_category_id' => 'required|exists:job_categories,id',
+            'employee_id' => 'required|exists:employees,id',
+        ];
     }
 }

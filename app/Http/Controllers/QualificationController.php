@@ -40,22 +40,10 @@ class QualificationController extends Controller
     {
         $educations = Education::query();
 
-        /* if ($request->has('export') && $request->export === 'true'){
-             return  Excel::download(new EducationExport(
-                 QualificationResource::collection($educations->get())), 'Educations.xlsx');
-         }
+        $employee = Employee::query()->where('uuid', $request->employeeId)->first();
+        $educations->where('employee_id', $employee->id);
 
-         if ($request->has('print') && $request->print === 'true'){
-             return $this->pdf('print.employee-dashboard.qualifications',
-                 QualificationResource::collection($educations->get()),'Educations');
-         }
-         if ($request->has('page') && $request->page == 0){
-             return QualificationResource::collection($educations->get());
-         }*/
-
-        $educations->where('employee_id', $request->employeeId);
-
-        return QualificationResource::collection($educations->paginate(10));
+        return QualificationResource::collection($educations->paginate($request->perPage ?? 10));
     }
 
     /**
@@ -69,7 +57,7 @@ class QualificationController extends Controller
         DB::beginTransaction();
         try {
             $user = Auth::user();
-            $employee = Employee::findOrFail($request->employee_id);
+            $employee = Employee::query()->where('uuid', $request->employee_id)->first();
 
             $request['date'] = Carbon::parse($request->date)->format('Y-m-d');
 

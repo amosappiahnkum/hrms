@@ -19,7 +19,7 @@ class NextOfKinController extends Controller
 
     public function show($employeeId): NextOfKinResource
     {
-        $employee = Employee::findOrFail($employeeId);
+        $employee = Employee::query()->where('uuid', $employeeId)->first();
 
         if (!$employee->nextOfKin) {
             $nextOfKin = $employee->nextOfKin()->create();
