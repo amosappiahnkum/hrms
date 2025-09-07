@@ -37,7 +37,7 @@ class DependantController extends Controller
 
         $dependants->where('employee_id', $employee->id);
 
-        return DependantResource::collection($dependants->paginate($request->perPage ?? 10));
+        return DependantResource::collection($dependants->paginate($request->per_page ?? 10));
     }
 
     /**

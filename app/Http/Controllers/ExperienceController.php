@@ -35,7 +35,7 @@ class ExperienceController extends Controller
         $employee = Employee::query()->where('uuid', $request->employeeId)->first();
         $experiences->where('employee_id', $employee->id);
 
-        return ExperienceResource::collection($experiences->paginate($request->perPage ?? 10));
+        return ExperienceResource::collection($experiences->paginate($request->per_page ?? 10));
     }
 
     /**

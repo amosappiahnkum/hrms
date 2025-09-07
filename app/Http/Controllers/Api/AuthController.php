@@ -83,7 +83,8 @@ class AuthController extends Controller
             "email" => $user->email,
             "phone_number" => $user->phone_number,
             "password_changed" => $user->password_changed,
-            "employee_id" => $user?->employee?->uuid ?? null
+            "employee_id" => $user?->employee?->uuid ?? null,
+            "department_id" => $user?->employee?->department_id ?? null
         ]);
     }
 

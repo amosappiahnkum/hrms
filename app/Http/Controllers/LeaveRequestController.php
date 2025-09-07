@@ -17,8 +17,6 @@ use App\Notifications\LeaveRequestNotification;
 use App\Notifications\LeaveStatusNotification;
 use Carbon\Carbon;
 use Exception;
-use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -356,5 +354,16 @@ class LeaveRequestController extends Controller
     public function show(LeaveRequest $leaveRequest): JsonResponse
     {
         return response()->json(new LeaveRequestResource($leaveRequest));
+    }
+
+    public function getMyLeaveRequest(Request $request): AnonymousResourceCollection
+    {
+        $auth = Auth::user();
+
+        $leaveRequest = LeaveRequest::query();
+
+        $leaveRequest->where('employee_id', $auth->employee->id);
+
+        return LeaveRequestResource::collection($leaveRequest->paginate($request->per_page ?? 10));
     }
 }

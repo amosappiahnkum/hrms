@@ -33,7 +33,7 @@ class EmergencyContactController extends Controller
         $employee = Employee::query()->where('uuid', $request->employeeId)->first();
         $emergencyContacts->where('employee_id', $employee->id);
 
-        return EmergencyContactResource::collection($emergencyContacts->paginate($request->perPage ?? 10));
+        return EmergencyContactResource::collection($emergencyContacts->paginate($request->per_page ?? 10));
     }
 
     /**

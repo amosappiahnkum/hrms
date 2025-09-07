@@ -96,7 +96,7 @@ class EmployeeController extends Controller
         }
 
         // Paginated response
-        return EmployeeResource::collection($employeesQuery->paginate($request->perPage ?? 10));
+        return EmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
     }
 
     /**
@@ -109,6 +109,7 @@ class EmployeeController extends Controller
     {
         $employeesQuery = Employee::query();
 
+
         if ($request->filled('search')) {
             $search = $request->query('search');
             $employeesQuery->where(function ($query) use ($search) {
@@ -119,7 +120,12 @@ class EmployeeController extends Controller
             });
         }
 
-        return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->perPage ?? 10));
+        if ($request->filled('department') && $request->department !== 'all') {
+            $employeesQuery->where('department_id', $request->department_id);
+        }
+
+
+        return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->per_page ?? 10));
     }
 
 

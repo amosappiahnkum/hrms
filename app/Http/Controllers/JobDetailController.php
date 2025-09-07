@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Helpers\SaveFile;
 use App\Http\Requests\UpdateJobDetailRequest;
 use App\Http\Resources\JobDetailResource;
 use App\Models\ActivityLog;
@@ -58,13 +57,13 @@ class JobDetailController extends Controller
             $request['contract_end_date'] = $this->getDate($request->contract_end_date);
 
 
-            if ($this->isHrAdmin()) {
-                $jobDetail->update($request->all());
-                $jobDetail->save();
-            } else {
+//            if ($this->isHrAdmin()) {
+//                $jobDetail->update($request->all());
+//                $jobDetail->save();
+//            } else {
                 $this->infoDifference($jobDetail, $request->all());
                 $this->requestUpdate($jobDetail);
-            }
+//            }
 
             if ($request->has('position_id') && $request->position_id != 'null') {
                 PreviousPosition::updateOrCreate([

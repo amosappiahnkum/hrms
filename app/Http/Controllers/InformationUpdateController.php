@@ -31,7 +31,10 @@ class InformationUpdateController extends Controller
             ], 400);
         }
 
-        $infoUpdates = InformationUpdate::query()->where('status', $request->status)->orderBy('created_at', 'asc')->paginate($request->per_page ?? 10);
+        $infoUpdates = InformationUpdate::query()
+            ->where('status', $request->status)
+            ->orderBy('created_at', 'asc')
+            ->paginate($request->per_page ?? 10);
 
         return InformationUpdateResource::collection($infoUpdates);
     }

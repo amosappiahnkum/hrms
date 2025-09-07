@@ -78,6 +78,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::post('status/change', [LeaveRequestController::class, 'changeLeaveStatus']);
     });
     Route::apiResource('/leave-requests', LeaveRequestController::class);
+    Route::get('my-leave-requests', [LeaveRequestController::class, 'getMyLeaveRequest']);
     Route::prefix('leave-management')->group(function () {
         Route::get('/filter-params', [LeaveManagementController::class, 'getFilterParams']);
         Route::get('/leave-requests', [LeaveManagementController::class, 'getLeaveRequests']);
@@ -108,7 +109,6 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
 
     Route::get('employees/{employee}/publications', [PublicationController::class, 'getMyPublications']);
     Route::apiResource('publications', PublicationController::class);
-
     Route::apiResource('grants', GrantAndFundController::class);
 
     // Auth routes

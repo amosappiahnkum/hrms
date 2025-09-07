@@ -43,7 +43,7 @@ class QualificationController extends Controller
         $employee = Employee::query()->where('uuid', $request->employeeId)->first();
         $educations->where('employee_id', $employee->id);
 
-        return QualificationResource::collection($educations->paginate($request->perPage ?? 10));
+        return QualificationResource::collection($educations->paginate($request->per_page ?? 10));
     }
 
     /**
