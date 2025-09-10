@@ -24,7 +24,7 @@ class StoreExperienceRequest extends FormRequest
     public function rules()
     {
         return [
-            //
+            'employee_id' => 'required|string|exists:employees,uuid',
         ];
     }
 }
