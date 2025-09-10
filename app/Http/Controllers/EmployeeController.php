@@ -256,7 +256,6 @@ class EmployeeController extends Controller
         try {
             $user = Auth::user();
 
-            Log::info('ss', $request->all());
             $employee = Employee::findOrFail($id);
             $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
 
