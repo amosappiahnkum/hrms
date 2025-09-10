@@ -24,7 +24,7 @@ class UpdateDependantRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'employee_id' => 'required|string|exists:employees,uuid',
         ];
     }
 }
