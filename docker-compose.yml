@@ -12,7 +12,7 @@ services:
     networks:
       - hrms_app_network
     depends_on:
-      - hrms_db
+#      - hrms_db
       - hrms_redis
     env_file:
       - .env
@@ -31,23 +31,23 @@ services:
     networks:
       - hrms_app_network
 
-  hrms_db:
-    image: mysql:8.0
-    container_name: hrms_db
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      MYSQL_DATABASE: ${DB_DATABASE}
-      MYSQL_USER: ${DB_USERNAME}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-    volumes:
-      - mysqldata:/var/lib/mysql
-    ports:
-      - "${APP_DB_PORT}:${DB_PORT}"
-    networks:
-      - hrms_app_network
+#  hrms_db:
+#    image: mysql:8.0
+#    container_name: hrms_db
+#    restart: unless-stopped
+#    env_file:
+#      - .env
+#    environment:
+#      MYSQL_DATABASE: ${DB_DATABASE}
+#      MYSQL_USER: ${DB_USERNAME}
+#      MYSQL_PASSWORD: ${DB_PASSWORD}
+#      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+#    volumes:
+#      - mysqldata:/var/lib/mysql
+#    ports:
+#      - "${APP_DB_PORT}:${DB_PORT}"
+#    networks:
+#      - hrms_app_network
 
   hrms_redis:
     image: redis:alpine
