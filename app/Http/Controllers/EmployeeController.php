@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\EmployeeExport;
+use App\Helpers\Helper;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
@@ -286,10 +287,7 @@ class EmployeeController extends Controller
                 ->to($employee)
                 ->as($user);
 
-            Http::withHeader('token', env('TTU_API_TOKEN'))
-                ->post(env('TTU_API_URL') . '/staff/bio-data', [
-                    'staff_id' => $request->staff_id,
-                ]);
+            Helper::updateSRMS($request->staff_id);
 
             DB::commit();
 

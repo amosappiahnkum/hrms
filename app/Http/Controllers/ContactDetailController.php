@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\Helper;
 use App\Http\Requests\UpdateContactDetailRequest;
 use App\Http\Resources\ContactDetailResource;
 use App\Models\ActivityLog;
@@ -31,6 +32,16 @@ class ContactDetailController extends Controller
         return new ContactDetailResource($employee->contactDetail);
     }
 
+    function cleanPhoneNumber($phone)
+    {
+        // Check if phone starts with '0'
+        if (substr($phone, 0, 1) === '0') {
+            return substr($phone, 1); // Remove the first digit
+        }
+
+        return $phone; // Return as-is
+    }
+
     /**
      * Update the specified resource in storage.
      *
@@ -54,6 +65,7 @@ class ContactDetailController extends Controller
                 $this->infoDifference($contactDetail, $request->all());
                 $update = $this->requestUpdate($contactDetail);
 
+                Helper::updateSRMS($this->cleanPhoneNumber($request->telephone));
                 /*$data = [
                     "title" => "Change in Contact information",
                     "message" => $contactDetail->employee->name . " made a request to change the Contact information"
