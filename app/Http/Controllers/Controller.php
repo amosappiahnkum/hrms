@@ -10,6 +10,7 @@ use App\Models\JobCategory;
 use App\Models\Position;
 use App\Models\Rank;
 use App\Models\SubUnit;
+use App\Models\TerminationReason;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -35,6 +36,7 @@ class Controller extends BaseController
 
         $isStaff = $loggedInUser->getRoleNames()->contains('staff') || $loggedInUser->getRoleNames()->contains('admin');
         $educationalLevels = EducationLevel::all();
+        $terminationReasons = TerminationReason::query()->select(['uuid', 'reason'])->get();
         $positions = Position::all();
         $jobCategories = JobCategory::all();
         $subUnits = SubUnit::all();
@@ -64,6 +66,7 @@ class Controller extends BaseController
 
         return response([
             'educationalLevels' => $educationalLevels,
+            'terminationReasons' => $terminationReasons,
             'jobCategories' => $jobCategories,
             'subUnits' => $subUnits,
             'departments' => $departments,

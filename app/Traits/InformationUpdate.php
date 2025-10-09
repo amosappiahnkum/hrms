@@ -26,7 +26,7 @@ trait InformationUpdate
      */
     public function infoDifference(Model $oldInfo, array $newInfo = []): void
     {
-        unset($newInfo['id'], $newInfo['file']);
+        unset($newInfo['id'], $newInfo['file'], $newInfo['employee_id']);
         $newData = json_decode(json_encode($newInfo, JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);
         $oldData = json_decode(json_encode($oldInfo, JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);
 

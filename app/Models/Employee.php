@@ -49,7 +49,8 @@ class Employee extends ApplicationModel
         'senior_staff',
         'senior_member',
         'junior_staff',
-        'secondment_staff'
+        'secondment_staff',
+        "current_status"
     ];
 
     /**

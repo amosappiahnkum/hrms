@@ -7,6 +7,7 @@ use App\Helpers\Helper;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
+use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Models\ActivityLog;
@@ -299,5 +300,23 @@ class EmployeeController extends Controller
                 'message' => "Something went wrong"
             ], 400);
         }
+    }
+
+    public function updateEmployeeStatus(UpdateEmployeeJobTypeRequest $request): JsonResponse
+    {
+        $employee = Employee::query()->where('uuid', $request->employee_id)->first();
+
+        if (!$employee) {
+            return response()->json([
+                'message' => 'Employee not found',
+            ], 404);
+        }
+
+        $employee->update($request->only(['job_type']));
+
+        return response()->json([
+            'message' => 'Employee status updated successfully',
+            'jobType' => $employee->job_type
+        ]);
     }
 }

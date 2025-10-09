@@ -54,10 +54,13 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
 
     Route::apiResource('/users', UserController::class);
 
-    Route::get('employees/search', [EmployeeController::class, 'searchEmployees']);
+    Route::prefix('employees')->group(function () {
+        Route::get('/search', [EmployeeController::class, 'searchEmployees']);
+        Route::post('update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
+        Route::get('/directory', [EmployeeController::class, 'getEmployeeDirectory']);
+    });
 
     Route::get('/stats/employee-management', [CommonController::class, 'getEmployeeManagementStats']);
-    Route::get('/employees/directory', [EmployeeController::class, 'getEmployeeDirectory']);
     Route::resource('/employees', EmployeeController::class);
     Route::get('/people', [EmployeeController::class, 'getPeople']);
 

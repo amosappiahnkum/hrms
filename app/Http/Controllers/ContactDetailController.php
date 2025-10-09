@@ -32,7 +32,7 @@ class ContactDetailController extends Controller
         return new ContactDetailResource($employee->contactDetail);
     }
 
-    function cleanPhoneNumber($phone)
+    function cleanPhoneNumber($phone): string
     {
         // Check if phone starts with '0'
         if (substr($phone, 0, 1) === '0') {
