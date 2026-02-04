@@ -14,10 +14,11 @@ class MiniEmployeeResource extends JsonResource
     public function toArray($request): array
     {
         return [
-            'id' => $this->id,
+            'id' => $this->uuid,
             'title' => $this->title,
             'name' => $this->name,
-            'staff_id' => $this->staff_id
+            'staff_id' => $this->staff_id,
+            'rank' => $this->rank->name,
         ];
     }
 }

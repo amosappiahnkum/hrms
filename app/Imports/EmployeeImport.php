@@ -4,13 +4,19 @@ namespace App\Imports;
 
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\Position;
 use App\Models\Rank;
+use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Concerns\Importable;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithProgressBar;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
+use Spatie\Permission\Models\Role;
 
 class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
 {
@@ -18,52 +24,36 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
 
     /**
      * @param array $row
-     *
-     * @return Employee
+     * @return mixed
      */
-    public function model(array $row): Employee
+    public function model(array $row)
     {
-        $rank = null;
-
-        if ($row['rank'] && $row['rank'] !== '') {
-            $rank = (new Rank)->firstOrCreate([
-                'name' => ucwords(strtolower($row['rank']))
-            ]);
-        }
-
-        $gtec_placement = null;
-
-        if ($row['gtec_placement'] && $row['gtec_placement'] !== '') {
-            $gtec_placement = Rank::firstOrCreate([
-                'name' => ucwords(strtolower($row['gtec_placement']))
-            ]);
-        }
-
         $department = Department::firstOrCreate([
             'name' => $row['department']
         ]);
 
+        $position = Position::firstOrCreate([
+            'name' => $row['position']
+        ]);
+
+        $email = $row['work_email'];
         $employee = Employee::updateOrCreate([
             'first_name' => $row['first_name'] ?: '',
-            'middle_name' => $row['middle_name'] ?: '',
+            'middle_name' => $row['other_names'] ?: '',
             'last_name' => $row['last_name'] ?: '',
             'staff_id' => $row['staff_id'] ?: '',
         ], [
             'title' => $row['title'] ?: '',
             'first_name' => $row['first_name'] ?: '',
-            'middle_name' => $row['middle_name'] ?: '',
+            'middle_name' => $row['other_names'] ?: '',
             'last_name' => $row['last_name'] ?: '',
             'staff_id' => $row['staff_id'] ?: '',
             'dob' => Carbon::parse(Date::excelToDateTimeObject($row['date_of_birth']))->format('Y-m-d'),
             'gender' => $row['gender'] ?: '',
-            'ssnit_number' => $row['ssnit_no'] ?: '',
-            'gtec_placement' => $gtec_placement?->id,
-            'qualification' => $row['qualification'] ?: '',
-            'senior_staff' => $row['senior_staff'] ?? false,
-            'senior_member' => $row['senior_member'] ?? false,
-            'junior_staff' => $row['junior_staff'] ?? false,
-            'secondment_staff' => $row['secondment_staff'] ?? false,
-            'rank_id' => $rank->id,
+            'job_type' => $row['type'] ?: '',
+            'ssnit_number' => $row['ssnit_number'] ?: '',
+            'gtec_placement' => null,
+            'rank_id' => null,
             'department_id' => $department->id,
             'user_id' => 1
         ]);
@@ -71,14 +61,38 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
         $employee->contactDetail()->create([
             'telephone' => $row['phone_number'] ?: '',
             'work_telephone' => $row['other_phone_number'] ?: '',
-            'work_email' => $row['work_email'] ?: '',
+            'work_email' => $email ?: '',
             'other_email' => $row['personal_email'] ?: '',
             'user_id' => 1,
         ]);
 
         $employee->jobDetail()->create([
-            'status' => $row['status']
+            'status' => null,
+            'position_id' => $position->id,
         ]);
+
+        if (!empty($email)) {
+            $staffRole = Role::query()->where('name', 'staff')->first();
+
+            $cleanEmail = Str::of($email)
+                ->trim()
+                ->replace(' ', '')
+                ->lower();
+            $username = Str::before($cleanEmail, '@');
+
+            $user = User::updateOrcreate(['username' => $username], [
+                'name' => $employee->name,
+                'username' => $username,
+                'email' => $cleanEmail,
+                'password' => Hash::make('password'),
+                'phone_number' => $row['phone_number'] ?: '',
+                'employee_id' => $employee->id,
+                'uuid' => Str::uuid(),
+            ]);
+
+            $employee->update(['user_id' => $user->id]);
+            $user->assignRole($staffRole);
+        }
 
         return $employee;
     }

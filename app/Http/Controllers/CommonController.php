@@ -6,8 +6,11 @@ use App\Http\Resources\EmployeeResource;
 use App\Models\Department;
 use App\Models\EducationLevel;
 use App\Models\Employee;
+use App\Models\Holiday;
 use App\Models\InformationUpdate;
 use App\Models\LeaveRequest;
+use App\Models\LeaveType;
+use App\Models\OverTimeRequest;
 use App\Models\Position;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -162,5 +165,19 @@ class CommonController extends Controller
     public function getEducationalLevels(): Collection
     {
         return EducationLevel::query()->select(['id', 'name'])->get();
+    }
+
+    public function getTimeAndAttendanceDashboardData(): array
+    {
+        $leaveRequests = LeaveRequest::query()->count();
+        $leaveTypes = LeaveType::query()->count();
+        $publicHolidays = Holiday::query()->whereMonth('start_date', date('m'))->count();
+
+        return [
+            'leaveRequests' => $leaveRequests,
+            'overtimeRequests' => 0,
+            'publicHolidays' => $publicHolidays,
+            'leaveTypes' => $leaveTypes,
+        ];
     }
 }

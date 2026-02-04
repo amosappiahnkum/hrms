@@ -56,6 +56,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
 
     Route::prefix('employees')->group(function () {
         Route::get('/search', [EmployeeController::class, 'searchEmployees']);
+        Route::post('update-level', [EmployeeController::class, 'updateEmployeeLevel']);
         Route::post('update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
         Route::get('/directory', [EmployeeController::class, 'getEmployeeDirectory']);
     });
@@ -75,25 +76,37 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::apiResource('/community-services', CommunityServiceController::class);
     Route::apiResource('/previous-ranks', PreviousRankController::class);
     Route::apiResource('/previous-positions', PreviousPositionController::class);
+    Route::get('holidays', [LeaveRequestController::class, 'getHolidays']);
     Route::prefix('leave-requests')->group(function () {
-        Route::get('holidays', [LeaveRequestController::class, 'getHolidays']);
         Route::get('types', [LeaveRequestController::class, 'getLeaveTypes']);
         Route::post('status/change', [LeaveRequestController::class, 'changeLeaveStatus']);
     });
     Route::apiResource('/leave-requests', LeaveRequestController::class);
     Route::get('my-leave-requests', [LeaveRequestController::class, 'getMyLeaveRequest']);
+
+    Route::get('team-request', [LeaveRequestController::class, 'getTeamLeaveRequest']);
+    Route::post('change-leave-status', [LeaveRequestController::class, 'changeLeaveStatus']);
+    Route::post('hr-change-leave-status', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
+    Route::prefix('my-leave')->group(function () {
+        Route::get('stats', [LeaveRequestController::class, 'getMyLeaveStats']);
+        Route::get('balances', [LeaveRequestController::class, 'getMyLeaveBalance']);
+        Route::get('upcoming', [LeaveRequestController::class, 'getUpcomingLeave']);
+    });
     Route::prefix('leave-management')->group(function () {
         Route::get('/filter-params', [LeaveManagementController::class, 'getFilterParams']);
         Route::get('/leave-requests', [LeaveManagementController::class, 'getLeaveRequests']);
         Route::post('/leave-requests/status/hr/change', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
     });
 
+    Route::patch('/leave-types/config/{id}', [LeaveTypeController::class, 'updateLeaveTypeConfig']);
     Route::apiResource('/leave-types', LeaveTypeController::class);
 
     Route::post('/approvals', [NotificationController::class, 'getApprovals']);
     Route::get('/supervisor/{employee}/pending-actions', [HomeController::class, 'getPendingApprovals']);
     Route::get('/my-team', [HomeController::class, 'getMyTeam']);
     Route::get('/who-is-out', [HomeController::class, 'getWhoIsOut']);
+
+    Route::get('/stats/time-attendance', [CommonController::class, 'getTimeAndAttendanceDashboardData']);
     Route::prefix('common')->group(function () {
         Route::get('permissions/{id}', [CommonController::class, 'getAllPermissions']);
         Route::post('permissions/assign', [CommonController::class, 'assignPermissions']);

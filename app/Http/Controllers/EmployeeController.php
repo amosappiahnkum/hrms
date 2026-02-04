@@ -6,12 +6,14 @@ use App\Exports\EmployeeExport;
 use App\Helpers\Helper;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
+use App\Http\Requests\UpdateEmployeeLevelRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Models\ActivityLog;
 use App\Models\ContactDetail;
+use App\Models\Department;
 use App\Models\Employee;
 use App\Notifications\EmailLinkedNotification;
 use App\Traits\InformationUpdate;
@@ -111,7 +113,6 @@ class EmployeeController extends Controller
     {
         $employeesQuery = Employee::query();
 
-
         if ($request->filled('search')) {
             $search = $request->query('search');
             $employeesQuery->where(function ($query) use ($search) {
@@ -123,7 +124,8 @@ class EmployeeController extends Controller
         }
 
         if ($request->filled('department') && $request->department !== 'all') {
-            $employeesQuery->where('department_id', $request->department_id);
+            $department = Department::where('uuid', $request->department)->firstOrFail();
+            $employeesQuery->where('department_id', $department->id);
         }
 
 
@@ -317,6 +319,24 @@ class EmployeeController extends Controller
         return response()->json([
             'message' => 'Employee status updated successfully',
             'jobType' => $employee->job_type
+        ]);
+    }
+
+    public function updateEmployeeLevel(UpdateEmployeeLevelRequest $request): JsonResponse
+    {
+        $employee = Employee::query()->where('uuid', $request->employee_id)->first();
+
+        if (!$employee) {
+            return response()->json([
+                'message' => 'Record not found',
+            ], 404);
+        }
+
+        $employee->update($request->only(['level']));
+
+        return response()->json([
+            'message' => 'Level updated successfully',
+            'level' => $employee->level
         ]);
     }
 }

@@ -13,6 +13,11 @@ class DepartmentResource extends JsonResource
      */
     public function toArray($request): array
     {
-        return parent::toArray($request);
+        return [
+            "id" => $this->uuid,
+            "name" => $this->name,
+            "head" => new MiniEmployeeResource($this->headOfDepartment),
+            "employees" => $this->employees->count()
+        ];
     }
 }

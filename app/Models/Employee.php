@@ -50,7 +50,8 @@ class Employee extends ApplicationModel
         'senior_member',
         'junior_staff',
         'secondment_staff',
-        "current_status"
+        "current_status",
+        "level",
     ];
 
     /**
@@ -89,7 +90,7 @@ class Employee extends ApplicationModel
      */
     public function department(): BelongsTo
     {
-        return $this->belongsTo(Department::class)->withDefault(['name' => '-']);
+        return $this->belongsTo(Department::class);
     }
 
     /**

@@ -2,23 +2,20 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\LoginRequest;
 use App\Http\Resources\AuthResponseResource;
+use App\Http\Resources\DepartmentResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-
     public function login(LoginRequest $request): JsonResponse
     {
         $credentials = $request->only('email', 'password');
@@ -73,19 +70,29 @@ class AuthController extends Controller
 
     public function me(): JsonResponse
     {
-        $user = Auth::user();
+        try {
+            $user = Auth::user();
 
-        return response()->json([
-            "id" => $user->id,
-            "uuid" => $user->uuid,
-            "name" => $user->name,
-            "username" => $user->username,
-            "email" => $user->email,
-            "phone_number" => $user->phone_number,
-            "password_changed" => $user->password_changed,
-            "employee_id" => $user?->employee?->uuid ?? null,
-            "department_id" => $user?->employee?->department_id ?? null
-        ]);
+            Log::info('os', [$user->employee]);
+            return response()->json([
+                "id" => $user->id,
+                "uuid" => $user->uuid,
+                "name" => $user->name,
+                "username" => $user->username,
+                "email" => $user->email,
+                "phone_number" => $user->phone_number,
+                "password_changed" => $user->password_changed,
+                "employee_id" => $user?->employee?->uuid ?? null,
+                "department_id" => $user?->employee?->department_id ?? null,
+                "department" => new DepartmentResource($user?->employee?->department)
+            ]);
+        } catch (\Exception $exception) {
+            Log::error($exception->getMessage());
+
+            return response()->json([
+                'message' => "Something went wrong"
+            ]);
+        }
     }
 
     public function validateAuth(): JsonResponse

@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Department;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateDepartmentRequest extends FormRequest
 {
@@ -13,7 +15,7 @@ class UpdateDepartmentRequest extends FormRequest
      */
     public function authorize()
     {
-        return false;
+        return true;
     }
 
     /**
@@ -21,10 +23,13 @@ class UpdateDepartmentRequest extends FormRequest
      *
      * @return array<string, mixed>
      */
-    public function rules()
+    public function rules(): array
     {
+        $department = Department::where('uuid', $this->route('department'))->first();
+
         return [
-            //
+            'name' => ['nullable','string', Rule::unique('departments')->ignore($department)],
+            'hod' => 'nullable|string|exists:employees,uuid',
         ];
     }
 }

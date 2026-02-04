@@ -33,9 +33,16 @@ class AppSetup extends Command
         try {
             $this->output->title('Application Setup Started');
 
+            $this->output->title('Applying migrations');
             Artisan::call('migrate:fresh');
+
+            $this->output->title('Seeding data');
             Artisan::call('db:seed');
+
+            $this->output->title('Import Employee data');
             Artisan::call('import:excel');
+
+            $this->output->title('Update Holidays');
             Artisan::call('update:holidays');
 
             $this->output->success('Setup Complete');

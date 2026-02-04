@@ -6,8 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         $ignore = [
@@ -24,10 +23,14 @@ return new class extends Migration
         ];
 
         // Get all table names
-        $tables = collect(Schema::getTables())
-            ->map(fn ($table) => Str::replace('app_', '', $table['name']))
-            ->reject(fn (string $t) => in_array($t, $ignore, true));
+        $database = DB::getDatabaseName();
+        $query = DB::select('SELECT table_name AS name  FROM information_schema.tables WHERE table_schema = ?', [$database]);
+        $tables = collect($query)
+            ->map(fn($table) => Str::replace('app_', '', $table->name))
+            ->reject(fn(string $t) => in_array($t, $ignore, true))
+            ->values();
 
+        \Illuminate\Support\Facades\Log::info('ds', $tables->toArray());
         // 1. Add uuid column if missing
         $tables->each(function (string $table) {
             $columns = collect(Schema::getColumns($table))->pluck('name');
@@ -55,7 +58,7 @@ return new class extends Migration
                     foreach ($rows as $row) {
                         DB::table($table)
                             ->where($pk, $row->{$pk})
-                            ->update(['uuid' => (string) Str::uuid()]);
+                            ->update(['uuid' => (string)Str::uuid()]);
                     }
                 }, $pk);
         });
@@ -70,7 +73,7 @@ return new class extends Migration
             // Ensure no nulls remain
             DB::table($table)
                 ->whereNull('uuid')
-                ->update(['uuid' => (string) Str::uuid()]);
+                ->update(['uuid' => (string)Str::uuid()]);
 
             Schema::table($table, function (Blueprint $blueprint) use ($table) {
                 $blueprint->uuid('uuid')->nullable(false)->change();
@@ -87,7 +90,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        $tables = collect(Schema::getTables())->map(fn ($table) => $table['name']);
+        $tables = collect(Schema::getTables())->map(fn($table) => $table['name']);
 
         $tables->each(function (string $table) {
             $columns = collect(Schema::getColumns($table))->pluck('name');

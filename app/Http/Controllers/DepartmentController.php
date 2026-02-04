@@ -6,9 +6,11 @@ use App\Http\Requests\StoreDepartmentRequest;
 use App\Http\Requests\UpdateDepartmentRequest;
 use App\Http\Resources\DepartmentResource;
 use App\Models\Department;
+use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 class DepartmentController extends Controller
 {
@@ -22,6 +24,12 @@ class DepartmentController extends Controller
     {
         $departments = Department::query();
 
+        if ($request->filled('search')) {
+            $search = $request->query('search');
+            $departments->where(function ($query) use ($search) {
+                $query->where('name', 'LIKE', "%{$search}%");
+            });
+        }
         return DepartmentResource::collection($departments->paginate($request->per_page ?? 10));
     }
 
@@ -72,12 +80,34 @@ class DepartmentController extends Controller
      * Update the specified resource in storage.
      *
      * @param UpdateDepartmentRequest $request
-     * @param Department $department
-     * @return Response
+     * @param string $uuid
      */
-    public function update(UpdateDepartmentRequest $request, Department $department)
+    public function update(UpdateDepartmentRequest $request, string $uuid)
     {
-        //
+        DB::beginTransaction();
+        try {
+            $department = Department::where('uuid', $uuid)->firstOrFail();
+            $head = Employee::where('uuid', $request->hod)->firstOrFail();
+
+            $data = $request->validated();
+
+            $data['hod'] = $head->id;
+
+            $head->update([
+                'department_id' => $department->id
+            ]);
+
+            $department->update($data);
+
+            $head->userAccount->assignRole('hod');
+
+            DB::commit();
+            return new DepartmentResource($department->fresh());
+        }catch (\Exception $exception){
+            DB::rollBack();
+
+            return response()->json(['success' => false, 'message' => $exception->getMessage()], 400);
+        }
     }
 
     /**
