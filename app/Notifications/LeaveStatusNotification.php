@@ -45,13 +45,14 @@ class LeaveStatusNotification extends Notification implements ShouldQueue
     {
         $status = strtoupper($this->data['leaveStatus']);
 
-        $pendingText  = $status === 'APPROVED' ? ' and it\'s pending HR approval.' : '';
+        $pendingText  = $status == 'APPROVED' ? ' and it\'s pending HR approval.' : '';
 
         return (new MailMessage)
             ->greeting('Dear ' . $this->data['employee'] . ',')
             ->subject('Leave Request '. $status)
             ->line('Your leave request was '. $status .' by '. $this->data['supervisor'])
             ->line('on '. Carbon::parse($this->data['date'])->format('D, M d Y'))
+            ->line($pendingText)
             ->action('Review Request', env('FRONTEND_URL'));
     }
 

@@ -3,14 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Exports\EmployeeExport;
+use App\Helpers\Helper;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
+use App\Http\Requests\UpdateEmployeeLevelRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
+use App\Http\Requests\UpdateEmployeeJobTypeRequest;
+use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Models\ActivityLog;
 use App\Models\ContactDetail;
+use App\Models\Department;
 use App\Models\Employee;
-use App\Models\PreviousRank;
+use App\Notifications\EmailLinkedNotification;
 use App\Traits\InformationUpdate;
 use App\Traits\UsePrint;
 use Carbon\Carbon;
@@ -18,8 +23,12 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -33,41 +42,96 @@ class EmployeeController extends Controller
     /**
      * Display a listing of the resource.
      *
-     * @return AnonymousResourceCollection|\Illuminate\Http\Response|BinaryFileResponse
+     * @return AnonymousResourceCollection|Response|BinaryFileResponse
      */
     public function index(Request $request)
     {
         $employeesQuery = Employee::query();
-        $employeesQuery->when($request->has('department_id') &&
-            $request->department_id !== 'all', function ($q) use ($request) {
-            return $q->where('department_id', $request->department_id);
-        });
 
-        $employeesQuery->when($request->has('rank_id') &&
-            $request->rank_id !== 'all', function ($q) use ($request) {
-            return $q->where('rank_id', $request->rank_id);
-        });
+        // Filter by department
+        if ($request->filled('department') && $request->department !== 'all') {
+            $employeesQuery->where('department_id', $request->department);
+        }
 
-        $employeesQuery->when($request->has('job_category_id') &&
-            $request->job_category_id !== 'all', function ($q) use ($request) {
-            return $q->whereRelation('jobDetail', static function ($jQuery) use ($request) {
-                return $jQuery->where('job_category_id', $request->job_category_id);
+        // Filter by department
+        if ($request->filled('gender') && $request->gender !== 'all') {
+            $employeesQuery->where('gender', $request->gender);
+        }
+
+
+        // Filter by department
+        if ($request->filled('marital_status') && $request->marital_status !== 'all') {
+            $employeesQuery->where('marital_status', $request->marital_status);
+        }
+
+        // Search by name fields
+        if ($request->filled('search')) {
+            $search = $request->query('search');
+            $employeesQuery->where(function ($query) use ($search) {
+                $query->where('first_name', 'LIKE', "%{$search}%")
+                    ->orWhere('last_name', 'LIKE', "%{$search}%")
+                    ->orWhere('middle_name', 'LIKE', "%{$search}%")
+                    ->orWhere('staff_id', 'LIKE', "%{$search}%");
             });
-        });
-
-
-        if ($request->has('export') && $request->export === 'true') {
-            return Excel::download(new EmployeeExport(EmployeeResource::collection($employeesQuery->get())),
-                'Expenses.xlsx');
         }
 
-        if ($request->has('print') && $request->print === 'true') {
-            return $this->pdf('print.employee.all', EmployeeResource::collection($employeesQuery->get()), 'Expenses',
-                'landscape');
+        // Filter by rank
+        if ($request->filled('rank_id') && $request->rank_id !== 'all') {
+            $employeesQuery->where('rank_id', $request->rank_id);
         }
 
-        return EmployeeResource::collection($employeesQuery->paginate(10));
+        // Filter by job category via relation
+        if ($request->filled('job_category_id') && $request->job_category_id !== 'all') {
+            $employeesQuery->whereHas('jobDetail', function ($query) use ($request) {
+                $query->where('job_category_id', $request->job_category_id);
+            });
+        }
+
+        // Export to Excel
+        if ($request->boolean('export')) {
+            $employees = $employeesQuery->get();
+            return Excel::download(new EmployeeExport(EmployeeResource::collection($employees)), 'employees.xlsx');
+        }
+
+        // Print to PDF
+        if ($request->boolean('print')) {
+            $employees = $employeesQuery->get();
+            return $this->pdf('print.employee.all', EmployeeResource::collection($employees), 'employees', 'landscape');
+        }
+
+        // Paginated response
+        return EmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
     }
+
+    /**
+     * Display a listing of the resource.
+     *
+     * @param Request $request
+     * @return AnonymousResourceCollection
+     */
+    public function getEmployeeDirectory(Request $request): AnonymousResourceCollection
+    {
+        $employeesQuery = Employee::query();
+
+        if ($request->filled('search')) {
+            $search = $request->query('search');
+            $employeesQuery->where(function ($query) use ($search) {
+                $query->where('first_name', 'LIKE', "%{$search}%")
+                    ->orWhere('last_name', 'LIKE', "%{$search}%")
+                    ->orWhere('middle_name', 'LIKE', "%{$search}%")
+                    ->orWhere('staff_id', 'LIKE', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('department') && $request->department !== 'all') {
+            $department = Department::where('uuid', $request->department)->firstOrFail();
+            $employeesQuery->where('department_id', $department->id);
+        }
+
+
+        return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->per_page ?? 10));
+    }
+
 
     /**
      * Store a newly created resource in storage.
@@ -78,8 +142,10 @@ class EmployeeController extends Controller
      */
     public function store(StoreEmployeeRequest $request)
     {
+
         DB::beginTransaction();
         try {
+            $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
             $employee = Employee::create($request->all());
             $employee->contactDetail()->create();
             $employee->jobDetail()->create();
@@ -96,12 +162,14 @@ class EmployeeController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param Employee $employee
+     * @param string $employeeId
      *
      * @return EmployeeResource
      */
-    public function show(Employee $employee): EmployeeResource
+    public function show(string $employeeId): EmployeeResource
     {
+        $employee = Employee::query()->where('uuid', $employeeId)->first();
+
         return new EmployeeResource($employee);
     }
 
@@ -130,14 +198,16 @@ class EmployeeController extends Controller
         }
     }
 
-    public function searchEmployees($query): AnonymousResourceCollection
+    public function searchEmployees(Request $request): AnonymousResourceCollection
     {
+
+        $query = $request->query('query');
         $employees = Employee::query()
             ->where('last_name', 'like', '%' . $query . '%')
             ->orWhere('middle_name', 'like', '%' . $query . '%')
-            ->orWhere('first_name', 'like', '%' . $query . '%')->get();
+            ->orWhere('first_name', 'like', '%' . $query . '%');
 
-        return EmployeeResource::collection($employees);
+        return EmployeeResource::collection($employees->paginate(10));
     }
 
     public function getPeople(): AnonymousResourceCollection
@@ -151,7 +221,7 @@ class EmployeeController extends Controller
         return EmployeeResource::collection($employeesQuery->paginate(10));
     }
 
-    public function getStaff(Request $request)
+    public function getStaff(Request $request): JsonResponse
     {
         $employee = Employee::query()->with('contactDetail')->where('staff_id', $request->staffId)->first();
 
@@ -164,9 +234,15 @@ class EmployeeController extends Controller
         return response()->json($employee);
     }
 
-    public function updateStaffMail(Request $request)
+    public function updateStaffMail(Request $request): JsonResponse
     {
-        ContactDetail::find($request->id)->update($request->only(['work_email']));
+        $contact = ContactDetail::find($request->id);
+
+        $employeeName = $contact->employee->first_name;
+
+        $contact->update($request->only(['work_email']));
+
+        Notification::route('mail', $request->work_email)->notify(new EmailLinkedNotification($employeeName));
 
         return response()->json(["message" => "Email updated successfully"]);
     }
@@ -182,40 +258,85 @@ class EmployeeController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
+
             $employee = Employee::findOrFail($id);
             $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
 
-            $this->infoDifference($employee, $request->all());
-            $this->requestUpdate($employee);
+            if ($this->isHrAdmin()) {
+                $employee->update($request->all());
+                $employee->save();
+            } else {
+                $this->infoDifference($employee, $request->all());
+                $this->requestUpdate($employee);
+            }
 
             if ($request->has('file') && $request->file !== "null") {
                 $saveFile = new SaveFile($employee, $request->file('file'), $this->docPath, $this->allowedFiles);
                 $saveFile->save();
             }
 
-            PreviousRank::updateOrCreate([
+            /*PreviousRank::updateOrCreate([
                 'rank_id' => $employee->rank_id,
                 'employee_id' => $employee->id
             ], [
                 'rank_id' => $employee->rank_id,
                 'employee_id' => $employee->id,
                 'user_id' => Auth::id()
-            ]);
+            ]);*/
 
-            $user = Auth::user();
-
-            ActivityLog::add($user->employee->name . 'update the personal details for ' . $employee->name,
-                'updated', [''], 'job-details')
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the personal details for ' . $employee->name,
+                'updated personal detail', [''], 'personal-details')
                 ->to($employee)
                 ->as($user);
+
+            Helper::updateSRMS($request->staff_id);
 
             DB::commit();
 
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
+
+            Log::info('Employee update failed', [$exception]);
             return response()->json([
-                'message' => $exception->getMessage()
+                'message' => "Something went wrong"
             ], 400);
         }
+    }
+
+    public function updateEmployeeStatus(UpdateEmployeeJobTypeRequest $request): JsonResponse
+    {
+        $employee = Employee::query()->where('uuid', $request->employee_id)->first();
+
+        if (!$employee) {
+            return response()->json([
+                'message' => 'Employee not found',
+            ], 404);
+        }
+
+        $employee->update($request->only(['job_type']));
+
+        return response()->json([
+            'message' => 'Employee status updated successfully',
+            'jobType' => $employee->job_type
+        ]);
+    }
+
+    public function updateEmployeeLevel(UpdateEmployeeLevelRequest $request): JsonResponse
+    {
+        $employee = Employee::query()->where('uuid', $request->employee_id)->first();
+
+        if (!$employee) {
+            return response()->json([
+                'message' => 'Record not found',
+            ], 404);
+        }
+
+        $employee->update($request->only(['level']));
+
+        return response()->json([
+            'message' => 'Level updated successfully',
+            'level' => $employee->level
+        ]);
     }
 }

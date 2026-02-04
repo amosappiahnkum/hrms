@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends ApplicationModel
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasUuid;
 
     /**
      * @var string[]
@@ -30,6 +31,8 @@ class Employee extends ApplicationModel
         'middle_name',
         'last_name',
         'staff_id',
+        'job_title',
+        'job_type',
         'dob',
         'gender',
         'marital_status',
@@ -46,7 +49,9 @@ class Employee extends ApplicationModel
         'senior_staff',
         'senior_member',
         'junior_staff',
-        'secondment_staff'
+        'secondment_staff',
+        "current_status",
+        "level",
     ];
 
     /**
@@ -85,7 +90,7 @@ class Employee extends ApplicationModel
      */
     public function department(): BelongsTo
     {
-        return $this->belongsTo(Department::class)->withDefault(['name' => '-']);
+        return $this->belongsTo(Department::class);
     }
 
     /**
@@ -132,7 +137,7 @@ class Employee extends ApplicationModel
     /**
      * @return HasMany
      */
-    public function departments(): hasMany
+    public function dependants(): hasMany
     {
         return $this->hasMany(Dependant::class);
     }
@@ -204,6 +209,11 @@ class Employee extends ApplicationModel
     public function publications()
     {
         return $this->hasMany(Publication::class);
+    }
+
+    public function experiences(): HasMany
+    {
+        return $this->hasMany(Experience::class);
     }
 
     public function grantAndFunds()

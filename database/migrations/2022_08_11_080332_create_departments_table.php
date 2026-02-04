@@ -22,12 +22,6 @@ return new class extends Migration
             $table->softDeletes();
             $table->timestamps();
         });
-
-        if (Schema::hasTable('app_departments')){
-            Schema::table('departments', static function (Blueprint $table) {
-                $table->foreignIdFor(Employee::class, 'hod')->nullable()->constrained();
-            });
-        }
     }
 
     /**

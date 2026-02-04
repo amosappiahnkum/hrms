@@ -1,0 +1,23 @@
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class InfoUpdateResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray($request): array
+    {
+        return [
+            'id' => $this->id,
+            'notification' => new NotificationResource($this->notification),
+            'not' => $this->notification,
+            'employee' => $this->requestedBy?->employee ? new MiniEmployeeResource($this->requestedBy?->employee) : null
+        ];
+    }
+}

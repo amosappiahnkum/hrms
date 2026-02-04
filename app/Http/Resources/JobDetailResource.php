@@ -3,10 +3,8 @@
 namespace App\Http\Resources;
 
 use Carbon\Carbon;
-use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use JsonSerializable;
 
 class JobDetailResource extends JsonResource
 {
@@ -20,6 +18,7 @@ class JobDetailResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'uuid' => $this->uuid,
             'position_id' => $this->position_id,
             'job_title' => $this->position?->name,
             'status' => $this->status,

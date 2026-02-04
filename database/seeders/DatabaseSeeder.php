@@ -16,12 +16,14 @@ class DatabaseSeeder extends Seeder
         $this->call([
             UserSeeder::class,
             JobCategorySeeder::class,
-            SubUnitSeeder::class,
+//            SubUnitSeeder::class,
             RolesAndPermissionsSeeder::class,
             TerminationReasonSeeder::class,
             EducationLevelSeeder::class,
             LeaveTypeSeeder::class,
-            PositionSeeder::class
+            PositionSeeder::class,
+            LeaveTypeLevelConfigSeeder::class,
+            LeaveRoleSeeder::class,
         ]);
     }
 }

@@ -15,3 +15,8 @@ yarn-error.log
 
 /public/css/app.css
 /public/js/app.js
+
+.idea
+/.idea
+/storage/logs/*.log
+/storage/logs/laravel.log

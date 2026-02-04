@@ -3,12 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\EmployeeResource;
+use App\Models\Department;
+use App\Models\EducationLevel;
 use App\Models\Employee;
+use App\Models\Holiday;
 use App\Models\InformationUpdate;
 use App\Models\LeaveRequest;
+use App\Models\LeaveType;
+use App\Models\OverTimeRequest;
+use App\Models\Position;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -132,6 +138,46 @@ class CommonController extends Controller
             ],
             'info_updates' => $informationUpdates,
             'total' => $pending
+        ];
+    }
+
+    public function getEmployeeManagementStats(): JsonResponse
+    {
+        $employees = Employee::query()->count();
+
+        $males = Employee::query()->where("gender", "Male")->count();
+        $females = Employee::query()->where("gender", "Female")->count();
+        $employeeByDepartments = Department::query()->withCount('employees')->get()->pluck('employees_count',
+            'name')->toArray();
+        $departments = Department::query()->count();
+        $positions = Position::query()->count();
+
+        return response()->json([
+            'employees' => $employees,
+            'males' => $males,
+            'females' => $females,
+            'departments' => $departments,
+            'positions' => $positions,
+            'employeeByDepartments' => $employeeByDepartments,
+        ]);
+    }
+
+    public function getEducationalLevels(): Collection
+    {
+        return EducationLevel::query()->select(['id', 'name'])->get();
+    }
+
+    public function getTimeAndAttendanceDashboardData(): array
+    {
+        $leaveRequests = LeaveRequest::query()->count();
+        $leaveTypes = LeaveType::query()->count();
+        $publicHolidays = Holiday::query()->whereMonth('start_date', date('m'))->count();
+
+        return [
+            'leaveRequests' => $leaveRequests,
+            'overtimeRequests' => 0,
+            'publicHolidays' => $publicHolidays,
+            'leaveTypes' => $leaveTypes,
         ];
     }
 }

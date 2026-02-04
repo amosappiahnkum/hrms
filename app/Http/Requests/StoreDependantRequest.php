@@ -26,6 +26,7 @@ class StoreDependantRequest extends FormRequest
         return [
             'name' => 'required',
             'relationship' => 'required',
+            'employee_id' => 'required|string|exists:employees,uuid',
         ];
     }
 }

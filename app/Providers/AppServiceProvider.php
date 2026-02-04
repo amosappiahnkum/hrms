@@ -7,6 +7,7 @@ use App\Models\Dependant;
 use App\Models\Education;
 use App\Models\EmergencyContact;
 use App\Models\Employee;
+use App\Models\Experience;
 use App\Models\JobDetail;
 use App\Models\NextOfKin;
 use App\Models\Photo;
@@ -36,7 +37,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (env('APP_ENV') !== 'local') {
+        if (env('APP_ENV') != 'local') {
             URL::forceScheme('https');
         }
 
@@ -46,6 +47,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Relation::morphMap([
+            'Experience' => Experience::class,
             'Employee' => Employee::class,
             'ContactDetail' => ContactDetail::class,
             'NextOfKin' => NextOfKin::class,

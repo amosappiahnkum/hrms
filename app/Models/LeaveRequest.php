@@ -3,17 +3,21 @@
 namespace App\Models;
 
 use App\Enums\Statuses;
+use App\Traits\HasUserId;
+use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LeaveRequest extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasUuid, HasUserId;
 
     protected $fillable = [
         'employee_id',
+        'department_id',
         'supervisor_id',
         'leave_type_id',
         'days_requested',
@@ -30,7 +34,8 @@ class LeaveRequest extends Model
         'hr_reason',
         'hr_id',
         'moved',
-        'moved_by'
+        'moved_by',
+        'user_id',
     ];
 
     protected $casts = [
@@ -75,5 +80,10 @@ class LeaveRequest extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function approvals(): HasMany
+    {
+        return $this->hasMany(LeaveApproval::class);
     }
 }

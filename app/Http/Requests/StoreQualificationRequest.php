@@ -27,6 +27,8 @@ class StoreQualificationRequest extends FormRequest
             'education_level_id' => 'required|integer',
             'institution' => 'required',
             'qualification' => 'required',
+            'cert_number' => 'required|string|unique:education,cert_number',
+            'employee_id' => 'required|string|exists:employees,uuid',
         ];
     }
 }

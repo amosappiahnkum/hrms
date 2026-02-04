@@ -5,20 +5,21 @@ namespace App\Http\Controllers;
 use App\Http\Requests\HrChangeLeaveStatusRequest;
 use App\Http\Requests\StoreLeaveRequestRequest;
 use App\Http\Resources\LeaveRequestResource;
+use App\Http\Resources\UpcomingLeaveResource;
 use App\Models\ActivityLog;
 use App\Models\Employee;
 use App\Models\EmployeeSupervisor;
 use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use App\Models\LeaveTypeLevelConfig;
 use App\Models\User;
 use App\Notifications\hr\LeaveStatusHrNotification;
 use App\Notifications\LeaveRequestNotification;
 use App\Notifications\LeaveStatusNotification;
+use App\Notifications\NotifyHodNotification;
 use Carbon\Carbon;
 use Exception;
-use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 
 class LeaveRequestController extends Controller
 {
@@ -43,20 +45,24 @@ class LeaveRequestController extends Controller
      *
      * @param Request $request
      *
-     * @return AnonymousResourceCollection
+     * @return JsonResponse|AnonymousResourceCollection
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): JsonResponse|AnonymousResourceCollection
     {
+        if (!$this->isHrAdmin()) {
+            return response()->json([
+                'message' => 'You do not have permission to view leave requests.'
+            ], 403);
+        }
+
         $leaveRequestQuery = LeaveRequest::query();
 
         $leaveRequestQuery->when($request->has('status'), function ($q) use ($request) {
-            return $q->where('status', $request->status)
-                ->where('employee_id', Auth::user()->employee->id)
-                ->orWhere('hr_status', $request->status)
-                ->where('employee_id', Auth::user()->employee->id);
+            return $q->where('status', $request->status);
         });
-
-        $leaveRequestQuery->where('employee_id', Auth::user()->employee->id);
+        $leaveRequestQuery->when($request->has('department'), function ($q) use ($request) {
+            return $q->where('department_id', $request->department);
+        });
 
         return LeaveRequestResource::collection($leaveRequestQuery->paginate(10));
     }
@@ -80,25 +86,22 @@ class LeaveRequestController extends Controller
 
             $employee = Auth::user()->employee;
 
+            $leaveType = LeaveType::where('uuid', $request->leave_type_id)->first();
+
+            $department = $employee->department;
+
             $leaveRequest = LeaveRequest::create([
                 'employee_id' => $employee->id,
-                'supervisor_id' => $request->employee_id,
-                'leave_type_id' => $request->leave_type_id,
+                'supervisor_id' => $department->hod,
+                'department_id' => $department->id,
+                'leave_type_id' => $leaveType->id,
                 'days_requested' => $daysRequested,
                 'start_date' => $startDate,
                 'reason' => $request->reason,
                 'end_date' => $this->lastDate,
             ]);
 
-            $supervisor = Employee::find($request->employee_id);
-
-            EmployeeSupervisor::updateOrCreate([
-                'supervisor_id' => $request->employee_id,
-                'employee_id' => $employee->id,
-            ], [
-                'supervisor_id' => $request->employee_id,
-                'employee_id' => $employee->id,
-            ]);
+            $supervisor = Employee::find($department->hod);
 
             Notification::route('mail', $supervisor->contactDetail->work_email)
                 ->notify(new LeaveRequestNotification([
@@ -140,7 +143,7 @@ class LeaveRequestController extends Controller
      */
     public function getLeaveDays($startDate, $numberOfDays): int
     {
-        $holidays = $this->getHolidays();
+        $holidays = $this->getHolidays()->pluck('start_date');
         $start = Carbon::parse($startDate)->startOfDay();
         $endDate = Carbon::parse($startDate)->addWeekdays($numberOfDays)->startOfDay();
 
@@ -161,7 +164,7 @@ class LeaveRequestController extends Controller
      */
     public function getHolidays(): Collection
     {
-        return Holiday::all()->pluck('start_date');
+        return Holiday::query()->whereYear('start_date', date('Y'))->orderBy('start_date')->get();
     }
 
     /**
@@ -181,13 +184,16 @@ class LeaveRequestController extends Controller
     {
         DB::beginTransaction();
         try {
-            $leaveRequest = LeaveRequest::find($request->id);
+            $leaveRequest = LeaveRequest::where('uuid', $request->id)->first();
 
             $date = Carbon::now()->format('Y-m-d');;
             $daysApproved =
                 $request->days_requested != $leaveRequest->days_requested ?
                     $this->validateLeaveDays($request->start_date, $request->days_requested) : $request->days_requested;
 
+            $decision = $request->decision;
+
+            $daysApproved =  $decision == 'approved' ? $daysApproved : 0;
             $leaveRequest->update([
                 'days_approved' => $daysApproved,
                 'start_date' => Carbon::parse($request->start_date)->format('Y-m-d'),
@@ -198,52 +204,58 @@ class LeaveRequestController extends Controller
                 'viewed' => true,
             ]);
 
+            $hod = Auth::user();
+
+            $leaveRequest->approvals()->create([
+                'approved_by' => $hod->id,
+                'role' => 'hod',
+                'decision' => $decision,
+                'comment' => $request->sup_reason,
+                'decided_at' => Carbon::now(),
+                'days_approved' => $daysApproved,
+            ]);
+
             $employeeUserAccount = $leaveRequest->employee->userAccount;
 
-            $user = Auth::user();
+            $hodName = $hod->employee->name;
+            // notify supervisor
+            $hod->notify(new NotifyHodNotification([
+                'leaveStatus' => $decision,
+                'supervisor' => $hodName,
+                'employee' => $employeeUserAccount->employee->name,
+                'date' => $date
+            ]));
 
-            if ($user) {
-                // notify supervisor
-//                $user->notify(new LeaveStatusNotification([
-//                    'leaveStatus' => $request->status,
-//                    'supervisor' => $user->employee->name,
-//                    'employee' => $employeeUserAccount->employee->name,
-//                    'date' => $date
-//                ], true, $request->status === 'approved'));
+            // notify employee
+            $employeeUserAccount->notify(new LeaveStatusNotification([
+                'leaveStatus' => $decision,
+                'supervisor' => $hodName,
+                'employee' => $employeeUserAccount->employee->name,
+                'date' => $date
+            ]));
 
-                // notify employee
-                $employeeUserAccount->notify(new LeaveStatusNotification([
-                    'leaveStatus' => $request->status,
-                    'supervisor' => $user->employee->name,
-                    'employee' => $employeeUserAccount->employee->name,
-                    'date' => $date
-                ]));
-            }
-
-            if ($request->status === 'approved') {
+            if ($decision === 'approved') {
                 // notify HRs
-                $users = User::permission('move-leave')->get();
+                $users = User::role('hr')->get();
 
                 foreach ($users as $item) {
                     if (!empty($item)) {
                         $item->notify(new LeaveStatusHrNotification([
                             'hr' => $item->employee?->name,
-                            'supervisor' => $user->employee->name,
+                            'supervisor' => $hodName,
                             'employee' => $employeeUserAccount->employee->name,
                             'date' => $date,
-                            'leaveStatus' => $request->status
+                            'leaveStatus' => $decision
                         ]));
                     }
                 }
             }
 
-            ActivityLog::add(
-                $user->employee->name . ' ' .
-                $request->status . ' ' . $daysApproved .
+            ActivityLog::add($hod->name . ' ' . $decision . ' ' . $daysApproved .
                 ' day(s) leave request starting from ' . $request->start_date . ' to ' . $this->lastDate,
-                $request->status, [''], 'leave-request')
+                $decision, [''], 'leave-request')
                 ->to($leaveRequest)
-                ->as($user);
+                ->as($hod);
 
             DB::commit();
 
@@ -256,49 +268,59 @@ class LeaveRequestController extends Controller
         }
     }
 
+    /**
+     * @param HrChangeLeaveStatusRequest $request
+     * @return JsonResponse
+     */
     public function hrChangeLeaveStatus(HrChangeLeaveStatusRequest $request): JsonResponse
     {
         DB::beginTransaction();
 
         try {
-            $leaveRequest = LeaveRequest::find($request->id);
+            $leaveRequest = LeaveRequest::where('uuid', $request->id)->first();
 
             $daysApproved = $this->validateLeaveDays($request->start_date, $request->days_requested);
 
+            $user = Auth::user();
+            $decision = $request->decision;
 
-            if ($leaveRequest->moved == null) {
-                $this->moveLeaveForApproval($leaveRequest,
-                    Carbon::parse($request->start_date)->format('Y-m-d'), $daysApproved);
-            } else {
-                $user = Auth::user();
+            $daysApproved =  $decision == 'approved' ? $daysApproved : 0;
 
-                $leaveRequest->update([
-                    'days_approved' => $daysApproved,
-                    'start_date' => Carbon::parse($request->start_date)->format('Y-m-d'),
-                    'end_date' => $this->lastDate,
-                    'hr_reason' => $request->hr_reason,
-                    'hr_status' => $request->hr_status_update,
-                    'hr_approval' => date('Y-m-d'),
-                    'hr_id' => $user?->employee->id
-                ]);
+            $leaveRequest->update([
+                'days_approved' => $daysApproved,
+                'start_date' => Carbon::parse($request->start_date)->format('Y-m-d'),
+                'end_date' => $this->lastDate,
+                'hr_reason' => $request->hr_reason,
+                'hr_status' => $decision,
+                'status' => $request->status,
+                'hr_approval' => date('Y-m-d'),
+                'hr_id' => $user?->employee->id
+            ]);
 
-                ActivityLog::add($user->employee->name . ' ' . $request->hr_status_update . ' leave request',
-                    $request->hr_status_update, [''], 'leave-request')
-                    ->to($leaveRequest)
-                    ->as($user);
+            $leaveRequest->approvals()->create([
+                'approved_by' => $user->id,
+                'role' => 'hr',
+                'decision' => $decision,
+                'comment' => $request->sup_reason,
+                'decided_at' => Carbon::now(),
+                'days_approved' => $daysApproved,
+            ]);
 
-                $date = Carbon::now()->format('Y-m-d');
+            ActivityLog::add($user->employee->name . ' ' . $decision . ' leave request', $decision, [''], 'leave-request')
+                ->to($leaveRequest)
+                ->as($user);
 
-                $employeeUserAccount = $leaveRequest->employee->userAccount;
+            /*$date = Carbon::now()->format('Y-m-d');
 
-                $employeeUserAccount->notify(new LeaveStatusNotification([
-                    'leaveStatus' => $request->hr_status_update,
-                    'supervisor' => $employeeUserAccount->employee->name,
-                    'employee' => $user->employee->name,
-                    'date' => $date,
-                    'hasPendingText' => false
-                ]));
-            }
+            $employeeUserAccount = $leaveRequest->employee->userAccount;
+
+            $employeeUserAccount->notify(new LeaveStatusNotification([
+                'leaveStatus' => $request->hr_status_update,
+                'supervisor' => $employeeUserAccount->employee->name,
+                'employee' => $user->employee->name,
+                'date' => $date,
+                'hasPendingText' => false
+            ]));*/
 
             DB::commit();
 
@@ -353,8 +375,111 @@ class LeaveRequestController extends Controller
         //
     }
 
-    public function show(LeaveRequest $leaveRequest): JsonResponse
+    /**
+     * @param string $id
+     * @return JsonResponse
+     */
+    public function show(string $id): JsonResponse
     {
+        $leaveRequest = LeaveRequest::where('uuid', $id)->firstOrFail();
+
         return response()->json(new LeaveRequestResource($leaveRequest));
+    }
+
+    /**
+     * @param Request $request
+     * @return AnonymousResourceCollection
+     */
+    public function getMyLeaveRequest(Request $request): AnonymousResourceCollection
+    {
+        $auth = Auth::user();
+
+        $leaveRequest = LeaveRequest::query();
+
+        $leaveRequest->where('employee_id', $auth->employee->id);
+
+        return LeaveRequestResource::collection($leaveRequest->paginate($request->per_page ?? 10));
+    }
+
+    public function getMyLeaveStats(Request $request): JsonResponse
+    {
+        $employeeId = Auth::user()->employee_id;
+
+        $counts = LeaveRequest::query()
+            ->where('employee_id', $employeeId)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
+        return response()->json([
+            'total' => $counts->sum(),
+            'pending' => $counts->get('pending', 0),
+            'approved' => $counts->get('supervisor_approved', 0) + $counts->get('hr_approved', 0),
+            'rejected' => $counts->get('supervisor_rejected', 0) + $counts->get('hr_rejected', 0)
+        ]);
+    }
+
+    public function getMyLeaveBalance(Request $request): JsonResponse
+    {
+        $employee = Auth::user()->employee;
+
+        $balances = LeaveTypeLevelConfig::with('leaveType') // eager load related leave type
+        ->where('employee_level', $employee->level)
+            ->get()
+            ->map(function ($config) use ($employee) {
+                $usedDays = LeaveRequest::where('employee_id', $employee->id)
+                    ->where('leave_type_id', $config->leave_type_id)
+                    ->whereIn('status', ['hr_approved'])
+                    ->sum('days_requested');
+
+                return [
+                    'leave_type_id' => $config->leave_type_id,
+                    'type' => $config->leaveType->name,
+                    'total' => $config->number_of_days,
+                    'used' => $usedDays,
+                    'remaining' => $config->number_of_days - $usedDays,
+                ];
+            });
+
+        return response()->json($balances);
+    }
+
+    public function getUpcomingLeave(): AnonymousResourceCollection
+    {
+        $departmentId = Auth::user()->employee->department_id;
+        $upcomingLeaves = LeaveRequest::with([
+            'employee:id,uuid,first_name,middle_name,last_name,department_id,title,staff_id',
+            'leaveType:id,name'
+        ])->whereIn('status', [
+            'hr_approved'
+        ])
+            ->whereDate('start_date', '>=', Carbon::today())
+            ->whereHas('employee', function ($query) use ($departmentId) {
+                $query->where('department_id', $departmentId);
+            })
+            ->orderBy('start_date')
+            ->get();
+
+        return UpcomingLeaveResource::collection($upcomingLeaves);
+    }
+
+
+    public function getTeamLeaveRequest()
+    {
+        if (!$this->isSupervisor()) {
+            return response()->json([
+                'message' => 'You do not have permission to view leave requests.'
+            ], 403);
+        }
+
+        $departmentId = Auth::user()->employee->department_id;
+        $upcomingLeaves = LeaveRequest::with([
+            'employee:id,uuid,first_name,middle_name,last_name,department_id,title,staff_id',
+            'leaveType:id,name'
+        ])->whereHas('employee', function ($query) use ($departmentId) {
+            $query->where('department_id', $departmentId);
+        })->paginate(10);
+
+        return LeaveRequestResource::collection($upcomingLeaves);
     }
 }

@@ -19,7 +19,7 @@ class NextOfKinController extends Controller
 
     public function show($employeeId): NextOfKinResource
     {
-        $employee = Employee::findOrFail($employeeId);
+        $employee = Employee::query()->where('uuid', $employeeId)->first();
 
         if (!$employee->nextOfKin) {
             $nextOfKin = $employee->nextOfKin()->create();
@@ -38,6 +38,8 @@ class NextOfKinController extends Controller
     {
         DB::beginTransaction();
         try {
+            $user = Auth::user();
+
             $employee = Employee::findOrFail($request->employee_id);
 
             $nextOfKin = $employee->nextOfKin;
@@ -46,14 +48,17 @@ class NextOfKinController extends Controller
                 $nextOfKin = $employee->nextOfKin()->create();
             }
 
-            $this->infoDifference($nextOfKin, $request->all());
-            $this->requestUpdate($nextOfKin);
-
-            $user = Auth::user();
+            if ($this->isHrAdmin()) {
+                $nextOfKin->update($request->all());
+                $nextOfKin->save();
+            } else {
+                $this->infoDifference($nextOfKin, $request->all());
+                $this->requestUpdate($nextOfKin);
+            }
 
             $employee = Employee::findOrFail($request->employee_id);
 
-            ActivityLog::add($user->employee->name . 'update the next of kin details for ' . $employee->name,
+            ActivityLog::add(($user?->employee?->name ?? $user->username) . 'update the next of kin details for ' . $employee->name,
                 'updated', [''], 'next of kin')
                 ->to($nextOfKin)
                 ->as($user);

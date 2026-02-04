@@ -6,6 +6,8 @@ use App\Http\Requests\StoreLeaveTypeRequest;
 use App\Http\Requests\UpdateLeaveTypeRequest;
 use App\Http\Resources\LeaveTypeResource;
 use App\Models\LeaveType;
+use App\Models\LeaveTypeLevelConfig;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 
@@ -82,5 +84,19 @@ class LeaveTypeController extends Controller
     public function destroy(LeaveType $leaveType)
     {
         //
+    }
+
+    /**
+     * @param Request $request
+     * @param string $leaveTypeId
+     * @return LeaveTypeResource
+     */
+    public function updateLeaveTypeConfig(Request $request, string $leaveTypeId): LeaveTypeResource
+    {
+        $config = LeaveTypeLevelConfig::query()->where('uuid', $leaveTypeId)->firstOrFail();
+
+        $config->update($request->all());
+
+        return new LeaveTypeResource($config->leaveType);
     }
 }
