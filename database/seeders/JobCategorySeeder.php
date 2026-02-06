@@ -15,7 +15,7 @@ class JobCategorySeeder extends Seeder
      */
     public function run(): void
     {
-        $categories = [
+        /*$categories = [
             [
                 'name' => 'Management/Key Officers',
                 'leave_entitlement' => 45
@@ -35,6 +35,21 @@ class JobCategorySeeder extends Seeder
             [
                 'name' => 'Junior Staff (no certificate)',
                 'leave_entitlement' => 32
+            ],
+        ];*/
+
+        $categories = [
+            [
+                'name' => 'Level 1',
+                'leave_entitlement' => 0
+            ],
+            [
+                'name' => 'Level 2',
+                'leave_entitlement' => 0
+            ],
+            [
+                'name' => 'Level 3',
+                'leave_entitlement' => 0
             ],
         ];
 

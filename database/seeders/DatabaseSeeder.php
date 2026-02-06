@@ -21,7 +21,7 @@ class DatabaseSeeder extends Seeder
             TerminationReasonSeeder::class,
             EducationLevelSeeder::class,
             LeaveTypeSeeder::class,
-            PositionSeeder::class,
+//            PositionSeeder::class,
             LeaveTypeLevelConfigSeeder::class,
             LeaveRoleSeeder::class,
         ]);

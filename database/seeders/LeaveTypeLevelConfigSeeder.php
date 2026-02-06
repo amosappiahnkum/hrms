@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\JobCategory;
 use App\Models\LeaveType;
 use Illuminate\Database\Seeder;
 
@@ -14,14 +15,13 @@ class LeaveTypeLevelConfigSeeder extends Seeder
     {
         $leaveTypes = LeaveType::all();
 
-        $levels = ['management', 'senior_member', 'senior_staff', 'junior_staff'];
+        $levels = JobCategory::query()->select('id', 'name')->get();
 
         foreach ($leaveTypes as $leaveType) {
-            foreach ($levels as $type) {
+            foreach ($levels as $level) {
                 $leaveType->leaveTypeLevelConfigs()->updateOrCreate([
-                    'employee_level' => $type,
+                    'job_category_id' => $level->id,
                 ],[
-//                    'entitlement_type' => 'custom',
                     'number_of_days' => 45,
                     'allow_half_day' => true,
                     'allow_carry_forward' => 0,

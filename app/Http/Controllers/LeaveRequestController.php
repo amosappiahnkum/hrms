@@ -424,7 +424,7 @@ class LeaveRequestController extends Controller
         $employee = Auth::user()->employee;
 
         $balances = LeaveTypeLevelConfig::with('leaveType') // eager load related leave type
-        ->where('employee_level', $employee->level)
+        ->where('job_category_id', $employee->jobDetail->job_category_id)
             ->get()
             ->map(function ($config) use ($employee) {
                 $usedDays = LeaveRequest::where('employee_id', $employee->id)
