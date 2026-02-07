@@ -39,6 +39,11 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+Route::get('/', function (Request $request) {
+    return view('welcome');
+});
+
+
 // Public routes
 Route::post('login', [AuthController::class, 'login']);
 Route::group(['middleware' => ['auth:sanctum']], static function () {
