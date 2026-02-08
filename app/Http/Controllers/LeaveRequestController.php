@@ -8,7 +8,6 @@ use App\Http\Requests\StoreLeaveRequestRequest;
 use App\Http\Resources\LeaveRequestResource;
 use App\Http\Resources\UpcomingLeaveResource;
 use App\Models\ActivityLog;
-use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\LeaveTypeLevelConfig;
@@ -53,14 +52,9 @@ class LeaveRequestController extends Controller
             ], 403);
         }
 
-        $leaveRequestQuery = LeaveRequest::query();
-
-        $leaveRequestQuery->when($request->has('status'), function ($q) use ($request) {
-            return $q->where('status', $request->status);
-        });
-        $leaveRequestQuery->when($request->has('department'), function ($q) use ($request) {
-            return $q->where('department_id', $request->department);
-        });
+        $leaveRequestQuery = LeaveRequest::query()->forDepartment($request->department)
+            ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
+            ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search));
 
         return LeaveRequestResource::collection($leaveRequestQuery->paginate(10));
     }
@@ -462,7 +456,7 @@ class LeaveRequestController extends Controller
     }
 
 
-    public function getTeamLeaveRequest(): JsonResponse|AnonymousResourceCollection
+    public function getTeamLeaveRequest(Request $request): JsonResponse|AnonymousResourceCollection
     {
         if (!$this->isSupervisor()) {
             return response()->json([
@@ -470,13 +464,15 @@ class LeaveRequestController extends Controller
             ], 403);
         }
 
-        $departmentId = Auth::user()->employee->department_id;
-        $upcomingLeaves = LeaveRequest::with([
+        $departmentId = auth()->user()->employee->department_id;
+
+        $upcomingLeaves = LeaveRequest::query()->with([
             'employee:id,uuid,first_name,middle_name,last_name,department_id,title,staff_id',
-            'leaveType:id,name'
-        ])->whereHas('employee', function ($query) use ($departmentId) {
-            $query->where('department_id', $departmentId);
-        })->paginate(10);
+            'leaveType:id,name',
+        ])->forDepartment($departmentId)
+            ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
+            ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search))
+            ->paginate(10);
 
         return LeaveRequestResource::collection($upcomingLeaves);
     }
