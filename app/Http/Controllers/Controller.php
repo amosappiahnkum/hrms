@@ -122,12 +122,18 @@ class Controller extends BaseController
 
     public function isSupervisor(): bool
     {
-        return $this->can('approve-leave-request') || $this->can('decline-leave-request');
+        return $this->hasRole('hod') || $this->can('approve-leave-request') || $this->can('decline-leave-request');
     }
 
     public function isHrAdmin(): bool
     {
+        return $this->hasRole('super-admin') || $this->hasRole('hr');
+    }
+
+    public function hasRole(string $role): bool
+    {
         $user = Auth::user();
-        return $user->hasRole('super-admin') || $user->hasRole('hr');
+
+        return $user->hasRole($role);
     }
 }

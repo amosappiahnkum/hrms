@@ -27,7 +27,7 @@ class LeaveStatusHrNotification extends Notification implements ShouldQueue
     /**
      * Get the notification's delivery channels.
      *
-     * @param  mixed  $notifiable
+     * @param mixed $notifiable
      * @return array
      */
     public function via($notifiable)
@@ -38,25 +38,45 @@ class LeaveStatusHrNotification extends Notification implements ShouldQueue
     /**
      * Get the mail representation of the notification.
      *
-     * @param  mixed  $notifiable
-     * @return \Illuminate\Notifications\Messages\MailMessage
+     * @param mixed $notifiable
+     * @return MailMessage `MailMessage
      */
-    public function toMail($notifiable)
+    public function toMail($notifiable): MailMessage
     {
-        $status = strtoupper($this->data['leaveStatus']);
+        $mail = (new MailMessage)
+            ->subject($this->data['subject'] ?? '')
+            ->greeting($this->data['greeting'] ?? '');
 
-        return (new MailMessage)
-            ->greeting('Dear ' . $this->data['hr'] . ',')
-            ->subject('Leave Request Notification')
-            ->line($this->data['supervisor']. ' '. $status . ' a leave request for '. $this->data['employee'].' on '.
-                Carbon::parse($this->data['date'])->format('D, M d Y') .' and it\'s pending your action.')
-            ->action('Review Request', env('FRONTEND_URL'));
+        foreach ($this->data['lines'] ?? [] as $line) {
+            $mail->line($line);
+        }
+
+        $mail->action('Review Request', env('FRONTEND_URL'));
+
+        return $mail;
+        /*$status = strtoupper($this->data['leaveStatus']);
+
+        $mail = (new MailMessage);
+
+        $mail->greeting('Dear ' . $this->data['hr'] . ',')->subject('Leave Request Notification');
+
+        if ($status == 'PENDING') {
+            $mail->line('Please note that ' . $this->data['employee'] . ' has submitted a leave request, which is currently pending action from the Head of Department');
+        } else if ($status == 'AUTO_APPROVED') {
+            $mail->line('Please note that ' . $this->data['employee'] . ' has submitted a leave request, which is currently pending your action');
+        } else {
+            $mail->line($this->data['supervisor'] . ' ' . $status . ' a leave request for ' . $this->data['employee'] . ' on ' .
+                Carbon::parse($this->data['date'])->format('D, M d Y') . ' and it\'s pending your action.');
+        }
+
+        $mail->action('Review Request', env('FRONTEND_URL'));
+        return $mail;*/
     }
 
     /**
      * Get the array representation of the notification.
      *
-     * @param  mixed  $notifiable
+     * @param mixed $notifiable
      * @return array
      */
     public function toArray($notifiable)

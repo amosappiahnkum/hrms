@@ -73,7 +73,6 @@ class AuthController extends Controller
         try {
             $user = Auth::user();
 
-            Log::info('os', [$user->employee]);
             return response()->json([
                 "id" => $user->id,
                 "uuid" => $user->uuid,

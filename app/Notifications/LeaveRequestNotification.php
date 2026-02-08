@@ -44,12 +44,17 @@ class LeaveRequestNotification extends Notification implements ShouldQueue
      */
     public function toMail($notifiable): MailMessage
     {
-        return (new MailMessage)
-            ->subject('Time off Request')
-            ->greeting('Dear ' . $this->data['supervisor'] . '!')
-            ->line($this->data['employee'] . ' ' . ' has requested ' . $this->data['daysRequested'] . ' day(s) off,')
-            ->line('Starting from ' . $this->data['startDate'] . ' and will resume on ' . $this->data['endDate'])
-            ->action('Review Request', env('FRONTEND_URL'));
+        $mail = (new MailMessage)
+            ->subject($this->data['subject'] ?? '')
+            ->greeting($this->data['greeting'] ?? '');
+
+        foreach ($this->data['lines'] ?? [] as $line) {
+            $mail->line($line);
+        }
+
+        $mail->action('Review Request', env('FRONTEND_URL'));
+
+        return $mail;
     }
 
     /**

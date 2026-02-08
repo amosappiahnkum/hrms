@@ -14,13 +14,13 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            UserSeeder::class,
-            JobCategorySeeder::class,
+//            UserSeeder::class,
+//            JobCategorySeeder::class,
 //            SubUnitSeeder::class,
-            RolesAndPermissionsSeeder::class,
-            TerminationReasonSeeder::class,
-            EducationLevelSeeder::class,
-            LeaveTypeSeeder::class,
+//            RolesAndPermissionsSeeder::class,
+//            TerminationReasonSeeder::class,
+//            EducationLevelSeeder::class,
+//            LeaveTypeSeeder::class,
 //            PositionSeeder::class,
             LeaveTypeLevelConfigSeeder::class,
             LeaveRoleSeeder::class,

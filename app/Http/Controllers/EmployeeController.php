@@ -11,6 +11,7 @@ use App\Http\Requests\UpdateEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
+use App\Http\Resources\MiniEmployeeResource;
 use App\Models\ActivityLog;
 use App\Models\ContactDetail;
 use App\Models\Department;
@@ -200,12 +201,15 @@ class EmployeeController extends Controller
 
     public function searchEmployees(Request $request): AnonymousResourceCollection
     {
-
         $query = $request->query('query');
         $employees = Employee::query()
             ->where('last_name', 'like', '%' . $query . '%')
             ->orWhere('middle_name', 'like', '%' . $query . '%')
             ->orWhere('first_name', 'like', '%' . $query . '%');
+
+        if ($request->filled('slim')) {
+            return MiniEmployeeResource::collection($employees->paginate(10));
+        }
 
         return EmployeeResource::collection($employees->paginate(10));
     }

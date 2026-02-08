@@ -38,11 +38,11 @@
     },
     {
         "roles": [
-            "hr"
+            "hr",
+            "hod"
         ],
         "group": "Leave Management",
         "permissions": [
-            "move-leave",
             "approve-leave",
             "disapprove-leave",
             "view-approved-leave",
