@@ -140,6 +140,7 @@ class AuthController extends Controller
         try {
             $student = Employee::where('uuid', $token)->firstOrFail();
 
+            Log::info('os', $student->toArray());
             return response()->make("
             <!DOCTYPE html>
             <html>
