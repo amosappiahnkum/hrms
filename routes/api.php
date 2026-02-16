@@ -46,7 +46,7 @@ Route::get('/', function (Request $request) {
 
 // Public routes
 Route::post('login', [AuthController::class, 'login']);
-Route::get('scan', [AuthController::class, 'qrCodeScan']);
+Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
 Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::get('commons', [HomeController::class, 'getCommonData']);
     Route::get('educational-levels', [CommonController::class, 'getEducationalLevels']);
