@@ -46,7 +46,12 @@ Route::get('/', function (Request $request) {
 
 // Public routes
 Route::post('login', [AuthController::class, 'login']);
+foreach (glob(__DIR__ . '/v1/*.php') as $file) {
+    require $file;
+}
 Route::group(['middleware' => ['auth:sanctum']], static function () {
+
+
     Route::get('commons', [HomeController::class, 'getCommonData']);
     Route::get('educational-levels', [CommonController::class, 'getEducationalLevels']);
     Route::prefix('user')->group(function () {

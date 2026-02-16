@@ -47,7 +47,12 @@ class EmployeeController extends Controller
      */
     public function index(Request $request)
     {
-        $employeesQuery = Employee::query();
+        // Filter by department
+        if ($request->filled('archived') && $request->archived == 'true') {
+            $employeesQuery = Employee::onlyTrashed();
+        } else {
+            $employeesQuery = Employee::query();
+        }
 
         // Filter by department
         if ($request->filled('department') && $request->department !== 'all') {
@@ -79,6 +84,12 @@ class EmployeeController extends Controller
         // Filter by rank
         if ($request->filled('rank_id') && $request->rank_id !== 'all') {
             $employeesQuery->where('rank_id', $request->rank_id);
+        }
+
+
+        // Filter by rank
+        if ($request->filled('job_type') && $request->job_type !== 'all') {
+            $employeesQuery->where('job_type', $request->job_type);
         }
 
         // Filter by job category via relation
