@@ -140,7 +140,6 @@ class AuthController extends Controller
         try {
             $student = Employee::where('uuid', $token)->firstOrFail();
 
-            Log::info('os', $student->toArray());
             return response()->make("
             <!DOCTYPE html>
             <html>
@@ -174,7 +173,7 @@ class AuthController extends Controller
             <body>
                 <div class='card'>
                     <div class='success'>
-                        Welcome {$student->first_name} {$student->middle_name} {$student->last_name}
+                        Welcome {$student->title} {$student->first_name} {$student->middle_name} {$student->last_name}
                     </div>
                 </div>
             </body>
