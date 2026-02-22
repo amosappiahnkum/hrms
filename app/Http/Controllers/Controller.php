@@ -36,7 +36,7 @@ class Controller extends BaseController
 
         $isStaff = $loggedInUser->getRoleNames()->contains('staff') || $loggedInUser->getRoleNames()->contains('admin');
         $educationalLevels = EducationLevel::all();
-        $terminationReasons = TerminationReason::query()->select(['uuid', 'reason'])->get();
+        $terminationReasons = TerminationReason::query()->select(['uuid', 'reason'])->orderBy('reason')->get();
         $positions = Position::all();
         $jobCategories = JobCategory::all();
         $subUnits = SubUnit::all();

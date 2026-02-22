@@ -12,14 +12,6 @@ use Spatie\Permission\Models\Role;
 
 class Helper
 {
-    public static function saveImage($model, $file, $directory): void
-    {
-        $image_name = uniqid() . '.' . $file->getClientOriginalExtension();
-        $file->storeAs(env('APP_PHOTO_PATH') . '/' . $directory . '/', $image_name);
-        $model->photo()->updateOrCreate(['photoable_id' => $model->id], [
-            'file_name' => $image_name
-        ]);
-    }
 
     public static function createUserAccount($model, $data, $userName = null): void
     {
@@ -52,22 +44,18 @@ class Helper
         return $request->all();
     }
 
-    public static function getUserAuthInfo(User $loggedInUser): array
-    {
-        return [
-            'user' => $loggedInUser->only(['id', 'name', 'username']),
-            'roles' => $loggedInUser->getRoleNames(),
-            'permissions' => $loggedInUser->getPermissionsViaRoles()->pluck('name')->merge
-            ($loggedInUser->getDirectPermissions()->pluck('name')),
-            'employee_id' => $loggedInUser->employee ? $loggedInUser->employee->id : null
-        ];
-    }
-
     public static function updateSRMS($staffId): void
     {
         Http::withHeader('token', env('TTU_API_TOKEN'))
             ->post(env('TTU_API_URL') . '/staff/bio-data', [
                 'staff_id' => $staffId,
             ]);
+    }
+
+    public static function getPhotoURL(?string $fileName): ?string
+    {
+        if (!$fileName) return null;
+
+        return env("APP_URL") . "/api/get-photo/{$fileName}";
     }
 }

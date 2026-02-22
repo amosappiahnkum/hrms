@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Helpers\Helper;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -44,7 +45,7 @@ class EmployeeResource extends JsonResource
             'rank' => $this->rank->name,
             'department_id' => $this->department_id,
             'department' => $this->department->name,
-            'photo' => $this->photo ? '/storage/images/employees/' . $this->photo->file_name : null,
+            'photo' => Helper::getPhotoURL($this->photo),
             'job' => [
                 'hire_date' => $this->jobDetail->joined_date ? Carbon::parse($this->jobDetail->joined_date)->format('Y-m-d') : 'Not Updated',
                 'location' => $this->jobDetail->location ?? 'Not Updated'

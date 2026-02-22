@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends ApplicationModel
 {
-    use HasFactory, SoftDeletes, HasUuid;
+    use SoftDeletes, HasUuid;
 
     /**
      * @var string[]
@@ -52,6 +52,11 @@ class Employee extends ApplicationModel
         'secondment_staff',
         "current_status",
         "level",
+        "termination_reason_id",
+        "termination_date",
+        "terminated_by",
+        "photo",
+        "onboarding"
     ];
 
     /**
@@ -69,6 +74,10 @@ class Employee extends ApplicationModel
         return $this->first_name . " " . $this->middle_name . " " . $this->last_name;
     }
 
+    public function terminationReason(): BelongsTo
+    {
+        return $this->belongsTo(TerminationReason::class);
+    }
     /**
      * @return BelongsTo
      */

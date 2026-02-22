@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Experience extends Model
+class Experience extends ApplicationModel
 {
     use HasFactory, SoftDeletes, HasUuid;
 

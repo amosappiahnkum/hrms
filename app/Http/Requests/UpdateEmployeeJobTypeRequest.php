@@ -24,7 +24,7 @@ class UpdateEmployeeJobTypeRequest extends FormRequest
     {
         return [
             'employee_id' => 'required|exists:employees,uuid',
-            'job_type' => 'required|in:Full Time,Part Time',
+            'job_type' => 'required|in:full_time,part_time',
         ];
     }
 }
