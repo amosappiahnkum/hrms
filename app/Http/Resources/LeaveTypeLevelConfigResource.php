@@ -16,7 +16,7 @@ class LeaveTypeLevelConfigResource extends JsonResource
     {
         return [
             'id' => $this->uuid,
-            'employee_level' => $this->employee_level,
+            'employee_level' => $this->jobCategory->name,
             'entitlement_type' => $this->entitlement_type,
             'number_of_days' => $this->number_of_days,
             'start_of_annual_cycle' => $this->start_of_annual_cycle,

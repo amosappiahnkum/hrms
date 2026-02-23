@@ -17,6 +17,7 @@ class MiniEmployeeResource extends JsonResource
             'id' => $this->uuid,
             'title' => $this->title,
             'name' => $this->name,
+            'department' => $this->department?->name,
             'staff_id' => $this->staff_id,
             'rank' => $this->rank->name,
         ];

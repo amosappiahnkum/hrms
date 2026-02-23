@@ -86,4 +86,22 @@ class LeaveRequest extends Model
     {
         return $this->hasMany(LeaveApproval::class);
     }
+
+    public function scopeForDepartment($query, ?int $departmentId)
+    {
+        return $query->when($departmentId, function ($q) use ($departmentId) {
+            $q->whereRelation('employee', 'department_id', $departmentId);
+        });
+    }
+
+    public function scopeSearchEmployee($query, string $search)
+    {
+        return $query->whereHas('employee', function ($q) use ($search) {
+            $q->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('middle_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%");
+            });
+        });
+    }
 }

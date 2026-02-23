@@ -13,8 +13,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('departments', function (Blueprint $table) {
-//            $table->integer('hod');
             $table->foreignId('hod')->nullable()->references('id')->on('employees')->nullOnDelete();
+            $table->integer('allowed_for_leave')->nullable()->default(0);
         });
     }
 
@@ -26,6 +26,7 @@ return new class extends Migration
         Schema::table('departments', function (Blueprint $table) {
             $table->dropForeign('app_departments_hod_foreign');
             $table->dropColumn('hod');
+            $table->dropColumn('allowed_for_leave');
         });
     }
 };

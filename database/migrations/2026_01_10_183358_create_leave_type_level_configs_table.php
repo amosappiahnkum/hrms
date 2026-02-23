@@ -19,8 +19,8 @@ return new class extends Migration
         Schema::create('leave_type_level_configs', function (Blueprint $table) {
             $table->id();
             $table->uuid();
-            $table->foreignId('leave_type_id')->constrained('leave_types')->onDelete('cascade');
-            $table->string('employee_level');
+            $table->foreignId('leave_type_id')->constrained()->onDelete('cascade');
+            $table->foreignId('job_category_id')->constrained()->onDelete('cascade');
             $table->integer('number_of_days')->default(0);
             $table->boolean('allow_half_day')->default(false);
             $table->boolean('allow_carry_forward')->default(false);
@@ -33,7 +33,7 @@ return new class extends Migration
             $table->boolean('requires_approval')->default(true);
             $table->timestamps();
 
-            $table->unique(['leave_type_id', 'employee_level']);
+            $table->unique(['leave_type_id', 'job_category_id'], 'leave_configs_leave_type_job_category_unique');
         });
     }
 

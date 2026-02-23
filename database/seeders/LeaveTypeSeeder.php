@@ -14,7 +14,7 @@ class LeaveTypeSeeder extends Seeder
      */
     public function run(): void
     {
-        $types = [
+        /*$types = [
             [
                 'name' => 'Annual Leave',
                 'description' => null,
@@ -132,6 +132,60 @@ class LeaveTypeSeeder extends Seeder
                 'should_request_before' => 1,
                 'user_id' => 1
             ],
+        ];*/
+        $types = [
+            [
+                'name' => 'Annual Leave',
+                'description' => null,
+                'entitlement_type' => 'custom',
+                'number_of_days' => 0,
+                'start_of_annual_cycle' => '2023-01-01',
+                'allow_half_day' => 1,
+                'allow_carry_forward' => 0,
+                'maximum_allotment' => 0,
+                'maximum_consecutive_days' => 0,
+                'should_request_before' => 1,
+                'user_id' => 1
+            ],
+            [
+                'name' => 'Maternity Leave',
+                'description' => null,
+                'entitlement_type' => 'custom',
+                'number_of_days' => 0,
+                'start_of_annual_cycle' => '2023-01-01',
+                'allow_half_day' => 1,
+                'allow_carry_forward' => 0,
+                'maximum_allotment' => 0,
+                'maximum_consecutive_days' => 0,
+                'should_request_before' => 1,
+                'user_id' => 1
+            ],
+            [
+                'name' => 'Sick Leave/Excuse Duty Leave',
+                'description' => null,
+                'entitlement_type' => 'custom',
+                'number_of_days' => 0,
+                'start_of_annual_cycle' => '2023-01-01',
+                'allow_half_day' => 1,
+                'allow_carry_forward' => 0,
+                'maximum_allotment' => 0,
+                'maximum_consecutive_days' => 0,
+                'should_request_before' => 1,
+                'user_id' => 1
+            ],
+            [
+                'name' => 'Bereaved Leave',
+                'description' => null,
+                'entitlement_type' => 'custom',
+                'number_of_days' => 0,
+                'start_of_annual_cycle' => '2023-01-01',
+                'allow_half_day' => 1,
+                'allow_carry_forward' => 0,
+                'maximum_allotment' => 0,
+                'maximum_consecutive_days' => 0,
+                'should_request_before' => 1,
+                'user_id' => 1
+            ]
         ];
 
         foreach ($types as $type) {

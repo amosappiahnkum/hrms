@@ -12,7 +12,7 @@ class LeaveTypeLevelConfig extends Model
 
     protected $fillable = [
         'uuid',
-        'employee_level',
+        'job_category_id',
         'leave_type_id',
         'entitlement_type',
         'number_of_days',
@@ -27,5 +27,10 @@ class LeaveTypeLevelConfig extends Model
     public function leaveType(): BelongsTo
     {
         return $this->belongsTo(LeaveType::class);
+    }
+
+    public function jobCategory(): BelongsTo
+    {
+        return $this->belongsTo(JobCategory::class);
     }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\LoginRequest;
 use App\Http\Resources\AuthResponseResource;
 use App\Http\Resources\DepartmentResource;
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -73,7 +74,6 @@ class AuthController extends Controller
         try {
             $user = Auth::user();
 
-            Log::info('os', [$user->employee]);
             return response()->json([
                 "id" => $user->id,
                 "uuid" => $user->uuid,
@@ -133,5 +133,94 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'All tokens revoked successfully'
         ]);
+    }
+
+    public function qrCodeScan($token)
+    {
+        try {
+            $student = Employee::where('uuid', $token)->firstOrFail();
+
+            return response()->make("
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Student Verification</title>
+                <meta name='viewport' content='width=device-width, initial-scale=1'>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        background-color: #f4f6f9;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                    }
+                    .card {
+                        background: white;
+                        padding: 40px;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                        text-align: center;
+                    }
+                    .success {
+                        color: #2e7d32;
+                        font-size: 24px;
+                        font-weight: bold;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class='card'>
+                    <div class='success'>
+                        Welcome {$student->title} {$student->first_name} {$student->middle_name} {$student->last_name}
+                    </div>
+                </div>
+            </body>
+            </html>
+        ", 200);
+
+        } catch (\Throwable $e) {
+
+            return response()->make("
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Verification Failed</title>
+                <meta name='viewport' content='width=device-width, initial-scale=1'>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        background-color: #f4f6f9;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                    }
+                    .card {
+                        background: white;
+                        padding: 40px;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                        text-align: center;
+                    }
+                    .error {
+                        color: #c62828;
+                        font-size: 22px;
+                        font-weight: bold;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class='card'>
+                    <div class='error'>
+                        Verification Failed
+                    </div>
+                </div>
+            </body>
+            </html>
+        ", 404);
+        }
     }
 }

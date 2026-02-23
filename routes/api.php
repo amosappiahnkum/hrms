@@ -39,8 +39,14 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+Route::get('/', function (Request $request) {
+    return view('welcome');
+});
+
+
 // Public routes
 Route::post('login', [AuthController::class, 'login']);
+Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
 Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::get('commons', [HomeController::class, 'getCommonData']);
     Route::get('educational-levels', [CommonController::class, 'getEducationalLevels']);
@@ -55,6 +61,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::apiResource('/users', UserController::class);
 
     Route::prefix('employees')->group(function () {
+        Route::post('/update-onboarding', [EmployeeController::class, 'onboardEmployee']);
         Route::get('/search', [EmployeeController::class, 'searchEmployees']);
         Route::post('update-level', [EmployeeController::class, 'updateEmployeeLevel']);
         Route::post('update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
@@ -62,6 +69,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     });
 
     Route::get('/stats/employee-management', [CommonController::class, 'getEmployeeManagementStats']);
+    Route::post('/terminate-employee', [EmployeeController::class, 'terminateEmployee']);
     Route::resource('/employees', EmployeeController::class);
     Route::get('/people', [EmployeeController::class, 'getPeople']);
 
@@ -83,7 +91,6 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     });
     Route::apiResource('/leave-requests', LeaveRequestController::class);
     Route::get('my-leave-requests', [LeaveRequestController::class, 'getMyLeaveRequest']);
-
     Route::get('team-request', [LeaveRequestController::class, 'getTeamLeaveRequest']);
     Route::post('change-leave-status', [LeaveRequestController::class, 'changeLeaveStatus']);
     Route::post('hr-change-leave-status', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
@@ -137,6 +144,9 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::delete('/tokens/{tokenId}', [AuthController::class, 'revokeToken']);
     Route::delete('/tokens', [AuthController::class, 'revokeAllTokens']);
     Route::apiResource('departments', DepartmentController::class);
+
+    Route::post("upload-photo", [EmployeeController::class, 'uploadPhoto']);
+    Route::get("get-photo/{fileName}", [EmployeeController::class, 'getPhoto']);
 });
 
 
