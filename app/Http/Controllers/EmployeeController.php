@@ -7,9 +7,9 @@ use App\Helpers\Helper;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\TerminateEmployeeRequest;
+use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Requests\UpdateEmployeeLevelRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
-use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Resources\ArchivedEmployeeResource;
 use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
@@ -31,7 +31,6 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Maatwebsite\Excel\Facades\Excel;
@@ -61,17 +60,14 @@ class EmployeeController extends Controller
             $employeesQuery = Employee::query();
         }
 
-        // Filter by department
         if ($request->filled('department') && $request->department !== 'all') {
             $employeesQuery->where('department_id', $request->department);
         }
 
-        // Filter by department
         if ($request->filled('gender') && $request->gender !== 'all') {
             $employeesQuery->where('gender', $request->gender);
         }
 
-        // Filter by department
         if ($request->filled('marital_status') && $request->marital_status !== 'all') {
             $employeesQuery->where('marital_status', $request->marital_status);
         }
