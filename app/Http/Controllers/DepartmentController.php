@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateDepartmentRequest;
 use App\Http\Resources\DepartmentResource;
 use App\Models\Department;
 use App\Models\Employee;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -81,32 +82,58 @@ class DepartmentController extends Controller
      *
      * @param UpdateDepartmentRequest $request
      * @param string $uuid
+     * @return DepartmentResource|JsonResponse
+     * @throws \Throwable
      */
     public function update(UpdateDepartmentRequest $request, string $uuid)
     {
         DB::beginTransaction();
+
         try {
             $department = Department::where('uuid', $uuid)->firstOrFail();
-            $head = Employee::where('uuid', $request->hod)->firstOrFail();
-
             $data = $request->validated();
 
-            $data['hod'] = $head->id;
+            // Only process HOD if provided in request
+            if (!empty($request->hod)) {
 
-            $head->update([
-                'department_id' => $department->id
-            ]);
+                $head = Employee::where('uuid', $request->hod)->firstOrFail();
+
+                // Employee must have user account
+                if (empty($head->userAccount)) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => "$head->name must login to complete their profile before being assigned as HOD."
+                    ], 400);
+                }
+
+                // Update department HOD
+                $data['hod'] = $head->id;
+
+                // Assign department to employee
+                $head->update([
+                    'department_id' => $department->id
+                ]);
+
+                // Assign role only if not already assigned
+                if (!$head->userAccount->hasRole('hod')) {
+                    $head->userAccount->assignRole('hod');
+                }
+            }
 
             $department->update($data);
 
-            $head->userAccount->assignRole('hod');
-
             DB::commit();
+
             return new DepartmentResource($department->fresh());
-        }catch (\Exception $exception){
+
+        } catch (\Exception $exception) {
             DB::rollBack();
 
-            return response()->json(['success' => false, 'message' => $exception->getMessage()], 400);
+            return response()->json([
+                'success' => false,
+                'message' => $exception->getMessage()
+            ], 400);
         }
     }
 
