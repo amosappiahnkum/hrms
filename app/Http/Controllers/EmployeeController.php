@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\EmployeeExport;
+use App\Filters\EmployeeFilter;
 use App\Helpers\Helper;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
@@ -48,74 +49,42 @@ class EmployeeController extends Controller
      * Display a listing of the resource.
      *
      * @param Request $request
-     * @return AnonymousResourceCollection|Response|BinaryFileResponse
-     * @throws \PhpOffice\PhpSpreadsheet\Exception
-     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
+     * @return AnonymousResourceCollection|BinaryFileResponse
      */
     public function index(Request $request)
     {
-        if ($request->filled('archived') && $request->archived == 'true') {
-            $employeesQuery = Employee::onlyTrashed();
-        } else {
-            $employeesQuery = Employee::query();
-        }
+        $query = Employee::query()
+            ->archived($request->boolean('archived'))
+            ->department($request->department)
+            ->gender($request->gender)
+            ->maritalStatus($request->marital_status)
+            ->rank($request->rank_id)
+            ->jobCategory($request->job_category_id)
+            ->search($request->search);
 
-        if ($request->filled('department') && $request->department !== 'all') {
-            $employeesQuery->where('department_id', $request->department);
-        }
-
-        if ($request->filled('gender') && $request->gender !== 'all') {
-            $employeesQuery->where('gender', $request->gender);
-        }
-
-        if ($request->filled('marital_status') && $request->marital_status !== 'all') {
-            $employeesQuery->where('marital_status', $request->marital_status);
-        }
-
-        // Search by name fields
-        if ($request->filled('search')) {
-            $search = $request->query('search');
-            $employeesQuery->where(function ($query) use ($search) {
-                $query->where('first_name', 'LIKE', "%{$search}%")
-                    ->orWhere('last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('middle_name', 'LIKE', "%{$search}%")
-                    ->orWhere('staff_id', 'LIKE', "%{$search}%");
-            });
-        }
-
-        // Filter by rank
-        if ($request->filled('rank_id') && $request->rank_id !== 'all') {
-            $employeesQuery->where('rank_id', $request->rank_id);
-        }
-
-        // Filter by job category via relation
-        if ($request->filled('job_category_id') && $request->job_category_id !== 'all') {
-            $employeesQuery->whereHas('jobDetail', function ($query) use ($request) {
-                $query->where('job_category_id', $request->job_category_id);
-            });
-        }
-
-        // Export to Excel
         if ($request->boolean('export')) {
-            $employees = $employeesQuery->get();
-            return Excel::download(new EmployeeExport(EmployeeResource::collection($employees)), 'employees.xlsx');
+            return $this->export($query);
         }
 
-        // Print to PDF
-        if ($request->boolean('print')) {
-            $employees = $employeesQuery->get();
-            return $this->pdf('print.employee.all', EmployeeResource::collection($employees), 'employees', 'landscape');
+        if ($request->boolean('archived')) {
+            $query->with('terminationReason');
+            return ArchivedEmployeeResource::collection(
+                $query->paginate($request->per_page ?? 10)
+            );
         }
 
-        if ($request->filled('archived') && $request->archived == 'true') {
-            // Paginated response
-            $employeesQuery->with('terminationReason');
-            return ArchivedEmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
-        }
-
-        return EmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
+        return EmployeeResource::collection($query->paginate($request->per_page ?? 10));
     }
 
+    private function export($query)
+    {
+        $employees = $query->get();
+
+        return Excel::download(
+            new EmployeeExport(EmployeeResource::collection($employees)),
+            'employees.xlsx'
+        );
+    }
     /**
      * Display a listing of the resource.
      *

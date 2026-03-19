@@ -2,9 +2,7 @@
 
 namespace App\Exports;
 
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -14,18 +12,18 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 class LeaveRequestExport implements FromCollection, WithMapping, WithHeadings, ShouldAutoSize
 {
     /**
-     * @var AnonymousResourceCollection
+     * @var Collection
      */
     private Collection $data;
 
     /**
-     * @param $leaveRequestResources
+     * @param $leaveRequests
      */
-    public function __construct($leaveRequestResources){
-        $this->data = $leaveRequestResources;
+    public function __construct($leaveRequests){
+        $this->data = $leaveRequests;
     }
 
-    public function collection()
+    public function collection(): Collection
     {
         return $this->data;
     }
@@ -47,7 +45,6 @@ class LeaveRequestExport implements FromCollection, WithMapping, WithHeadings, S
 
     public function map($row): array
     {
-        Log::info('row', [$row->employee->staff_id]);
         return [
             $row->employee->staff_id,
             $row->employee->name,

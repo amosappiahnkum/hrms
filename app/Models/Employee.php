@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Scopes\EmployeeScope;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends ApplicationModel
 {
-    use SoftDeletes, HasUuid;
+    use SoftDeletes, HasUuid, EmployeeScope;
 
     /**
      * @var string[]
