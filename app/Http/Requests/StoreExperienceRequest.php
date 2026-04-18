@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Employee;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreExperienceRequest extends FormRequest
@@ -24,7 +25,27 @@ class StoreExperienceRequest extends FormRequest
     public function rules()
     {
         return [
-            'employee_id' => 'required|string|exists:employees,uuid',
+            'employee_uuid' => 'required|string|exists:employees,uuid',
+            'employee_id' => 'sometimes|exists:employees,id',
+            'city' => 'required|string',
+            'company' => 'required|string',
+            'job_title' => 'required|string',
+            'from' => 'required|date',
+            'to' => 'nullable|date',
+            'comment' => 'required|string',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->employee_uuid) {
+            $employee = Employee::query()
+                ->where('uuid', $this->employee_uuid)
+                ->firstOrFail();
+
+            $this->merge([
+                'employee_id' => $employee->id,
+            ]);
+        }
     }
 }

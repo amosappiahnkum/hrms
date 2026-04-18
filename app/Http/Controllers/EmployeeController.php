@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\EmployeeExport;
 use App\Filters\EmployeeFilter;
+use App\Helpers\ApiResponse;
 use App\Helpers\Helper;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
@@ -121,6 +122,7 @@ class EmployeeController extends Controller
      * @param StoreEmployeeRequest $request
      *
      * @return EmployeeResource|JsonResponse
+     * @throws Throwable
      */
     public function store(StoreEmployeeRequest $request)
     {
@@ -145,14 +147,13 @@ class EmployeeController extends Controller
      * Display the specified resource.
      *
      * @param string $employeeId
-     *
-     * @return EmployeeResource
+     * @return JsonResponse
      */
-    public function show(string $employeeId): EmployeeResource
+    public function show(string $employeeId)
     {
-        $employee = Employee::query()->where('uuid', $employeeId)->first();
+        $employee = Employee::query()->where('uuid', $employeeId)->firstOrFail();
 
-        return new EmployeeResource($employee);
+        return ApiResponse::success(new EmployeeResource($employee));
     }
 
     /**
@@ -244,6 +245,10 @@ class EmployeeController extends Controller
         DB::beginTransaction();
         try {
             $user = Auth::user();
+
+            $department = Department::where('uuid', $request->department_id)->firstOrFail();
+
+            $request['department_id'] = $department->id;
 
             $employee = Employee::findOrFail($id);
             $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
@@ -432,5 +437,91 @@ class EmployeeController extends Controller
                 'message' => "Something went wrong"
             ], 400);
         }
+    }
+
+    /**
+     * @param Employee $employee
+     * @return JsonResponse
+     */
+    public function getSpecializations(Employee $employee)
+    {
+        return ApiResponse::success($employee->specializations, 'Specializations');
+    }
+
+    public function updateSpecializations(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'specializations' => ['required', 'array'],
+            'specializations.*' => ['string', 'distinct'],
+        ]);
+
+        $specializations = array_values(array_unique([
+            ...($employee->specializations ?? []),
+            ...$validated['specializations'],
+        ]));
+
+        $employee->update(['specializations' => $specializations]);
+
+        return ApiResponse::success([
+            'specializations' => $specializations,
+        ], 'Specializations updated successfully');
+    }
+
+    public function removeSpecialization(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'specialization' => ['required', 'string'],
+        ]);
+
+        $employee->specializations = array_values(array_filter(
+            $employee->specializations ?? [], fn ($item) => $item !== $validated['specialization']
+        ));
+
+        $employee->save();
+
+        return ApiResponse::success($employee->specializations);
+    }
+
+    /**
+     * @param Employee $employee
+     * @return JsonResponse
+     */
+    public function getResearchInterests(Employee $employee)
+    {
+        return ApiResponse::success($employee->research_interests, 'Research Interests');
+    }
+
+    public function updateResearchInterests(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'research_interests' => ['required', 'array'],
+            'research_interests.*' => ['string', 'distinct'],
+        ]);
+
+        $research_interests = array_values(array_unique([
+            ...($employee->research_interests ?? []),
+            ...$validated['research_interests'],
+        ]));
+
+        $employee->update(['research_interests' => $research_interests]);
+
+        return ApiResponse::success([
+            'specializations' => $research_interests,
+        ], 'Research interests updated successfully');
+    }
+
+    public function removeResearchInterest(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'research_interest' => ['required', 'string'],
+        ]);
+
+        $employee->research_interests = array_values(array_filter(
+            $employee->research_interests ?? [], fn ($item) => $item !== $validated['research_interest']
+        ));
+
+        $employee->save();
+
+        return ApiResponse::success($employee->research_interests);
     }
 }

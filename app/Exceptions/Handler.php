@@ -2,7 +2,13 @@
 
 namespace App\Exceptions;
 
+use App\Helpers\ApiResponse;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -37,5 +43,44 @@ class Handler extends ExceptionHandler
         $this->reportable(function (Throwable $e) {
             //
         });
+    }
+
+    public function render($request, Throwable $e): JsonResponse|Response
+    {
+        // Model not found (404)
+        if ($e instanceof ModelNotFoundException) {
+            return ApiResponse::error(
+                'Resource not found',
+                null,
+                404
+            );
+        }
+
+        // Validation errors
+        if ($e instanceof ValidationException) {
+            return ApiResponse::error(
+                'Validation failed',
+                $e->errors(),
+                422
+            );
+        }
+
+        // HTTP exceptions (403, 401, etc.)
+        if ($e instanceof HttpExceptionInterface) {
+            return ApiResponse::error(
+                $e->getMessage() ?: 'Request error',
+                null,
+                $e->getStatusCode()
+            );
+        }
+
+        // Fallback (500)
+//        return ApiResponse::error(
+//            config('app.debug') ? $e->getMessage() : 'Server error',
+//            null,
+//            500
+//        );
+
+        return parent::render($request, $e);
     }
 }

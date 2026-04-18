@@ -32,7 +32,7 @@ class UpdateEmployeeRequest extends FormRequest
             'staff_id' => ['nullable','string', Rule::unique('employees')->ignore($employee)],
             'telephone' => 'nullable|string|unique:employees,telephone',
             'rank_id' => 'required|integer|exists:ranks,id',
-            'department_id' => 'required|integer|exists:departments,id',
+            'department_id' => 'required|uuid|exists:departments,uuid',
         ];
     }
 

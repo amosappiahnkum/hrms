@@ -8,13 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class PreviousPosition extends Model
+class PreviousPosition extends AppModel
 {
     use HasFactory, SoftDeletes, HasUuid;
 
     protected $fillable = [
         'employee_id',
         'position_id',
+        'department_id',
         'start',
         'end',
         'user_id'
@@ -34,5 +35,13 @@ class PreviousPosition extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * @return BelongsTo
+     */
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
     }
 }

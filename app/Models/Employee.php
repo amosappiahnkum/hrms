@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 
-class Employee extends ApplicationModel
+class Employee extends AppModel
 {
     use SoftDeletes, HasUuid, EmployeeScope;
 
@@ -22,6 +22,7 @@ class Employee extends ApplicationModel
     protected $appends = [
         'name'
     ];
+
 
     /**
      * @var string[]
@@ -57,14 +58,24 @@ class Employee extends ApplicationModel
         "termination_date",
         "terminated_by",
         "photo",
-        "onboarding"
+        "onboarding",
+        "bio",
+        "research_interests",
+        "specializations",
+    ];
+
+    protected $attributes = [
+        'specializations' => '[]',
+        'research_interests' => '[]',
     ];
 
     /**
      * @var string[]
      */
     protected $casts = [
-        'marital_status' => 'string'
+        'marital_status' => 'string',
+        'specializations' => 'array',
+        'research_interests' => 'array',
     ];
 
     /**
@@ -79,6 +90,7 @@ class Employee extends ApplicationModel
     {
         return $this->belongsTo(TerminationReason::class);
     }
+
     /**
      * @return BelongsTo
      */

@@ -13,6 +13,10 @@ class ContactDetail extends ApplicationModel
 {
     use HasFactory, Notifiable, SoftDeletes, HasUuid;
 
+    protected $casts = [
+        'social_links' => 'array',
+    ];
+
     protected $fillable = [
         'employee_id',
         'address',

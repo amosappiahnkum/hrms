@@ -2,44 +2,43 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\StorePublicationRequest;
 use App\Http\Requests\UpdatePublicationRequest;
+use App\Http\Resources\PublicationResource;
 use App\Models\Employee;
 use App\Models\Publication;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
 class PublicationController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\JsonResponse
+//     * @return JsonResponse
      */
-    public function index()
+    public function index(Request $request)
     {
-        $publications = Publication::with(['employee'])
-            ->latest()->paginate(10);
+        $publications = Publication::query();
 
-        return response()->json($publications);
-    }
+        $publications->when($request->employee_uuid, function ($query, $employee_uuid) {
+            $query->whereHas('employee', function ($q) use ($employee_uuid) {
+                $q->where('uuid', $employee_uuid);
+            });
+        })->latest();
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function create()
-    {
-        return response()->json([
-            'message' => 'Use POST /api/publications to create a new publication'
-        ]);
+        return PublicationResource::collection($publications->paginate($request->per_page ?? 10));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \App\Http\Requests\StorePublicationRequest  $request
-     * @return \Illuminate\Http\Response
+     * @param StorePublicationRequest $request
+     * @return JsonResponse
      */
     public function store(StorePublicationRequest $request)
     {
@@ -48,27 +47,26 @@ class PublicationController extends Controller
             'user_id' => auth()->id()
         ]);
 
-        return response()->json($publication, Response::HTTP_CREATED);
+        return ApiResponse::success($publication);
     }
 
     /**
      * Display the specified resource.
      *
-     * @param  \App\Models\Publication  $publication
-     * @return \Illuminate\Http\Response
+     * @param Publication $publication
+     * @return JsonResponse
      */
     public function show(Publication $publication)
     {
-        $publication->load(['user', 'employee']);
-        return response()->json($publication);
+        return  ApiResponse::success($publication);
     }
 
     /**
      * Update the specified resource in storage.
      *
-     * @param  \App\Http\Requests\UpdatePublicationRequest  $request
-     * @param  \App\Models\Publication  $publication
-     * @return \Illuminate\Http\Response
+     * @param UpdatePublicationRequest $request
+     * @param Publication $publication
+     * @return Response
      */
     public function update(UpdatePublicationRequest $request, Publication $publication)
     {
@@ -76,14 +74,14 @@ class PublicationController extends Controller
 
         $publication->update($request->validated());
 
-        return response()->json($publication);
+        return PublicationResource::make($publication);
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param  \App\Models\Publication  $publication
-     * @return \Illuminate\Http\Response
+     * @param Publication $publication
+     * @return JsonResponse
      */
     public function destroy(Publication $publication)
     {
@@ -91,7 +89,7 @@ class PublicationController extends Controller
 
         $publication->delete();
 
-        return response()->json(null, Response::HTTP_NO_CONTENT);
+        return ApiResponse::success(null, 'Publication deleted successfully.', ResponseAlias::HTTP_OK);
     }
 
     public function getMyPublications(Employee $employee)

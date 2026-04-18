@@ -19,9 +19,9 @@ class EmployeeResource extends JsonResource
     public function toArray($request): array
     {
         return [
-            'id' => $this->id,
             'uuid' => $this->uuid,
             'title' => $this->title,
+            'bio' => $this->bio,
             'job_type' => $this->job_type,
             'first_name' => $this->first_name,
             'middle_name' => $this->middle_name,
@@ -32,8 +32,11 @@ class EmployeeResource extends JsonResource
             'dob' => $this->dob,
             'age' => Carbon::parse($this->dob)->age,
             'gender' => $this->gender,
+            'specializations' => $this->specializations,
+            'research_interests' => $this->research_interests,
             'marital_status' => $this->marital_status,
             'telephone' => $this->contactDetail->telephone,
+            'social_links' => $this->contactDetail->social_links,
             'work_telephone' => $this->contactDetail->work_telephone,
             'work_email' => $this->contactDetail->work_email,
             'other_email' => $this->contactDetail->other_email,
@@ -48,11 +51,10 @@ class EmployeeResource extends JsonResource
             'photo' => Helper::getPhotoURL($this->photo),
             'job' => [
                 'hire_date' => $this->jobDetail->joined_date ? Carbon::parse($this->jobDetail->joined_date)->format('Y-m-d') : 'Not Updated',
-                'location' => $this->jobDetail->location ?? 'Not Updated'
+                'location' => $this->jobDetail->location ?? 'Not Updated',
+                'room' => $this->jobDetail->room ?? 'Not Updated'
             ],
             'supervisor' => $this->employeeSupervisor?->supervisor->name,
-            'permissions' => $this->userAccount?->getPermissionsViaRoles()->pluck('id')->merge
-            ($this->userAccount?->getDirectPermissions()->pluck('id'))
         ];
     }
 }

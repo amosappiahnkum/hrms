@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Education extends ApplicationModel
+class Education extends AppModel
 {
     use HasFactory, SoftDeletes, HasUuid;
 
@@ -22,7 +22,9 @@ class Education extends ApplicationModel
         'date',
         'type',
         'cert_number',
-        'user_id'
+        'field',
+        'country',
+        'user_id',
     ];
 
     protected $casts = [

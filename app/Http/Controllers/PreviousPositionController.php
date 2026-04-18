@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\StorePreviousPositionRequest;
 use App\Http\Requests\UpdatePreviousPositionRequest;
 use App\Http\Resources\PreviousPositionResource;
@@ -12,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
 class PreviousPositionController extends Controller
 {
@@ -24,9 +27,15 @@ class PreviousPositionController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $previousPositions = PreviousPosition::where('employee_id', $request->employeeId)->paginate(10);
+        $previousPositions = PreviousPosition::query();
 
-        return PreviousPositionResource::collection($previousPositions);
+        $previousPositions->when($request->employee_uuid, function ($query, $employee_uuid) {
+            $query->whereHas('employee', function ($q) use ($employee_uuid) {
+                $q->where('uuid', $employee_uuid);
+            });
+        })->orderByDesc('start');
+
+        return PreviousPositionResource::collection($previousPositions->paginate($request->per_page ?? 10));
     }
 
     /**
@@ -34,20 +43,18 @@ class PreviousPositionController extends Controller
      *
      * @param StorePreviousPositionRequest $request
      * @return PreviousPositionResource|JsonResponse
+     * @throws \Throwable
      */
     public function store(StorePreviousPositionRequest $request): PreviousPositionResource|JsonResponse
     {
-        DB::beginTransaction();
         try {
-            $request['user_id'] = Auth::user()->id;
-            $previousPosition = PreviousPosition::create($request->all());
-            DB::commit();
+            $previousPosition = PreviousPosition::create($request->validated());
 
-            return new PreviousPositionResource($previousPosition);
+            return ApiResponse::success(PreviousPositionResource::make($previousPosition));
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+
+            Log::error($exception->getMessage());
+            return ApiResponse::error('Something went wrong');
         }
     }
 
@@ -55,45 +62,46 @@ class PreviousPositionController extends Controller
      * Display the specified resource.
      *
      * @param UpdatePreviousPositionRequest $request
-     * @param $id
+     * @param PreviousPosition $previousPosition
      * @return PreviousPositionResource|JsonResponse
+     * @throws \Throwable
      */
-    public function update(UpdatePreviousPositionRequest $request, $id): JsonResponse|PreviousPositionResource
+    public function update(UpdatePreviousPositionRequest $request, PreviousPosition $previousPosition): JsonResponse|PreviousPositionResource
     {
-        DB::beginTransaction();
         try {
-            $previousPosition = PreviousPosition::findOrFail($id);
-            $previousPosition->update($request->all());
+            $previousPosition->update($request->validated());
 
-            DB::commit();
-            return new PreviousPositionResource($previousPosition);
+            return ApiResponse::success(PreviousPositionResource::make($previousPosition));
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Log::error($exception->getMessage());
+
+            return ApiResponse::error('Something went wrong');
         }
+    }
+
+    public function show(PreviousPosition $previousPosition)
+    {
+        return ApiResponse::success(PreviousPositionResource::make($previousPosition));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param $id
+     * @param PreviousPosition $previousPosition
      * @return JsonResponse|null
+     * @throws \Throwable
      */
-    public function destroy($id): ?JsonResponse
+    public function destroy(PreviousPosition $previousPosition): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $previousPosition = PreviousPosition::findOrFail($id);
             $previousPosition->delete();
             DB::commit();
-            return response()->json([
-                'message' =>'Emergency Contact Deleted'
-            ]);
+            return ApiResponse::success(null, 'Qualification deleted.', ResponseAlias::HTTP_OK);
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+
+            Log::error($exception->getMessage());
+            return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
         }
     }
 }

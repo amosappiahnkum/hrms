@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Experience extends ApplicationModel
+class Experience extends AppModel
 {
     use HasFactory, SoftDeletes, HasUuid;
 
@@ -23,6 +23,7 @@ class Experience extends ApplicationModel
         'city',
         'country',
         'job_type',
+        'user_id',
     ];
 
     public function employee(): BelongsTo

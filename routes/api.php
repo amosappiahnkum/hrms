@@ -1,16 +1,15 @@
 <?php
 
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\CommonController;
 use App\Http\Controllers\CommunityServiceController;
 use App\Http\Controllers\ContactDetailController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DependantController;
 use App\Http\Controllers\DirectReportController;
-use App\Http\Controllers\ExperienceController;
-use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\QualificationController;
 use App\Http\Controllers\EmergencyContactController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\ExperienceController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InformationUpdateController;
 use App\Http\Controllers\JobDetailController;
@@ -18,14 +17,11 @@ use App\Http\Controllers\LeaveManagementController;
 use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\NextOfKinController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PreviousPositionController;
 use App\Http\Controllers\PreviousRankController;
+use App\Http\Controllers\QualificationController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\ProjectController;
-use App\Http\Controllers\PublicationController;
-use App\Http\Controllers\GrantAndFundController;
-use App\Http\Controllers\Api\AuthController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -39,11 +35,11 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function (Request $request) {
-    return view('welcome');
+Route::prefix('')->group(function () {
+    foreach (glob(__DIR__ . '/v1/*.php') as $file) {
+        require $file;
+    }
 });
-
-
 // Public routes
 Route::post('login', [AuthController::class, 'login']);
 Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
@@ -53,30 +49,18 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::prefix('user')->group(function () {
         Route::get('/{id}/roles/active', [UserController::class, 'getActiveRoles']);
         Route::get('/{id}/roles', [UserController::class, 'getUserRoles']);
-        Route::post('/{id}/delete', [UserController::class, 'deleteUser']);
-        Route::post('/roles/add', [UserController::class, 'addUserRoles']);
-        Route::post('/roles/actions', [UserController::class, 'enableOrDisableRole']);
-    });
+   });
 
     Route::apiResource('/users', UserController::class);
 
-    Route::prefix('employees')->group(function () {
-        Route::post('/update-onboarding', [EmployeeController::class, 'onboardEmployee']);
-        Route::get('/search', [EmployeeController::class, 'searchEmployees']);
-        Route::post('update-level', [EmployeeController::class, 'updateEmployeeLevel']);
-        Route::post('update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
-        Route::get('/directory', [EmployeeController::class, 'getEmployeeDirectory']);
-    });
-
     Route::get('/stats/employee-management', [CommonController::class, 'getEmployeeManagementStats']);
     Route::post('/terminate-employee', [EmployeeController::class, 'terminateEmployee']);
-    Route::resource('/employees', EmployeeController::class);
     Route::get('/people', [EmployeeController::class, 'getPeople']);
 
     Route::apiResource('/contact-details', ContactDetailController::class);
     Route::apiResource('/job-details', JobDetailController::class);
     Route::apiResource('/next-of-kin', NextOfKinController::class);
-    Route::apiResource('/educations', QualificationController::class);
+    Route::apiResource('/qualifications', QualificationController::class);
     Route::apiResource('/experiences', ExperienceController::class);
     Route::apiResource('/emergency-contacts', EmergencyContactController::class);
     Route::apiResource('/dependants', DependantController::class);
@@ -126,14 +110,6 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::get('search-staff-id', [EmployeeController::class, 'getStaff']);
     Route::post('update-mail', [EmployeeController::class, 'updateStaffMail']);
 
-    Route::get('/user-projects', [ProjectController::class, 'userProjects']);
-
-    Route::apiResource('projects', ProjectController::class);
-
-    Route::get('employees/{employee}/publications', [PublicationController::class, 'getMyPublications']);
-    Route::apiResource('publications', PublicationController::class);
-    Route::apiResource('grants', GrantAndFundController::class);
-
     // Auth routes
     Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
     Route::get('/me', [AuthController::class, 'me'])->name('api.me');
@@ -147,9 +123,4 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
 
     Route::post("upload-photo", [EmployeeController::class, 'uploadPhoto']);
     Route::get("get-photo/{fileName}", [EmployeeController::class, 'getPhoto']);
-});
-
-
-Route::middleware('auth:api')->get('/user', function (Request $request) {
-    return $request->user();
 });

@@ -2,114 +2,105 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\StoreProjectRequest;
 use App\Http\Requests\UpdateProjectRequest;
+use App\Http\Resources\ProjectResource;
 use App\Models\Project;
+use Exception;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
 class ProjectController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
-     */
-    public function index()
-    {
-        return Project::with(['employee', 'user'])
-            ->paginate(10);
-    }
-
-    public function userProjects(Request $request)
-    {
-        return Project::where('user_id', auth()->id())
-            ->with(['employee', 'user'])
-            ->paginate(10);
-    }
-
-    /**
-     * Show the form for creating a new resource.
+     * @param Request $request
      *
-     * @return \Illuminate\Http\Response
+     * @return AnonymousResourceCollection
      */
-    public function create()
+    public function index(Request $request): AnonymousResourceCollection
     {
-        //
+        $projects = Project::query();
+
+        $projects->when($request->employee_uuid, function ($query, $employee_uuid) {
+            $query->whereHas('employee', function ($q) use ($employee_uuid) {
+                $q->where('uuid', $employee_uuid);
+            });
+        })->orderByDesc('year');
+
+        return ProjectResource::collection($projects->paginate($request->per_page ?? 10));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \App\Http\Requests\StoreProjectRequest  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @param StoreProjectRequest $request
+     * @return ProjectResource|JsonResponse
+     * @throws \Throwable
      */
-    public function store(StoreProjectRequest $request)
+    public function store(StoreProjectRequest $request): ProjectResource|JsonResponse
     {
-        $project = Project::create([
-            'title' => $request->title,
-            'year' => $request->year,
-            'location' => $request->location,
-            'significance' => $request->significance,
-            'description' => $request->description,
-            'user_id' => auth()->id(),
-            'employee_id' => $request->employee_id,
-        ]);
+        try {
+            $project = Project::create($request->validated());
 
-        return response()->json($project->load(['employee', 'user']), 201);
+            return ApiResponse::success(ProjectResource::make($project));
+        }catch (Exception $exception){
+
+            Log::error($exception->getMessage());
+            return ApiResponse::error('Something went wrong');
+        }
     }
 
     /**
      * Display the specified resource.
      *
-     * @param  \App\Models\Project  $project
-     * @return \Illuminate\Http\Response
+     * @param UpdateProjectRequest $request
+     * @param Project $project
+     * @return ProjectResource|JsonResponse
+     * @throws \Throwable
      */
+    public function update(UpdateProjectRequest $request, Project $project): JsonResponse|ProjectResource
+    {
+        try {
+            $project->update($request->validated());
+
+            return ApiResponse::success(ProjectResource::make($project));
+        }catch (Exception $exception){
+            Log::error($exception->getMessage());
+
+            return ApiResponse::error('Something went wrong');
+        }
+    }
+
     public function show(Project $project)
     {
-        return $project->load(['employee', 'user']);
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  \App\Models\Project  $project
-     * @return \Illuminate\Http\Response
-     */
-    public function edit(Project $project)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param  \App\Http\Requests\UpdateProjectRequest  $request
-     * @param  \App\Models\Project  $project
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function update(UpdateProjectRequest $request, Project $project)
-    {
-        $project->update([
-            'title' => $request->title,
-            'year' => $request->year,
-            'location' => $request->location,
-            'significance' => $request->significance,
-            'description' => $request->description,
-            'employee_id' => $request->employee_id,
-        ]);
-
-        return response()->json($project->load(['employee', 'user']));
+        return ApiResponse::success(ProjectResource::make($project));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param  \App\Models\Project  $project
-     * @return \Illuminate\Http\JsonResponse
+     * @param Project $project
+     * @return JsonResponse|null
+     * @throws \Throwable
      */
-    public function destroy(Project $project)
+    public function destroy(Project $project): ?JsonResponse
     {
-        $project->delete();
-        return response()->json(null, 204);
+        DB::beginTransaction();
+        try {
+            $project->delete();
+            DB::commit();
+            return ApiResponse::success(null, 'Project deleted.', ResponseAlias::HTTP_OK);
+        }catch (Exception $exception){
+
+            Log::error($exception->getMessage());
+            return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
+        }
     }
 }

@@ -18,17 +18,17 @@ class QualificationResource extends JsonResource
     public function toArray($request): array|JsonSerializable|Arrayable
     {
         return [
-            'id' => $this->id,
-            'employee_id' => $this->employee_id,
-//            'employee' => new EmployeeResource($this->employee),
-            'education_level_id' => $this->education_level_id,
-            'education_level' => $this->educationLevel,
+            'uuid' => $this->uuid,
+            'employee_uuid' => $this->employee_id,
+            'education_level_uuid' => $this->educationLevel->uuid,
+            'education_level' => $this->educationLevel->name,
+            'field' => $this->field,
+            'country' => $this->country,
             'institution' => $this->institution,
             'qualification' => $this->qualification,
             'cert_number' => $this->cert_number,
             'date' => $this->date,
-//            'photo' => new PhotoResource($this->photo),
-//            'certificate' => $this->photo ? '/storage/docs/qualifications/' . $this->photo->file_name : null,
+            'type' => $this->type,
             'info_update' => $this->informationUpdate,
         ];
     }
