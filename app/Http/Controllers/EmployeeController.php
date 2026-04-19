@@ -237,22 +237,16 @@ class EmployeeController extends Controller
      * Store a newly created resource in storage.
      *
      * @param UpdateEmployeeRequest $request
-     * @param $id
+     * @param Employee $employee
      * @return EmployeeResource|JsonResponse
+     * @throws Throwable
      */
-    public function update(UpdateEmployeeRequest $request, $id): EmployeeResource|JsonResponse
+    public function update(UpdateEmployeeRequest $request, Employee $employee): EmployeeResource|JsonResponse
     {
         DB::beginTransaction();
         try {
-            $user = Auth::user();
 
-            $department = Department::where('uuid', $request->department_id)->firstOrFail();
-
-            $request['department_id'] = $department->id;
-
-            $employee = Employee::findOrFail($id);
-            $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
-
+            Log::info('osik', $request->validated());
             if ($this->isHrAdmin()) {
                 $employee->update($request->all());
                 $employee->save();
@@ -266,25 +260,12 @@ class EmployeeController extends Controller
                 $saveFile->save();
             }
 
-            /*PreviousRank::updateOrCreate([
-                'rank_id' => $employee->rank_id,
-                'employee_id' => $employee->id
-            ], [
-                'rank_id' => $employee->rank_id,
-                'employee_id' => $employee->id,
-                'user_id' => Auth::id()
-            ]);*/
 
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the personal details for ' . $employee->name,
-                'updated personal detail', [''], 'personal-details')
-                ->to($employee)
-                ->as($user);
-
-            Helper::updateSRMS($request->staff_id);
+//            Helper::updateSRMS($request->staff_id);
 
             DB::commit();
 
-            return new EmployeeResource($employee);
+            return ApiResponse::success(EmployeeResource::make($employee));
         } catch (Exception $exception) {
 
             Log::info('Employee update failed', [$exception]);

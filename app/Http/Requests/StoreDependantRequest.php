@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Employee;
+use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreDependantRequest extends FormRequest
@@ -25,8 +27,28 @@ class StoreDependantRequest extends FormRequest
     {
         return [
             'name' => 'required',
-            'relationship' => 'required',
-            'employee_id' => 'required|string|exists:employees,uuid',
+            'relationship' => 'required|string',
+            'phone_number' => 'nullable|string',
+            'alt_phone_number' => 'nullable|string',
+            'dob' => 'nullable|date',
+            'employee_uuid' => 'required|string|exists:employees,uuid',
+            'employee_id' => 'sometimes|exists:employees,id',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->employee_uuid) {
+            $employee = Employee::query()
+                ->where('uuid', $this->employee_uuid)
+                ->firstOrFail();
+            $this->merge([
+                'employee_id' => $employee->id,
+            ]);
+        }
+
+        $this->merge([
+            'dob' => Carbon::parse($this->dob)->format('Y-m-d'),
+        ]);
     }
 }

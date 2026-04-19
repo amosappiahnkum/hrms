@@ -22,6 +22,7 @@ class JobDetail extends ApplicationModel
         'contract_start_date',
         'contract_end_date',
         'employee_id',
+        'room',
         'user_id',
         'job_category_id',
         'sub_unit_id',

@@ -13,12 +13,20 @@ class Project extends AppModel
 
     protected $fillable = [
         'title',
-        'year',
+        'end_year',
+        'start_year',
         'location',
         'significance',
         'description',
         'user_id',
+        'role',
+        'status',
+        'collaborators',
         'employee_id'
+    ];
+
+    protected $casts = [
+        'collaborators' => 'array',
     ];
 
     public function employee(): BelongsTo

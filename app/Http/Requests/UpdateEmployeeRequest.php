@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Department;
+use App\Models\Rank;
+use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class UpdateEmployeeRequest extends FormRequest
@@ -28,14 +30,48 @@ class UpdateEmployeeRequest extends FormRequest
         $employee = $this->route('employee');
 
         return [
+            'department_uuid' => 'required|uuid|exists:departments,uuid',
+            'department_id' => 'sometimes|exists:departments,id',
+            'dob' => 'required|date',
+            'first_name' => 'required|string',
+            'gender' => 'required|in:Male,Female',
+            'job_type' => 'required|in:full_time,part_time',
+            'last_name' => 'required|string',
+            'marital_status' => 'required|in:Single,Married,Divorced,Widow,Separated',
+            'middle_name' => 'nullable|string',
+            'qualification' => 'required|string',
             'ssnit_number' => ['nullable','string', Rule::unique('employees')->ignore($employee)],
             'staff_id' => ['nullable','string', Rule::unique('employees')->ignore($employee)],
-            'telephone' => 'nullable|string|unique:employees,telephone',
-            'rank_id' => 'required|integer|exists:ranks,id',
-            'department_id' => 'required|uuid|exists:departments,uuid',
+            'rank_uuid' => 'required|uuid|exists:ranks,uuid',
+            'rank_id' => 'sometimes|exists:ranks,id',
         ];
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->department_uuid) {
+            $d = Department::query()
+                ->where('uuid', $this->department_uuid)
+                ->firstOrFail();
+            $this->merge([
+                'department_id' => $d->id,
+            ]);
+        }
+        if ($this->rank_uuid) {
+            $r = Rank::query()
+                ->where('uuid', $this->rank_uuid)
+                ->firstOrFail();
+            $this->merge([
+                'rank_id' => $r->id,
+            ]);
+        }
+
+        if ($this->dob) {
+            $this->merge([
+                'dob' => Carbon::parse($this->dob)->format('Y-m-d'),
+            ]);
+        }
+    }
     public function messages(): array
     {
         return [

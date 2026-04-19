@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class NextOfKin extends Model
+class NextOfKin extends AppModel
 {
     use HasFactory, SoftDeletes, HasUuid;
 
@@ -19,7 +19,9 @@ class NextOfKin extends Model
         'phone_number',
         'alt_phone_number',
         'address',
-        'email'
+        'employee_id',
+        'email',
+        'user_id',
     ];
 
     /**

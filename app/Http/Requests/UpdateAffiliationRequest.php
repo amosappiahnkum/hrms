@@ -28,6 +28,7 @@ class UpdateAffiliationRequest extends FormRequest
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
             'association' => 'required|string',
+            'description' => 'required|string',
             'role' => 'required|string',
             'start' => 'required|date_format:Y',
             'end'   => 'nullable|date_format:Y',

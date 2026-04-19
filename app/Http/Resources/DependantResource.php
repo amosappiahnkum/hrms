@@ -16,14 +16,13 @@ class DependantResource extends JsonResource
     public function toArray($request): array
     {
         return [
-            'id' => $this->id,
+            'uuid' => $this->uuid,
             'name' => $this->name,
-            'employee_id' => $this->employee_id,
+            'employee_uuid' => $this->employee->uuid,
             'relationship' => $this->relationship,
             'phone_number' => $this->phone_number,
             'alt_phone_number' => $this->alt_phone_number,
             'dob' => $this->dob,
-            'user_id' => $this->user_id,
             'info_update' => $this->informationUpdate,
         ];
     }

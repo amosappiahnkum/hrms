@@ -17,6 +17,9 @@ return new class extends Migration
             $table->jsonb('specializations')->default('[]')->nullable();
         });
 
+        Schema::table('next_of_kin', function (Blueprint $table) {
+            $table->integer('user_id')->nullable();
+        });
         Schema::table('job_details', function (Blueprint $table) {
             $table->longText('room')->nullable();
         });
@@ -36,13 +39,14 @@ return new class extends Migration
 
         Schema::table('projects', function (Blueprint $table) {
             $table->string('role')->nullable();
-            $table->year('start_year')->nullable();
+            $table->year('end_year')->nullable();
             $table->string('status')->nullable();
             $table->jsonb('collaborators')->nullable();
         });
 
 
         Schema::table('grant_and_funds', function (Blueprint $table) {
+            $table->string('currency')->nullable();
             $table->year('start')->nullable();
             $table->year('end')->nullable();
         });
@@ -81,12 +85,13 @@ return new class extends Migration
 
         Schema::table('projects', function (Blueprint $table) {
             $table->dropColumn('role');
-            $table->dropColumn('start_year');
+            $table->dropColumn('end_year');
             $table->dropColumn('status');
             $table->dropColumn('collaborators');
         });
 
         Schema::table('grant_and_funds', function (Blueprint $table) {
+            $table->dropColumn('currency');
             $table->dropColumn('start');
             $table->dropColumn('end');
         });
@@ -99,8 +104,12 @@ return new class extends Migration
         Schema::table('experiences', function (Blueprint $table) {
             $table->dropColumn('user_id');
         });
+
         Schema::table('previous_positions', function (Blueprint $table) {
             $table->dropColumn('department_id');
+        });
+        Schema::table('next_of_kin', function (Blueprint $table) {
+            $table->dropColumn('user_id');
         });
     }
 };

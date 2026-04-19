@@ -18,8 +18,8 @@ class ContactDetailResource extends JsonResource
     public function toArray($request): array|JsonSerializable|Arrayable
     {
         return [
-            'id' => $this->id,
-            'employee_id' => $this->employee_id,
+            'uuid' => $this->uuid,
+            'employee_uuid' => $this->employee->uuid,
             'address' => $this->address,
             'city' => $this->city,
             'region' => $this->region,

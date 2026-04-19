@@ -16,6 +16,9 @@ class GrantAndFund extends AppModel
         'benefactor',
         'date',
         'description',
+        'start',
+        'end',
+        'currency',
         'employee_id',
         'user_id'
     ];

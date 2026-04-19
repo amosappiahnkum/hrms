@@ -3,7 +3,6 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\CommonController;
 use App\Http\Controllers\CommunityServiceController;
-use App\Http\Controllers\ContactDetailController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DependantController;
 use App\Http\Controllers\DirectReportController;
@@ -16,7 +15,6 @@ use App\Http\Controllers\JobDetailController;
 use App\Http\Controllers\LeaveManagementController;
 use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\LeaveTypeController;
-use App\Http\Controllers\NextOfKinController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PreviousPositionController;
 use App\Http\Controllers\PreviousRankController;
@@ -57,9 +55,6 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::post('/terminate-employee', [EmployeeController::class, 'terminateEmployee']);
     Route::get('/people', [EmployeeController::class, 'getPeople']);
 
-    Route::apiResource('/contact-details', ContactDetailController::class);
-    Route::apiResource('/job-details', JobDetailController::class);
-    Route::apiResource('/next-of-kin', NextOfKinController::class);
     Route::apiResource('/qualifications', QualificationController::class);
     Route::apiResource('/experiences', ExperienceController::class);
     Route::apiResource('/emergency-contacts', EmergencyContactController::class);

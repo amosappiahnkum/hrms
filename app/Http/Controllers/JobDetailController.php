@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\UpdateJobDetailRequest;
 use App\Http\Resources\JobDetailResource;
 use App\Models\ActivityLog;
@@ -27,82 +28,53 @@ class JobDetailController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param $employeeId
-     *
-     * @return JobDetailResource
+     * @param Employee $employee
+     * @return JsonResponse
      */
-    public function show($employeeId): JobDetailResource
+    public function show(Employee $employee): JsonResponse
     {
-        $employee = Employee::query()->where('uuid', $employeeId)->first();
-
-        return new JobDetailResource($employee->jobDetail);
+        return ApiResponse::success(JobDetailResource::make($employee->jobDetail));
     }
 
     /**
      * Update the specified resource in storage.
      *
      * @param UpdateJobDetailRequest $request
-     * @param $id
-     *
+     * @param Employee $employee
      * @return JobDetailResource|JsonResponse
+     * @throws \Throwable
      */
-    public function update(UpdateJobDetailRequest $request, $id): JobDetailResource|JsonResponse
+    public function update(UpdateJobDetailRequest $request, Employee $employee): JobDetailResource|JsonResponse
     {
         DB::beginTransaction();
         try {
-            $jobDetail = JobDetail::findOrFail($id);
-
-            $request['joined_date'] = $this->getDate($request->joined_date);
-            $request['contract_start_date'] = $this->getDate($request->contract_start_date);
-            $request['contract_end_date'] = $this->getDate($request->contract_end_date);
-
-
             if ($this->isHrAdmin()) {
-                $jobDetail->update($request->all());
-                $jobDetail->save();
+                $employee->jobDetail->update($request->validated());
+                $employee->jobDetail->save();
             } else {
-                $this->infoDifference($jobDetail, $request->all());
-                $this->requestUpdate($jobDetail);
+                $this->infoDifference($employee->jobDetail, $request->validated());
+                $this->requestUpdate($employee->jobDetail);
             }
 
-            if ($request->has('position_id') && $request->position_id != 'null') {
-                PreviousPosition::updateOrCreate([
-                    'position_id' => $request->position_id,
-                    'employee_id' => $jobDetail->employee_id
-                ], [
-                    'position_id' => $request->position_id,
-                    'employee_id' => $jobDetail->employee_id,
-                    'user_id' => Auth::id()
-                ]);
-            }
-
-            $user = Auth::user();
-
-
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the personal details for ' . $jobDetail->employee->name,
-                'updated personal detail', [''], 'personal-details')
-                ->to($jobDetail->employee)
-                ->as($user);
+            /*         if ($request->has('position_id') && $request->position_id != 'null') {
+                         PreviousPosition::updateOrCreate([
+                             'position_id' => $request->position_id,
+                             'employee_id' => $jobDetail->employee_id
+                         ], [
+                             'position_id' => $request->position_id,
+                             'employee_id' => $jobDetail->employee_id,
+                             'user_id' => Auth::id()
+                         ]);
+                     }*/
 
             DB::commit();
 
-            return new JobDetailResource($jobDetail);
+            return ApiResponse::success(JobDetailResource::make($employee->jobDetail));
         } catch (Exception $exception) {
             Log::error('Job Detail Update: ', [$exception]);
-
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Db::rollBack();
+            return ApiResponse::error('Something went wrong', []);
         }
-    }
-
-    public function getDate($date): ?string
-    {
-        if ($date !== 'null') {
-            return Carbon::parse($date)->format('Y-m-d');
-        }
-
-        return null;
     }
 
 }

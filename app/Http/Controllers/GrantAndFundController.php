@@ -32,7 +32,7 @@ class GrantAndFundController extends Controller
             $query->whereHas('employee', function ($q) use ($employee_uuid) {
                 $q->where('uuid', $employee_uuid);
             });
-        })->orderByDesc('year');
+        })->orderByDesc('start');
 
         return GrantAndFundResource::collection($grantAndFunds->paginate($request->per_page ?? 10));
     }
@@ -47,9 +47,9 @@ class GrantAndFundController extends Controller
     public function store(StoreGrantAndFundRequest $request): GrantAndFundResource|JsonResponse
     {
         try {
-            $grantAndFund = GrantAndFund::create($request->validated());
+            $grant = GrantAndFund::create($request->validated());
 
-            return ApiResponse::success(GrantAndFundResource::make($grantAndFund));
+            return ApiResponse::success(GrantAndFundResource::make($grant));
         }catch (Exception $exception){
 
             Log::error($exception->getMessage());
@@ -61,16 +61,16 @@ class GrantAndFundController extends Controller
      * Display the specified resource.
      *
      * @param UpdateGrantAndFundRequest $request
-     * @param GrantAndFund $grantAndFund
+     * @param GrantAndFund $grant
      * @return GrantAndFundResource|JsonResponse
      * @throws \Throwable
      */
-    public function update(UpdateGrantAndFundRequest $request, GrantAndFund $grantAndFund): JsonResponse|GrantAndFundResource
+    public function update(UpdateGrantAndFundRequest $request, GrantAndFund $grant): JsonResponse|GrantAndFundResource
     {
         try {
-            $grantAndFund->update($request->validated());
+            $grant->update($request->validated());
 
-            return ApiResponse::success(GrantAndFundResource::make($grantAndFund));
+            return ApiResponse::success(GrantAndFundResource::make($grant));
         }catch (Exception $exception){
             Log::error($exception->getMessage());
 
@@ -78,23 +78,23 @@ class GrantAndFundController extends Controller
         }
     }
 
-    public function show(GrantAndFund $grantAndFund)
+    public function show(GrantAndFund $grant)
     {
-        return ApiResponse::success(GrantAndFundResource::make($grantAndFund));
+        return ApiResponse::success(GrantAndFundResource::make($grant));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param GrantAndFund $grantAndFund
+     * @param GrantAndFund $grant
      * @return JsonResponse|null
      * @throws \Throwable
      */
-    public function destroy(GrantAndFund $grantAndFund): ?JsonResponse
+    public function destroy(GrantAndFund $grant): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $grantAndFund->delete();
+            $grant->delete();
             DB::commit();
             return ApiResponse::success(null, 'GrantAndFund deleted.', ResponseAlias::HTTP_OK);
         }catch (Exception $exception){

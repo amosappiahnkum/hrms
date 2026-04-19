@@ -32,7 +32,7 @@ class ProjectController extends Controller
             $query->whereHas('employee', function ($q) use ($employee_uuid) {
                 $q->where('uuid', $employee_uuid);
             });
-        })->orderByDesc('year');
+        })->orderByDesc('start_year');
 
         return ProjectResource::collection($projects->paginate($request->per_page ?? 10));
     }

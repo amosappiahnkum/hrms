@@ -4,12 +4,11 @@ namespace App\Models;
 
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class EmergencyContact extends ApplicationModel
+class EmergencyContact extends AppModel
 {
     use HasFactory, SoftDeletes, HasUuid;
 

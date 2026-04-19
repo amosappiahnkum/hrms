@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\UpdateNextOfKinRequest;
 use App\Http\Resources\NextOfKinResource;
-use App\Models\ActivityLog;
 use App\Models\Employee;
+use App\Models\NextOfKin;
 use App\Traits\InformationUpdate;
 use Exception;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -17,61 +17,44 @@ class NextOfKinController extends Controller
 {
     use InformationUpdate;
 
-    public function show($employeeId): NextOfKinResource
+    /**
+     * @param Employee $employee
+     * @return JsonResponse
+     */
+    public function show(Employee $employee)
     {
-        $employee = Employee::query()->where('uuid', $employeeId)->first();
-
         if (!$employee->nextOfKin) {
-            $nextOfKin = $employee->nextOfKin()->create();
+            $employee->nextOfKin()->create();
         }
 
-        return new NextOfKinResource($employee->nextOfKin ?? $nextOfKin);
+        return ApiResponse::success(NextOfKinResource::make($employee->nextOfKin)) ;
     }
 
     /**
      * @param UpdateNextOfKinRequest $request
-     * @param $id
-     *
+     * @param Employee $employee
      * @return NextOfKinResource|JsonResponse
+     * @throws \Throwable
      */
-    public function update(UpdateNextOfKinRequest $request, $id): NextOfKinResource|JsonResponse
+    public function update(UpdateNextOfKinRequest $request, Employee $employee): NextOfKinResource|JsonResponse
     {
         DB::beginTransaction();
+
         try {
-            $user = Auth::user();
-
-            $employee = Employee::findOrFail($request->employee_id);
-
-            $nextOfKin = $employee->nextOfKin;
-
-            if (!$nextOfKin) {
-                $nextOfKin = $employee->nextOfKin()->create();
-            }
-
             if ($this->isHrAdmin()) {
-                $nextOfKin->update($request->all());
-                $nextOfKin->save();
+                $employee->nextOfKin->update($request->validated());
+                $employee->nextOfKin->save();
             } else {
-                $this->infoDifference($nextOfKin, $request->all());
-                $this->requestUpdate($nextOfKin);
+                $this->infoDifference($employee->nextOfKin, $request->validated());
+                $this->requestUpdate($employee->nextOfKin);
             }
-
-            $employee = Employee::findOrFail($request->employee_id);
-
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . 'update the next of kin details for ' . $employee->name,
-                'updated', [''], 'next of kin')
-                ->to($nextOfKin)
-                ->as($user);
 
             DB::commit();
 
-            return new NextOfKinResource($nextOfKin);
+            return ApiResponse::success(NextOfKinResource::make($employee->nextOfKin));
         } catch (Exception $exception) {
             Log::error('Next of Kin Update: ', [$exception]);
-
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::error('Something went wrong', []);
         }
     }
 }
