@@ -19,6 +19,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PreviousPositionController;
 use App\Http\Controllers\PreviousRankController;
 use App\Http\Controllers\QualificationController;
+use App\Http\Controllers\QuickEmailController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -42,6 +43,7 @@ Route::prefix('')->group(function () {
 Route::post('login', [AuthController::class, 'login']);
 Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
 Route::group(['middleware' => ['auth:sanctum']], static function () {
+    Route::post('mail/send', [QuickEmailController::class, 'send']);
     Route::get('commons', [HomeController::class, 'getCommonData']);
     Route::get('educational-levels', [CommonController::class, 'getEducationalLevels']);
     Route::prefix('user')->group(function () {
