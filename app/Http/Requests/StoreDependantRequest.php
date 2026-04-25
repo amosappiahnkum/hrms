@@ -33,6 +33,7 @@ class StoreDependantRequest extends FormRequest
             'dob' => 'nullable|date',
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
+            'user_id' => 'sometimes|exists:users,id',
         ];
     }
 
@@ -48,7 +49,8 @@ class StoreDependantRequest extends FormRequest
         }
 
         $this->merge([
-            'dob' => Carbon::parse($this->dob)->format('Y-m-d'),
+            'dob' => $this->dob ? Carbon::parse($this->dob)->format('Y-m-d') : null,
+            'user_id' => auth()->id(),
         ]);
     }
 }

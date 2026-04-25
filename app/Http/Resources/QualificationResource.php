@@ -19,7 +19,7 @@ class QualificationResource extends JsonResource
     {
         return [
             'uuid' => $this->uuid,
-            'employee_uuid' => $this->employee_id,
+            'employee_uuid' => $this->employee->uuid,
             'education_level_uuid' => $this->educationLevel->uuid,
             'education_level' => $this->educationLevel->name,
             'field' => $this->field,

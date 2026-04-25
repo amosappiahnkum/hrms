@@ -34,15 +34,23 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::prefix('')->group(function () {
-    foreach (glob(__DIR__ . '/v1/*.php') as $file) {
-        require $file;
-    }
-});
 // Public routes
 Route::post('login', [AuthController::class, 'login']);
 Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
+
+Route::prefix('v1')->group(function () {
+    foreach (glob(__DIR__ . '/staff-directory/*.php') as $file) {
+        require $file;
+    }
+});
+
 Route::group(['middleware' => ['auth:sanctum']], static function () {
+    Route::prefix('v1')->group(function () {
+        foreach (glob(__DIR__ . '/v1/*.php') as $file) {
+            require $file;
+        }
+    });
+
     Route::post('mail/send', [QuickEmailController::class, 'send']);
     Route::get('commons', [HomeController::class, 'getCommonData']);
     Route::get('educational-levels', [CommonController::class, 'getEducationalLevels']);
@@ -50,6 +58,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::get('/{id}/roles/active', [UserController::class, 'getActiveRoles']);
         Route::get('/{id}/roles', [UserController::class, 'getUserRoles']);
    });
+    Route::get('employees/{employee}/stats', [EmployeeController::class, 'employeeStats']);
 
     Route::apiResource('/users', UserController::class);
 

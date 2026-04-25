@@ -1,12 +1,24 @@
-<x-mail::message>
-# Email Notification
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; }
+        .button {
+            background-color: #3490dc;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+<h1>Email Notification</h1>
 
-{{ $body }}
+<p>{{ $body }}</p>
 
-<x-mail::button :url="config('app.url')">
-View Details
-</x-mail::button>
+<a href="{{ config('app.url') }}" class="button">View Details</a>
 
-Thanks,<br>
-{{ config('app.name') }}
-</x-mail::message>
+<p>Thanks,<br>{{ config('app.name') }}</p>
+</body>
+</html>

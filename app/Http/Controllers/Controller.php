@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Resources\CelebrationResource;
 use App\Models\Department;
 use App\Models\EducationLevel;
@@ -135,5 +136,31 @@ class Controller extends BaseController
         $user = Auth::user();
 
         return $user->hasRole($role);
+    }
+
+    public function empStats(string $employeeId)
+    {
+        $employee = Employee::where('uuid', $employeeId)->withCount([
+            'publications',
+            'projects',
+            'grantAndFunds',
+            'awards'
+        ])
+            ->with('jobDetail:id,employee_id,joined_date')
+            ->firstOrFail();
+
+        $yearsAtUniversity = null;
+
+        if ($employee->jobDetail?->joined_date) {
+            $yearsAtUniversity = Carbon::parse($employee->jobDetail->joined_date)->diffInYears(now());
+        }
+
+        return [
+            'publications' => $employee->publications_count,
+            'research_projects' => $employee->projects_count,
+            'grants_won' => $employee->grant_and_funds_count,
+            'honours_awards' => $employee->awards_count,
+            'years_at_university' => (int) $yearsAtUniversity,
+        ];
     }
 }

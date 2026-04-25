@@ -32,6 +32,7 @@ class StoreEmergencyContactRequest extends FormRequest
             'email' => 'nullable|email',
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
+            'user_id' => 'sometimes|exists:users,id',
         ];
     }
 
@@ -44,6 +45,10 @@ class StoreEmergencyContactRequest extends FormRequest
             $this->merge([
                 'employee_id' => $employee->id,
             ]);
+
         }
+        $this->merge([
+            'user_id' => auth()->id(),
+        ]);
     }
 }

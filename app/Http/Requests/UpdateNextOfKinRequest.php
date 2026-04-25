@@ -32,6 +32,7 @@ class UpdateNextOfKinRequest extends FormRequest
             'address' => 'nullable|string',
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
+            'user_id' => 'sometimes|exists:users,id',
         ];
     }
 
@@ -43,6 +44,7 @@ class UpdateNextOfKinRequest extends FormRequest
                 ->firstOrFail();
             $this->merge([
                 'employee_id' => $employee->id,
+                'user_id' => auth()->id(),
             ]);
         }
     }

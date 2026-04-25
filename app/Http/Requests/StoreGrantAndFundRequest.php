@@ -36,6 +36,7 @@ class StoreGrantAndFundRequest extends FormRequest
             'description' => 'nullable|string',
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
+            'user_id' => 'sometimes|exists:users,id',
         ];
     }
 
@@ -52,6 +53,7 @@ class StoreGrantAndFundRequest extends FormRequest
 
         $this->merge([
             'start' => Carbon::parse($this->start)->format('Y'),
+            'user_id' => auth()->id(),
         ]);
 
         if ($this->end) {

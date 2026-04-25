@@ -26,6 +26,7 @@ class StoreAchievementRequest extends FormRequest
         return [
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
+            'user_id' => 'sometimes|exists:users,id',
             'description' => 'required|string',
             'title' => 'required|string',
             'year' => 'required'
@@ -42,5 +43,9 @@ class StoreAchievementRequest extends FormRequest
                 'employee_id' => $employee->id,
             ]);
         }
+
+        $this->merge([
+            'user_id' => auth()->id(),
+        ]);
     }
 }

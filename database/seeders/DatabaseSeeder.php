@@ -20,10 +20,12 @@ class DatabaseSeeder extends Seeder
 //            RolesAndPermissionsSeeder::class,
 //            TerminationReasonSeeder::class,
 //            EducationLevelSeeder::class,
-            LeaveTypeSeeder::class,
+//            LeaveTypeSeeder::class,
 //            PositionSeeder::class,
-            LeaveTypeLevelConfigSeeder::class,
+//            LeaveTypeLevelConfigSeeder::class,
 //            LeaveRoleSeeder::class,
+
+            FacultySeeder::class,
         ]);
     }
 }

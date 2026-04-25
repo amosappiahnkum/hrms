@@ -238,8 +238,28 @@ class Employee extends AppModel
         return $this->hasMany(Experience::class);
     }
 
+    public function previousPositions(): HasMany
+    {
+        return $this->hasMany(PreviousPosition::class);
+    }
+
     public function grantAndFunds()
     {
         return $this->hasMany(GrantAndFund::class);
+    }
+
+    public function awards()
+    {
+        return $this->hasMany(Award::class);
+    }
+
+    public function achievements()
+    {
+        return $this->hasMany(Achievement::class);
+    }
+
+    public function affiliations()
+    {
+        return $this->hasMany(Affiliation::class);
     }
 }

@@ -20,6 +20,7 @@ return new class extends Migration
         Schema::table('next_of_kin', function (Blueprint $table) {
             $table->integer('user_id')->nullable();
         });
+
         Schema::table('job_details', function (Blueprint $table) {
             $table->longText('room')->nullable();
         });
@@ -35,6 +36,10 @@ return new class extends Migration
 
         Schema::table('publications', function (Blueprint $table) {
             $table->string('type')->nullable();
+        });
+
+        Schema::table('departments', function (Blueprint $table) {
+            $table->integer('faculty_id')->nullable();
         });
 
         Schema::table('projects', function (Blueprint $table) {
@@ -108,8 +113,13 @@ return new class extends Migration
         Schema::table('previous_positions', function (Blueprint $table) {
             $table->dropColumn('department_id');
         });
+
         Schema::table('next_of_kin', function (Blueprint $table) {
             $table->dropColumn('user_id');
+        });
+
+        Schema::table('departments', function (Blueprint $table) {
+            $table->dropColumn('faculty_id');
         });
     }
 };

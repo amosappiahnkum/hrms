@@ -245,8 +245,6 @@ class EmployeeController extends Controller
     {
         DB::beginTransaction();
         try {
-
-            Log::info('osik', $request->validated());
             if ($this->isHrAdmin()) {
                 $employee->update($request->all());
                 $employee->save();
@@ -504,5 +502,32 @@ class EmployeeController extends Controller
         $employee->save();
 
         return ApiResponse::success($employee->research_interests);
+    }
+
+    public function employeeStats(string $uuid)
+    {
+        $stats = $this->empStats($uuid);
+
+        return ApiResponse::success($stats);
+    }
+
+    /**
+     * @param Employee $employee
+     * @return JsonResponse
+     */
+    public function getBiography(Employee $employee)
+    {
+        return ApiResponse::success($employee->bio, 'Biography');
+    }
+
+    public function updateBiography(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'biography' => 'required|string|max:1500'
+        ]);
+
+        $employee->update(['bio' => $validated['biography']]);
+
+        return ApiResponse::success($employee->bio, 'Specializations updated successfully');
     }
 }

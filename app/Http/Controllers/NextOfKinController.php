@@ -24,7 +24,8 @@ class NextOfKinController extends Controller
     public function show(Employee $employee)
     {
         if (!$employee->nextOfKin) {
-            $employee->nextOfKin()->create();
+            $nextOfKin = $employee->nextOfKin()->create();
+            return ApiResponse::success(NextOfKinResource::make($nextOfKin)) ;
         }
 
         return ApiResponse::success(NextOfKinResource::make($employee->nextOfKin)) ;

@@ -18,6 +18,9 @@ Route::prefix('employees')->group(function () {
     Route::put('/{employee}/specializations', [EmployeeController::class, 'updateSpecializations']);
     Route::put('/{employee}/remove-specialization', [EmployeeController::class, 'removeSpecialization']);
 
+    Route::get('/{employee}/biography', [EmployeeController::class, 'getBiography']);
+    Route::put('/{employee}/biography', [EmployeeController::class, 'updateBiography']);
+
     Route::get('/{employee}/next-of-kin', [NextOfKinController::class, 'show']);
     Route::put('/{employee}/next-of-kin', [NextOfKinController::class, 'update']);
 
@@ -36,7 +39,6 @@ Route::prefix('employees')->group(function () {
     Route::get('/search', [EmployeeController::class, 'searchEmployees']);
     Route::post('update-level', [EmployeeController::class, 'updateEmployeeLevel']);
     Route::post('update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
-    Route::get('/directory', [EmployeeController::class, 'getEmployeeDirectory']);
 });
 Route::apiResource('/employees', EmployeeController::class);
 Route::apiResource('/awards', AwardController::class);
@@ -44,5 +46,4 @@ Route::apiResource('/achievements', AchievementController::class);
 Route::apiResource('/affiliations', AffiliationController::class);
 Route::apiResource('/grants', GrantAndFundController::class);
 Route::apiResource('projects', ProjectController::class);
-Route::get('employees/{employee}/publications', [PublicationController::class, 'getMyPublications']);
 Route::apiResource('publications', PublicationController::class);

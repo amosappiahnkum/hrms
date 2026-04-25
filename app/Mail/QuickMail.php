@@ -10,22 +10,21 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class QuickMail extends Mailable
+class QuickMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
     /**
-     * Create a new message instance.
+     * @param string $subjectText
+     * @param string $bodyText
+     * @param array $attachmentPaths
      */
     public function __construct(
         public string $subjectText,
         public string $bodyText,
-        public $attachments = []
+        public array $attachmentPaths = []
     ) {}
 
-    /**
-     * Get the message envelope.
-     */
     public function envelope(): Envelope
     {
         return new Envelope(
@@ -33,24 +32,28 @@ class QuickMail extends Mailable
         );
     }
 
-    /**
-     * Get the message content definition.
-     */
     public function content(): Content
     {
         return new Content(
-            view: 'emails.dynamic', // Create this blade file
+            view: 'emails.dynamic',
             with: ['body' => $this->bodyText],
         );
     }
 
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, Attachment>
-     */
     public function attachments(): array
     {
-        return array_map(fn($path) => Attachment::fromPath($path), $this->attachments);
+        $attachments = [];
+
+        foreach ($this->attachmentPaths as $path) {
+            // Double-check: does the file actually exist on disk?
+            if ($path && file_exists($path)) {
+                $attachments[] = Attachment::fromPath($path);
+            } else {
+                // Optional: Log this error so you know an attachment was missing
+                \Log::warning("Attachment not found at path: " . ($path ?? 'null'));
+            }
+        }
+
+        return $attachments;
     }
 }

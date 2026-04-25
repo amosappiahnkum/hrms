@@ -33,9 +33,9 @@ class QualificationController extends Controller
      *
      * @param Request $request
      *
-     * @return AnonymousResourceCollection|Response|BinaryFileResponse
+     * @return AnonymousResourceCollection
      */
-    public function index(Request $request): Response|BinaryFileResponse|AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
         $educations = Education::query();
 

@@ -27,6 +27,7 @@ class StoreAffiliationRequest extends FormRequest
         return [
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
+            'user_id' => 'sometimes|exists:users,id',
             'association' => 'required|string',
             'description' => 'required|string',
             'role' => 'required|string',
@@ -48,6 +49,7 @@ class StoreAffiliationRequest extends FormRequest
 
         $this->merge([
             'start' => Carbon::parse($this->date)->format('Y'),
+            'user_id' => auth()->id()
         ]);
 
         if ($this->end) {

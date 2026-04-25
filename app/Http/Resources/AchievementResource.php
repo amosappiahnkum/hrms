@@ -14,6 +14,12 @@ class AchievementResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        return parent::toArray($request);
+        return [
+            'uuid' => $this->uuid,
+            'employee_uuid' => $this->employee->uuid,
+            'title' => $this->title,
+            'year' => $this->year,
+            'description' => $this->description,
+        ];
     }
 }

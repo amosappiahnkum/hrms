@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Resources\public;
+namespace App\Http\Resources\StaffDirectory;
 
 use App\Helpers\Helper;
 use Illuminate\Http\Request;
@@ -21,10 +21,14 @@ class EmployeeResource extends JsonResource
             'title' => $this->title,
             'slug' => Str::slug($this->name),
             'name' => $this->name,
+            'bio' => $this->bio,
             'email' => $this->contactDetail->work_email,
             'department' => $this->department->name,
             'rank' => $this->rank->name,
+            'specializations' => $this->specializations,
+            'research_interests' => $this->research_interests,
             'photo' => Helper::getPhotoURL($this->photo),
+            'room' => $this->jobDetail->room ?? 'Not Updated'
         ];
     }
 }

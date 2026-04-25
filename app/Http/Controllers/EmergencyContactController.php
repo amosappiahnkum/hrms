@@ -57,7 +57,6 @@ class EmergencyContactController extends Controller
             $user = Auth::user();
 
             if ($this->isHrAdmin()) {
-                $request['user_id'] = $user->id;
                 $emergencyContact = EmergencyContact::create($request->validated());
             } else {
                 $emergencyContact = EmergencyContact::create(['user_id' => $user->id]);
@@ -65,12 +64,6 @@ class EmergencyContactController extends Controller
                 $this->infoDifference($emergencyContact, $request->validated());
                 $this->requestUpdate($emergencyContact);
             }
-
-            /* ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added emergency contact for ' . $employee->name,
-                 'created', [''], 'emergencyContact')
-                 ->to($employee)
-                 ->as($user);*/
-
 
             DB::commit();
             return new EmergencyContactResource($emergencyContact);
