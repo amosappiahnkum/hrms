@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::table('employees', function (Blueprint $table) {
             $table->longText('bio')->nullable();
-            $table->jsonb('research_interests')->default('[]')->nullable();
-            $table->jsonb('specializations')->default('[]')->nullable();
+            $table->jsonb('research_interests')->nullable();
+            $table->jsonb('specializations')->nullable();
         });
 
         Schema::table('next_of_kin', function (Blueprint $table) {
