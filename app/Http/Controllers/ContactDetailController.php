@@ -64,7 +64,9 @@ class ContactDetailController extends Controller
                 $this->infoDifference($employee->contactDetail, $request->validated());
                 $this->requestUpdate($employee->contactDetail);
 
-                Helper::updateSRMS($this->cleanPhoneNumber($request->telephone));
+                $phone = $this->cleanPhoneNumber($request->telephone);
+                Log::info('osikani', [$employee->staff_id, $phone]);
+                Helper::updateSRMS($employee->staff_id, $phone);
             }
 
             DB::commit();

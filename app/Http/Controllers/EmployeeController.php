@@ -273,7 +273,8 @@ class EmployeeController extends Controller
             }
 
 
-//            Helper::updateSRMS($request->staff_id);
+            Log::info('emp', [$request->staff_id, $employee?->contactDetail?->phone]);
+            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
 
             DB::commit();
 
