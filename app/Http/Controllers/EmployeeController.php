@@ -115,6 +115,20 @@ class EmployeeController extends Controller
         return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->per_page ?? 10));
     }
 
+    public function getMyTeam(Request $request): AnonymousResourceCollection
+    {
+        Log::info('here');
+        $employee = Auth::user()?->employee;
+
+
+        Log::info('sod', [$employee]);
+        $employeesQuery = Employee::query();
+
+        $employeesQuery->where('department_id', $employee->department_id);
+
+
+        return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->per_page ?? 10));
+    }
 
     /**
      * Store a newly created resource in storage.

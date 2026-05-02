@@ -40,6 +40,9 @@ Route::prefix('employees')->group(function () {
     Route::post('update-level', [EmployeeController::class, 'updateEmployeeLevel']);
     Route::post('update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
 });
+
+Route::get('/my-colleagues', [EmployeeController::class, 'getMyTeam']);
+
 Route::apiResource('/employees', EmployeeController::class);
 Route::apiResource('/awards', AwardController::class);
 Route::apiResource('/achievements', AchievementController::class);
