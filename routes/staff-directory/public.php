@@ -5,6 +5,9 @@ use App\Http\Controllers\QuickEmailController;
 
 Route::prefix('directory')->group(function () {
     Route::get('/', [PublicController::class, 'getEmployees']);
+    Route::get('/counts', [PublicController::class, 'getCounts']);
+    Route::get('/ranks', [PublicController::class, 'getRanks']);
+    Route::get('/departments', [PublicController::class, 'getDepartments']);
     Route::post('mail/send', [QuickEmailController::class, 'send']);
     Route::group(['prefix' => '{employee}'], function () {
         Route::get('/stats', [PublicController::class, 'getEmployeeStats']);

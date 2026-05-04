@@ -65,7 +65,7 @@ class ContactDetailController extends Controller
                 $this->requestUpdate($employee->contactDetail);
 
                 $phone = $this->cleanPhoneNumber($request->telephone);
-                Log::info('osikani', [$employee->staff_id, $phone]);
+
                 Helper::updateSRMS($employee->staff_id, $phone);
             }
 
