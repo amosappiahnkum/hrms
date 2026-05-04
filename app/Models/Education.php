@@ -57,4 +57,20 @@ class Education extends AppModel
             ->where('status', 'pending')
             ->latest();
     }
+
+    protected static function booted()
+    {
+        parent::booted();
+        static::saving(function ($qualification) {
+            if ($qualification->education_level_id) {
+                $qualification->education_level_rank =
+                    $qualification->level()->value('rank');
+            }
+        });
+    }
+
+    public function level(): BelongsTo
+    {
+        return $this->belongsTo(EducationLevel::class, 'education_level_id');
+    }
 }

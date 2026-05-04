@@ -16,19 +16,21 @@ class EmployeeResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $qual = $this?->highestQualification;
         return [
             'uuid' => $this->uuid,
             'title' => $this->title,
             'slug' => Str::slug($this->name),
             'name' => $this->name,
+            'qualification' => $qual ? $qual->qualification . ' in ' . $qual->field . ' from ' . $qual->institution : null,
             'bio' => $this->bio,
-            'email' => $this->contactDetail->work_email,
-            'department' => $this->department->name,
-            'rank' => $this->rank->name,
+            'email' => $this?->contactDetail?->work_email,
+            'department' => $this?->department?->name,
+            'rank' => $this?->rank?->name,
             'specializations' => $this->specializations,
             'research_interests' => $this->research_interests,
             'photo' => Helper::getPhotoURL($this->photo),
-            'room' => $this->jobDetail->room ?? 'Not Updated'
+            'room' => $this?->jobDetail?->room ?? 'Address not updated'
         ];
     }
 }

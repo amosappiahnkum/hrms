@@ -19,8 +19,11 @@ class AppModel extends Model
     protected static function booted()
     {
         static::creating(static function ($model) {
-            if (isset($model->user_id)) {
+            if (empty($model->user_id)) {
+                Log::info('here', [Auth::id()]);
                 $model->user_id = Auth::id();
+            } else {
+                Log::info('no', ['']);
             }
         });
     }

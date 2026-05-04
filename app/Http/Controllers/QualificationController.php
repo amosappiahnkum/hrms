@@ -59,18 +59,13 @@ class QualificationController extends Controller
     {
         DB::beginTransaction();
         try {
-            $user = Auth::user();
-
-            if ($this->isHrAdmin()) {
-                $request['user_id'] = $user->id;
+             if ($this->isHrAdmin()) {
                 $qualification = Education::create($request->validated());
             } else {
-                $qualification = Education::create(['user_id' => $user->id]);
-
+                $qualification = Education::create();
                 $this->infoDifference($qualification, $request->validated());
                 $this->requestUpdate($qualification);
             }
-
             /* ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added emergency contact for ' . $employee->name,
                  'created', [''], 'qualification')
                  ->to($employee)

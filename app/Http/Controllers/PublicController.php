@@ -6,7 +6,6 @@ use App\Helpers\ApiResponse;
 use App\Http\Resources\AchievementResource;
 use App\Http\Resources\AffiliationResource;
 use App\Http\Resources\AwardResource;
-use App\Http\Resources\DepartmentResource;
 use App\Http\Resources\ExperienceResource;
 use App\Http\Resources\GrantAndFundResource;
 use App\Http\Resources\ProjectResource;
@@ -26,6 +25,7 @@ class PublicController extends Controller
     public function getEmployees(Request $request)
     {
         $employees = Employee::query()
+            ->with('highestQualification')
             ->when($request->department, function ($q, $uuid) {
                 $q->whereHas('department', fn($d) => $d->where('uuid', $uuid));
             })
@@ -43,6 +43,7 @@ class PublicController extends Controller
                 });
             })
             ->with(['department', 'rank'])
+            ->orderBy('directory_order')
             ->paginate(12)
             ->withQueryString();
 

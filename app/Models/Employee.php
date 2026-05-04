@@ -172,6 +172,11 @@ class Employee extends AppModel
         return $this->hasMany(Education::class);
     }
 
+    public function latestQualification()
+    {
+        return $this->hasOne(Education::class)->latestOfMany('date');
+    }
+
     /**
      * @return HasOne
      */
@@ -261,5 +266,10 @@ class Employee extends AppModel
     public function affiliations()
     {
         return $this->hasMany(Affiliation::class);
+    }
+
+    public function highestQualification()
+    {
+        return $this->hasOne(Education::class)->ofMany('education_level_rank', 'max');
     }
 }
