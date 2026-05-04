@@ -42,7 +42,13 @@ class MinioUploadService
 
     public function getFile(string $fileName): ?string
     {
-        return Storage::disk('s3')->get("photos/{$fileName}");
+        try {
+            return Storage::disk('s3')->get("photos/{$fileName}");
+        }catch (\Exception $exception) {
+            Log::error('getfile', [$exception]);
+
+            return null;
+        }
     }
 
     /**
