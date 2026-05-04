@@ -43,9 +43,8 @@ class PublicController extends Controller
                 });
             })
             ->with(['department', 'rank'])
-            ->orderBy('directory_order')
-            ->paginate(12)
-            ->withQueryString();
+            ->orderByRaw('directory_order IS NULL, directory_order ASC')
+            ->paginate(12);
 
         return EmployeeResource::collection($employees);
     }
