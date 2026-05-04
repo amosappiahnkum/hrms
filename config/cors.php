@@ -19,7 +19,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'],
+    'allowed_origins' => ['https://directory.ttu.edu.gh', 'https://hrms.ttuportal.com'],
 
     'allowed_origins_patterns' => [],
 
