@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class AppModel extends Model
 {
@@ -20,10 +19,7 @@ class AppModel extends Model
     {
         static::creating(static function ($model) {
             if (empty($model->user_id)) {
-                Log::info('here', [Auth::id()]);
                 $model->user_id = Auth::id();
-            } else {
-                Log::info('no', ['']);
             }
         });
     }

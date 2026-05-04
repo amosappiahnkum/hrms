@@ -62,6 +62,6 @@ class Helper
     {
         if (!$fileName) return null;
 
-        return env("APP_URL") . "/api/get-photo/{$fileName}";
+        return env("PHOTO_URL") . "/{$fileName}";
     }
 }

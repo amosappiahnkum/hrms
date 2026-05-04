@@ -117,11 +117,8 @@ class EmployeeController extends Controller
 
     public function getMyTeam(Request $request): AnonymousResourceCollection
     {
-        Log::info('here');
         $employee = Auth::user()?->employee;
 
-
-        Log::info('sod', [$employee]);
         $employeesQuery = Employee::query();
 
         $employeesQuery->where('department_id', $employee->department_id);
