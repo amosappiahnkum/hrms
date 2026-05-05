@@ -380,8 +380,8 @@ class EmployeeController extends Controller
 
     public function getPhoto($fileName, MinioUploadService $minio)
     {
-        Log::info($fileName);
-        return $minio->getFile($fileName);
+        return response($minio->getFile($fileName), 200)
+            ->header('Content-Type', 'image/jpeg');
     }
 
     public function onboardEmployee(Request $request)
