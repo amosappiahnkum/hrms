@@ -32,7 +32,7 @@ class EmployeeResource extends JsonResource
             'specializations' => $this->specializations,
             'research_interests' => $this->research_interests,
             'photo' => Helper::getTempPhoto($this->photo),
-            'room' => $this?->jobDetail?->room ?? 'Address not updated'
+            'room' => $this?->jobDetail?->room ?? null
         ];
     }
 }
