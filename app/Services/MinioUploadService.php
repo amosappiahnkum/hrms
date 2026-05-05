@@ -42,25 +42,12 @@ class MinioUploadService
 
     public function getFile(string $fileName): ?string
     {
-        /*try {
+        try {
             return Storage::disk('s3')->get("photos/{$fileName}");
         }catch (\Exception $exception) {
             Log::error('getfile', [$exception]);
 
             return null;
-        }*/
-
-        try {
-            $file = Storage::disk('s3')->get("photos/{$fileName}");
-
-            return response($file, 200)
-                ->header('Content-Type', Storage::disk('s3')->mimeType("photos/{$fileName}"))
-                ->header('Cache-Control', 'public, max-age=31536000');
-
-        } catch (\Exception $exception) {
-            Log::error('getfile', [$exception]);
-
-            abort(404);
         }
     }
 
