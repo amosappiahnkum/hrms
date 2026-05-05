@@ -381,7 +381,7 @@ class EmployeeController extends Controller
     public function getPhoto($fileName, MinioUploadService $minio)
     {
         return response($minio->getFile($fileName), 200)
-            ->header('Content-Type', 'text/html; charset=utf-8');
+            ->header('Content-Type', 'text/html');
     }
 
     public function onboardEmployee(Request $request)
