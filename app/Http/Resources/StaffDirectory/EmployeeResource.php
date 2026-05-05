@@ -31,7 +31,7 @@ class EmployeeResource extends JsonResource
             'rank' => $this?->rank?->name,
             'specializations' => $this->specializations,
             'research_interests' => $this->research_interests,
-            'photo' => Helper::getPhotoURL($this->photo),
+            'photo' => Helper::getTempPhoto($this->photo),
             'room' => $this?->jobDetail?->room ?? 'Address not updated'
         ];
     }

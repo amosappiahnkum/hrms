@@ -8,6 +8,7 @@ use Exception;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
@@ -53,7 +54,7 @@ class Helper
                     'staff_id' => $staffId,
                     'phone' => $phone,
                 ]);
-        }catch (Exception $e) {
+        } catch (Exception $e) {
             Log::error("Failed to update SRMS: " . $e->getMessage());
         }
     }
@@ -63,5 +64,12 @@ class Helper
         if (!$fileName) return null;
 
         return env("PHOTO_URL") . "/{$fileName}";
+    }
+
+    public static function getTempPhoto(?string $fileName): ?string
+    {
+        if (!$fileName) return null;
+
+        return Storage::disk('s3')->temporaryUrl("photos/{$fileName}", now()->addMinutes(5));
     }
 }
