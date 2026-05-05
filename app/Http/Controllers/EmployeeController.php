@@ -380,6 +380,7 @@ class EmployeeController extends Controller
 
     public function getPhoto($fileName, MinioUploadService $minio)
     {
+        Log::info($fileName);
         return $minio->getFile($fileName);
     }
 

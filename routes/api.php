@@ -39,6 +39,7 @@ Route::post('login', [AuthController::class, 'login']);
 Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
 
 Route::prefix('v1')->group(function () {
+    Route::get("get-photo/{fileName}", [EmployeeController::class, 'getPhoto']); // todo: authenticate
     foreach (glob(__DIR__ . '/staff-directory/*.php') as $file) {
         require $file;
     }
@@ -128,7 +129,6 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::apiResource('departments', DepartmentController::class);
 
         Route::post("upload-photo", [EmployeeController::class, 'uploadPhoto']);
-        Route::get("get-photo/{fileName}", [EmployeeController::class, 'getPhoto']);
     });
 
 });

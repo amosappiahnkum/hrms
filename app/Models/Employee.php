@@ -177,6 +177,11 @@ class Employee extends AppModel
         return $this->hasOne(Education::class)->latestOfMany('date');
     }
 
+    public function latestPosition()
+    {
+        return $this->hasOne(PreviousPosition::class)->latestOfMany('start');
+    }
+
     /**
      * @return HasOne
      */

@@ -42,7 +42,7 @@ class PublicController extends Controller
                         ->orWhereRaw("JSON_SEARCH(specializations, 'one', ?) IS NOT NULL", ["%{$v}%"]);
                 });
             })
-            ->with(['department', 'rank'])
+            ->with(['department', 'rank', 'latestPosition'])
             ->orderByRaw('directory_order IS NULL, directory_order ASC')
             ->paginate(12);
 
@@ -92,14 +92,14 @@ class PublicController extends Controller
 
     public function getExperiences(Request $request, Employee $employee)
     {
-        $qualifications = $employee->experiences()->paginate($request->per_page);
+        $qualifications = $employee->experiences()->orderByDesc('from')->paginate($request->per_page);
 
         return ExperienceResource::collection($qualifications);
     }
 
     public function getPreviousPositions(Request $request, Employee $employee)
     {
-        $qualifications = $employee->previousPositions()->paginate($request->per_page);
+        $qualifications = $employee->previousPositions()->orderByDesc('start')->paginate($request->per_page);
 
         return ExperienceResource::collection($qualifications);
     }
@@ -116,28 +116,28 @@ class PublicController extends Controller
 
     public function getAwards(Request $request, Employee $employee)
     {
-        $awards = $employee->awards()->paginate($request->per_page);
+        $awards = $employee->awards()->orderByDesc('year')->paginate($request->per_page);
 
         return AwardResource::collection($awards);
     }
 
     public function getAchievements(Request $request, Employee $employee)
     {
-        $achievements = $employee->achievements()->paginate($request->per_page);
+        $achievements = $employee->achievements()->orderByDesc('year')->paginate($request->per_page);
 
         return AchievementResource::collection($achievements);
     }
 
     public function getAffiliations(Request $request, Employee $employee)
     {
-        $affiliations = $employee->affiliations()->paginate($request->per_page);
+        $affiliations = $employee->affiliations()->orderByDesc('start')->paginate($request->per_page);
 
         return AffiliationResource::collection($affiliations);
     }
 
     public function getGrants(Request $request, Employee $employee)
     {
-        $grants = $employee->grantAndFunds()->paginate($request->per_page);
+        $grants = $employee->grantAndFunds()->orderByDesc('start')->paginate($request->per_page);
 
         return GrantAndFundResource::collection($grants);
     }
