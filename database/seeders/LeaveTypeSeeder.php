@@ -14,11 +14,12 @@ class LeaveTypeSeeder extends Seeder
      */
     public function run(): void
     {
-        /*$types = [
+        $types = [
             [
                 'name' => 'Annual Leave',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'days',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -32,6 +33,7 @@ class LeaveTypeSeeder extends Seeder
                 'name' => 'Casual Leave',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'days',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -45,6 +47,7 @@ class LeaveTypeSeeder extends Seeder
                 'name' => 'Maternity Leave',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'days',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -55,9 +58,38 @@ class LeaveTypeSeeder extends Seeder
                 'user_id' => 1
             ],
             [
-                'name' => 'Study Leave',
+                'name' => 'Study Leave with Pay',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'years',
+                'number_of_days' => 0,
+                'start_of_annual_cycle' => '2023-01-01',
+                'allow_half_day' => 1,
+                'allow_carry_forward' => 0,
+                'maximum_allotment' => 0,
+                'maximum_consecutive_days' => 0,
+                'should_request_before' => 1,
+                'user_id' => 1
+            ],
+            [
+                'name' => 'Study leave without Pay',
+                'description' => null,
+                'entitlement_type' => 'custom',
+                'request_type' => 'years',
+                'number_of_days' => 0,
+                'start_of_annual_cycle' => '2023-01-01',
+                'allow_half_day' => 1,
+                'allow_carry_forward' => 0,
+                'maximum_allotment' => 0,
+                'maximum_consecutive_days' => 0,
+                'should_request_before' => 1,
+                'user_id' => 1
+            ],
+            [
+                'name' => 'Study Leave with Pay and Sponsorship',
+                'description' => null,
+                'entitlement_type' => 'custom',
+                'request_type' => 'years',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -71,6 +103,7 @@ class LeaveTypeSeeder extends Seeder
                 'name' => 'Sick Leave/Excuse Duty Leave',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'days',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -84,6 +117,7 @@ class LeaveTypeSeeder extends Seeder
                 'name' => 'Compassionate Leave',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'days',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -97,6 +131,7 @@ class LeaveTypeSeeder extends Seeder
                 'name' => 'Sabbatical Leave',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'years',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -110,6 +145,7 @@ class LeaveTypeSeeder extends Seeder
                 'name' => 'Examination Leave',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'days',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -123,6 +159,7 @@ class LeaveTypeSeeder extends Seeder
                 'name' => 'Leave of Absence',
                 'description' => null,
                 'entitlement_type' => 'custom',
+                'request_type' => 'days',
                 'number_of_days' => 0,
                 'start_of_annual_cycle' => '2023-01-01',
                 'allow_half_day' => 1,
@@ -132,8 +169,8 @@ class LeaveTypeSeeder extends Seeder
                 'should_request_before' => 1,
                 'user_id' => 1
             ],
-        ];*/
-        $types = [
+        ];
+        /*$types = [
             [
                 'name' => 'Annual Leave',
                 'description' => null,
@@ -186,7 +223,7 @@ class LeaveTypeSeeder extends Seeder
                 'should_request_before' => 1,
                 'user_id' => 1
             ]
-        ];
+        ];*/
 
         foreach ($types as $type) {
             LeaveType::updateOrCreate(['name' => $type['name']], $type);

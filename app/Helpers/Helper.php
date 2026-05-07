@@ -4,9 +4,11 @@ namespace App\Helpers;
 
 use App\Models\User;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
@@ -44,18 +46,30 @@ class Helper
         return $request->all();
     }
 
-    public static function updateSRMS($staffId): void
+    public static function updateSRMS($staffId, $phone): void
     {
-        Http::withHeader('token', env('TTU_API_TOKEN'))
-            ->post(env('TTU_API_URL') . '/staff/bio-data', [
-                'staff_id' => $staffId,
-            ]);
+        try {
+            Http::withHeader('token', env('TTU_API_TOKEN'))
+                ->post(env('TTU_API_URL') . '/staff/bio-data', [
+                    'staff_id' => $staffId,
+                    'phone' => $phone,
+                ]);
+        } catch (Exception $e) {
+            Log::error("Failed to update SRMS: " . $e->getMessage());
+        }
     }
 
     public static function getPhotoURL(?string $fileName): ?string
     {
         if (!$fileName) return null;
 
-        return env("APP_URL") . "/api/get-photo/{$fileName}";
+        return env("PHOTO_URL") . "/{$fileName}";
+    }
+
+    public static function getTempPhoto(?string $fileName): ?string
+    {
+        if (!$fileName) return null;
+
+        return Storage::disk('s3')->temporaryUrl("photos/{$fileName}", now()->addMinutes(5));
     }
 }

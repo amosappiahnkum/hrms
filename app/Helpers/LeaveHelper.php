@@ -26,8 +26,14 @@ class LeaveHelper
         }
     }
 
-    public function validateLeaveDays($startDate, $daysRequested)
+    public function validateLeaveDays($startDate, $daysRequested, $type = "days")
     {
+        if ($type == "years") {
+            $this->lastDate = Carbon::parse($startDate)->addYears($daysRequested)->format('Y-m-d');
+
+            return $daysRequested;
+        }
+
         $daysCount = $this->getLeaveDays($startDate, $daysRequested);
 
         if ($daysCount < $daysRequested) {

@@ -22,7 +22,7 @@ class LeaveTypeLevelConfigSeeder extends Seeder
                 $leaveType->leaveTypeLevelConfigs()->updateOrCreate([
                     'job_category_id' => $level->id,
                 ],[
-                    'number_of_days' => 45,
+                    'number_of_days' => 42,
                     'allow_half_day' => true,
                     'allow_carry_forward' => 0,
                     'maximum_allotment' => 45,

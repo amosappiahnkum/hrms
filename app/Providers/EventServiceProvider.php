@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Events\ApprovalApproved;
+use App\Events\ApprovalRejected;
+use App\Events\ApprovalRequested;
+use App\Listeners\SendApprovalApprovedNotification;
+use App\Listeners\SendApprovalRejectedNotification;
+use App\Listeners\SendApprovalRequestNotification;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -17,6 +23,17 @@ class EventServiceProvider extends ServiceProvider
     protected $listen = [
         Registered::class => [
             SendEmailVerificationNotification::class,
+        ],
+        ApprovalRequested::class => [
+            SendApprovalRequestNotification::class,
+        ],
+
+        ApprovalApproved::class => [
+            SendApprovalApprovedNotification::class,
+        ],
+
+        ApprovalRejected::class => [
+            SendApprovalRejectedNotification::class,
         ],
     ];
 

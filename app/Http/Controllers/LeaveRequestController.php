@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\EmployeeExport;
+use App\Exports\LeaveRequestExport;
 use App\Helpers\LeaveHelper;
 use App\Http\Requests\HrChangeLeaveStatusRequest;
 use App\Http\Requests\StoreLeaveRequestRequest;
+use App\Http\Resources\EmployeeResource;
 use App\Http\Resources\LeaveRequestResource;
 use App\Http\Resources\UpcomingLeaveResource;
 use App\Models\ActivityLog;
@@ -25,10 +28,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Throwable;
 
 class LeaveRequestController extends Controller
 {
-
     private LeaveHelper $leaveHelper;
 
     public function __construct()
@@ -42,9 +47,11 @@ class LeaveRequestController extends Controller
      *
      * @param Request $request
      *
-     * @return JsonResponse|AnonymousResourceCollection
+     * @return JsonResponse|AnonymousResourceCollection|BinaryFileResponse
+     * @throws \PhpOffice\PhpSpreadsheet\Exception
+     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
      */
-    public function index(Request $request): JsonResponse|AnonymousResourceCollection
+    public function index(Request $request)
     {
         if (!$this->isHrAdmin()) {
             return response()->json([
@@ -54,7 +61,13 @@ class LeaveRequestController extends Controller
 
         $leaveRequestQuery = LeaveRequest::query()->forDepartment($request->department)
             ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
+            ->when($request->filled('leaveType'), fn($q) => $q->where('leave_type_id', $request->leaveType))
             ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search));
+
+        if ($request->boolean('export')) {
+            $employees = $leaveRequestQuery->get();
+            return Excel::download(new LeaveRequestExport($employees), 'leave-requests.xlsx');
+        }
 
         return LeaveRequestResource::collection($leaveRequestQuery->paginate(10));
     }
@@ -85,9 +98,9 @@ class LeaveRequestController extends Controller
             $startDate = Carbon::parse($request->start_date)->format('Y-m-d');
             $daysRequested = $request->number_of_days;
 
-            $this->leaveHelper->validateLeaveDays($startDate, $daysRequested);
-
             $leaveType = LeaveType::where('uuid', $request->leave_type_id)->first();
+            $this->leaveHelper->validateLeaveDays($startDate, $daysRequested, $leaveType->request_type);
+
 
             $leaveRequest = LeaveRequest::create([
                 'employee_id' => $employee->id,
@@ -183,10 +196,11 @@ class LeaveRequestController extends Controller
         try {
             $leaveRequest = LeaveRequest::where('uuid', $request->id)->first();
 
-            $date = Carbon::now()->format('Y-m-d');;
+            $requestType = $leaveRequest->leaveType->request_type;
+            $date = Carbon::now()->format('Y-m-d');
             $daysApproved =
                 $request->days_requested != $leaveRequest->days_requested ?
-                    $this->leaveHelper->validateLeaveDays($request->start_date, $request->days_requested)
+                    $this->leaveHelper->validateLeaveDays($request->start_date, $request->days_requested, $requestType)
                     : $request->days_requested;
 
             $decision = $request->decision;
@@ -240,7 +254,7 @@ class LeaveRequestController extends Controller
 
                 // notify HRs
                 $hrMailData['lines'] = [
-                    "Please note that $hodName $decision a $daysApproved day leave request for $emp, which is currently pending your action"
+                    "Please note that $hodName $decision a $daysApproved $requestType leave request for $emp, which is currently pending your action"
                 ];
 
                 $this->leaveHelper->notifyAllHrs($hrMailData);
@@ -275,6 +289,7 @@ class LeaveRequestController extends Controller
     /**
      * @param HrChangeLeaveStatusRequest $request
      * @return JsonResponse
+     * @throws Throwable
      */
     public function hrChangeLeaveStatus(HrChangeLeaveStatusRequest $request): JsonResponse
     {
@@ -285,7 +300,7 @@ class LeaveRequestController extends Controller
 
             $leaveRequest = LeaveRequest::where('uuid', $request->id)->first();
 
-            $daysApproved = $this->leaveHelper->validateLeaveDays($request->start_date, $request->days_requested);
+            $daysApproved = $this->leaveHelper->validateLeaveDays($request->start_date, $request->days_requested, $leaveRequest->leaveType->request_type);
 
             $decision = $request->decision;
 

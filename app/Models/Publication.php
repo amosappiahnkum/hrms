@@ -5,11 +5,12 @@ namespace App\Models;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Publication extends Model
+class Publication extends AppModel
 {
-    use HasFactory, SoftDeletes, HasUuid;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'title',
@@ -21,7 +22,8 @@ class Publication extends Model
         'isbn_issn',
         'doi',
         'employee_id',
-        'user_id'
+        'user_id',
+        'type'
     ];
 
     protected $casts = [
@@ -30,13 +32,13 @@ class Publication extends Model
     ];
 
     // Relationship with user
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
     // New relationship
-    public function employee()
+    public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
     }

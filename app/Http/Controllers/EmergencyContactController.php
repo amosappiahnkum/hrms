@@ -2,36 +2,43 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\StoreEmergencyContactRequest;
 use App\Http\Requests\UpdateEmergencyContactRequest;
 use App\Http\Resources\EmergencyContactResource;
-use App\Models\ActivityLog;
 use App\Models\EmergencyContact;
-use App\Models\Employee;
-use App\Traits\InformationUpdate;
+use App\Services\UpdateApprovalService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class EmergencyContactController extends Controller
 {
-    use InformationUpdate;
 
     /**
      * Display a listing of the resource.
      *
      * @param Request $request
-     * @return AnonymousResourceCollection
+     *
+     * @return AnonymousResourceCollection|Response|BinaryFileResponse
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): Response|BinaryFileResponse|AnonymousResourceCollection
     {
         $emergencyContacts = EmergencyContact::query();
 
-        $employee = Employee::query()->where('uuid', $request->employeeId)->first();
-        $emergencyContacts->where('employee_id', $employee->id);
+        $emergencyContacts->when($request->employee_uuid, function ($query, $employee_uuid) {
+            $query->whereHas('employee', function ($q) use ($employee_uuid) {
+                $q->where('uuid', $employee_uuid);
+            });
+        });
 
         return EmergencyContactResource::collection($emergencyContacts->paginate($request->per_page ?? 10));
     }
@@ -41,96 +48,94 @@ class EmergencyContactController extends Controller
      *
      * @param StoreEmergencyContactRequest $request
      * @return EmergencyContactResource|JsonResponse
+     * @throws Throwable
      */
-    public function store(StoreEmergencyContactRequest $request): EmergencyContactResource|JsonResponse
+    public function store(StoreEmergencyContactRequest $request): JsonResponse|EmergencyContactResource
     {
-        DB::beginTransaction();
         try {
-            $user = Auth::user();
-            $employee = Employee::query()->where('uuid', $request->employee_id)->first();
+            $validated = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $request['user_id'] = $user->id;
-                $contact = $employee->emergencyContacts()->create($request->all());
+                EmergencyContact::create($validated);
             } else {
-                $contact = $employee->emergencyContacts()->create([
-                    'user_id' => $user->id
-                ]);
-                $this->infoDifference($contact, $request->all());
-                $this->requestUpdate($contact);
+                app(UpdateApprovalService::class)->create(
+                    new EmergencyContact(),
+                    $validated,
+                    Auth::id()
+                );
             }
 
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added emergency contact for ' . $employee->name,
-                'updated', [''], 'emergency-contact')
-                ->to($employee)
-                ->as($user);
+            return ApiResponse::success(
+                null,
+                'Emergency Contact creation request submitted for approval'
+            );
 
-            DB::commit();
+        } catch (Throwable $e) {
+            Log::error('Add EmergencyContact Error', ['error' => $e]);
 
-            return new EmergencyContactResource($contact);
-        } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::error('Something went wrong');
         }
     }
 
     /**
-     * Display the specified resource.
+     * Update the specified resource in storage.
      *
      * @param UpdateEmergencyContactRequest $request
-     * @param $id
+     * @param EmergencyContact $emergencyContact
      * @return EmergencyContactResource|JsonResponse
+     * @throws Throwable
      */
-    public function update(UpdateEmergencyContactRequest $request, $id): JsonResponse|EmergencyContactResource
+    public function update(UpdateEmergencyContactRequest $request, EmergencyContact $emergencyContact): JsonResponse|EmergencyContactResource
     {
         DB::beginTransaction();
         try {
-            $user = Auth::user();
 
-            $emergencyContact = EmergencyContact::findOrFail($id);
+            $changes = $request->validated();
+
             if ($this->isHrAdmin()) {
-                $emergencyContact->update($request->all());
-                $emergencyContact->save();
+                $emergencyContact->update($changes);
             } else {
-                $this->infoDifference($emergencyContact, $request->all());
-                $this->requestUpdate($emergencyContact);
+                app(UpdateApprovalService::class)->update($emergencyContact, $changes, Auth::id());
             }
 
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the emergency contact for ' . $emergencyContact->employee->name,
-                'updated', [''], 'emergency-contact')
-                ->to($emergencyContact->employee)
-                ->as($user);
             DB::commit();
             return new EmergencyContactResource($emergencyContact);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Log::error('Update Dependant Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
+    }
+
+    public function show(EmergencyContact $emergencyContact)
+    {
+        return ApiResponse::success(EmergencyContactResource::make($emergencyContact));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param $id
+     * @param EmergencyContact $emergencyContact
      * @return JsonResponse|null
+     * @throws Throwable
      */
-    public function destroy($id): ?JsonResponse
+    public function destroy(EmergencyContact $emergencyContact): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $emergencyContact = EmergencyContact::findOrFail($id);
-            $emergencyContact->informationUpdate()->delete();
-            $emergencyContact->delete();
+
+            if ($this->isHrAdmin()) {
+                $emergencyContact->delete();
+            } else {
+                app(UpdateApprovalService::class)->delete($emergencyContact, Auth::id());
+            }
+
             DB::commit();
-            return response()->json([
-                'message' => 'Emergency Contact Deleted'
-            ]);
+
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+
+            Log::error('Delete EmergencyContact Error: ', [$exception]);
+            return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
         }
     }
 }

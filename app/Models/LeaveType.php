@@ -14,6 +14,7 @@ class LeaveType extends Model
     protected $fillable = [
         'name',
         'description',
+        'request_type',
     ];
 
     /**

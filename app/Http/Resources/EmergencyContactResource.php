@@ -16,14 +16,13 @@ class EmergencyContactResource extends JsonResource
     public function toArray($request): array
     {
         return [
-            'id' => $this->id,
-            'employee_id' => $this->employee_id,
+            'uuid' => $this->uuid,
+            'employee_uuid' => $this->employee->uuid,
             'name' => $this->name,
             'relationship' => $this->relationship,
             'phone_number' => $this->phone_number,
             'alt_phone_number' => $this->alt_phone_number,
             'email' => $this->email,
-            'user_id' => $this->user_id,
             'info_update' => $this->informationUpdate,
         ];
     }

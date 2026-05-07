@@ -56,9 +56,9 @@ class EmployeeExport implements FromCollection, WithMapping, WithHeadings, Shoul
         return [
             $row->staff_id,
             $row->name,
-            $row->department->name,
-            $row->rank->name,
-            $row->gtecPlacement->name,
+            $row->department?->name ?? '-',
+            $row->rank?->name ?? '-',
+            $row->gtecPlacement?->name ?? '-',
             $row->gender,
             $row->dob,
             $row->contactDetail->telephone,

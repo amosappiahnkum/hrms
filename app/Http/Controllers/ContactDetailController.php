@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Helpers\Helper;
 use App\Http\Requests\UpdateContactDetailRequest;
 use App\Http\Resources\ContactDetailResource;
+use App\Http\Resources\DependantResource;
 use App\Models\ActivityLog;
 use App\Models\ContactDetail;
 use App\Models\Employee;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use App\Traits\Notifier;
 use Exception;
@@ -15,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ContactDetailController extends Controller
 {
@@ -23,13 +27,13 @@ class ContactDetailController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param $employeeId
-     * @return ContactDetailResource
+     * @param Employee $employee
+     * @return JsonResponse
      */
-    public function show($employeeId): ContactDetailResource
+    public function show(Employee $employee): JsonResponse
     {
-        $employee = Employee::query()->where('uuid', $employeeId)->first();
-        return new ContactDetailResource($employee->contactDetail);
+        Log::info('here');
+        return ApiResponse::success(ContactDetailResource::make($employee->contactDetail));
     }
 
     function cleanPhoneNumber($phone): string
@@ -46,52 +50,31 @@ class ContactDetailController extends Controller
      * Update the specified resource in storage.
      *
      * @param UpdateContactDetailRequest $request
-     * @param $id
-     * @return ContactDetailResource|JsonResponse
+     * @param Employee $employee
+     * @return JsonResponse
+     * @throws Throwable
      */
-    public function update(UpdateContactDetailRequest $request, $id): JsonResponse|ContactDetailResource
+
+    public function update(UpdateContactDetailRequest $request, Employee $employee)
     {
         DB::beginTransaction();
 
+        $contact = $employee->contactDetail;
         try {
-            $user = Auth::user();
 
-            $contactDetail = ContactDetail::findOrFail($id);
+            $changes = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $contactDetail->update($request->all());
-                $contactDetail->save();
+                $contact->update($changes);
             } else {
-                $this->infoDifference($contactDetail, $request->all());
-                $update = $this->requestUpdate($contactDetail);
-
-                Helper::updateSRMS($this->cleanPhoneNumber($request->telephone));
-                /*$data = [
-                    "title" => "Change in Contact information",
-                    "message" => $contactDetail->employee->name . " made a request to change the Contact information"
-                ];
-
-                $this->notify($data, $contactDetail->employee_id, [
-                    'type' => 'ContactDetail',
-                    'model_type' => 'InformationUpdate',
-                    'model_id' => $update->id
-                ]);*/
+                app(UpdateApprovalService::class)->update($contact, $changes, Auth::id());
             }
 
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the contact details for ' . $contactDetail->employee->name,
-                'updated contact details', [''], 'contact-details')
-                ->to($contactDetail->employee)
-                ->as($user);
-
             DB::commit();
-            return new ContactDetailResource($contactDetail);
+            return ApiResponse::success([]);
         } catch (Exception $exception) {
-            DB::rollBack();
-
-            Log::error($exception);
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Log::error('Update Contact Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 }

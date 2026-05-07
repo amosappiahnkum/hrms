@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\UpdateJobDetailRequest;
 use App\Http\Resources\JobDetailResource;
 use App\Models\ActivityLog;
 use App\Models\Employee;
 use App\Models\JobDetail;
 use App\Models\PreviousPosition;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use Carbon\Carbon;
 use Exception;
@@ -15,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class JobDetailController extends Controller
 {
@@ -27,82 +30,43 @@ class JobDetailController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param $employeeId
-     *
-     * @return JobDetailResource
+     * @param Employee $employee
+     * @return JsonResponse
      */
-    public function show($employeeId): JobDetailResource
+    public function show(Employee $employee): JsonResponse
     {
-        $employee = Employee::query()->where('uuid', $employeeId)->first();
-
-        return new JobDetailResource($employee->jobDetail);
+        return ApiResponse::success(JobDetailResource::make($employee->jobDetail));
     }
 
     /**
      * Update the specified resource in storage.
      *
      * @param UpdateJobDetailRequest $request
-     * @param $id
-     *
-     * @return JobDetailResource|JsonResponse
+     * @param Employee $employee
+     * @return JsonResponse
+     * @throws Throwable
      */
-    public function update(UpdateJobDetailRequest $request, $id): JobDetailResource|JsonResponse
+
+    public function update(UpdateJobDetailRequest $request, Employee $employee): JsonResponse
     {
         DB::beginTransaction();
+
+        $jobDetail = $employee->jobDetail;
         try {
-            $jobDetail = JobDetail::findOrFail($id);
 
-            $request['joined_date'] = $this->getDate($request->joined_date);
-            $request['contract_start_date'] = $this->getDate($request->contract_start_date);
-            $request['contract_end_date'] = $this->getDate($request->contract_end_date);
-
+            $changes = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $jobDetail->update($request->all());
-                $jobDetail->save();
+                $jobDetail->update($changes);
             } else {
-                $this->infoDifference($jobDetail, $request->all());
-                $this->requestUpdate($jobDetail);
+                app(UpdateApprovalService::class)->update($jobDetail, $changes, Auth::id());
             }
-
-            if ($request->has('position_id') && $request->position_id != 'null') {
-                PreviousPosition::updateOrCreate([
-                    'position_id' => $request->position_id,
-                    'employee_id' => $jobDetail->employee_id
-                ], [
-                    'position_id' => $request->position_id,
-                    'employee_id' => $jobDetail->employee_id,
-                    'user_id' => Auth::id()
-                ]);
-            }
-
-            $user = Auth::user();
-
-
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the personal details for ' . $jobDetail->employee->name,
-                'updated personal detail', [''], 'personal-details')
-                ->to($jobDetail->employee)
-                ->as($user);
 
             DB::commit();
-
-            return new JobDetailResource($jobDetail);
+            return ApiResponse::success([]);
         } catch (Exception $exception) {
-            Log::error('Job Detail Update: ', [$exception]);
-
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Log::error('Update Job Detail Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
-
-    public function getDate($date): ?string
-    {
-        if ($date !== 'null') {
-            return Carbon::parse($date)->format('Y-m-d');
-        }
-
-        return null;
-    }
-
 }

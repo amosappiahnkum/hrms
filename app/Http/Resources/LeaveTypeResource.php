@@ -19,7 +19,9 @@ class LeaveTypeResource extends JsonResource
     {
         return [
             'id' => $this->uuid,
+            'l_id' => $this->id,
             'name' => $this->name,
+            'type' => $this->request_type,
             'description' => $this->description,
             'configs' => LeaveTypeLevelConfigResource::collection($this->leaveTypeLevelConfigs)
         ];

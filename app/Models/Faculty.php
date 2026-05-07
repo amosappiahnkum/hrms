@@ -4,9 +4,14 @@ namespace App\Models;
 
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 
-class Faculty extends Model
+class Faculty extends AppModel
 {
     use HasFactory, HasUuid;
+
+    protected $fillable = [
+        'name',
+        'uuid',
+        'description',
+    ];
 }

@@ -3,14 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Exports\EmployeeExport;
+use App\Filters\EmployeeFilter;
+use App\Helpers\ApiResponse;
 use App\Helpers\Helper;
 use App\Helpers\SaveFile;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\TerminateEmployeeRequest;
+use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Requests\UpdateEmployeeLevelRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
-use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Resources\ArchivedEmployeeResource;
+use App\Http\Resources\DependantResource;
 use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Http\Resources\MiniEmployeeResource;
@@ -21,6 +24,7 @@ use App\Models\Employee;
 use App\Models\TerminationReason;
 use App\Notifications\EmailLinkedNotification;
 use App\Services\MinioUploadService;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use App\Traits\UsePrint;
 use Carbon\Carbon;
@@ -31,7 +35,6 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Maatwebsite\Excel\Facades\Excel;
@@ -49,75 +52,41 @@ class EmployeeController extends Controller
      * Display a listing of the resource.
      *
      * @param Request $request
-     * @return AnonymousResourceCollection|Response|BinaryFileResponse
-     * @throws \PhpOffice\PhpSpreadsheet\Exception
-     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
+     * @return AnonymousResourceCollection|BinaryFileResponse
      */
     public function index(Request $request)
     {
-        if ($request->filled('archived') && $request->archived == 'true') {
-            $employeesQuery = Employee::onlyTrashed();
-        } else {
-            $employeesQuery = Employee::query();
-        }
+        $query = Employee::query()
+            ->archived($request->boolean('archived'))
+            ->department($request->department)
+            ->gender($request->gender)
+            ->maritalStatus($request->marital_status)
+            ->rank($request->rank_id)
+            ->jobCategory($request->job_category_id)
+            ->search($request->search);
 
-        // Filter by department
-        if ($request->filled('department') && $request->department !== 'all') {
-            $employeesQuery->where('department_id', $request->department);
-        }
-
-        // Filter by department
-        if ($request->filled('gender') && $request->gender !== 'all') {
-            $employeesQuery->where('gender', $request->gender);
-        }
-
-        // Filter by department
-        if ($request->filled('marital_status') && $request->marital_status !== 'all') {
-            $employeesQuery->where('marital_status', $request->marital_status);
-        }
-
-        // Search by name fields
-        if ($request->filled('search')) {
-            $search = $request->query('search');
-            $employeesQuery->where(function ($query) use ($search) {
-                $query->where('first_name', 'LIKE', "%{$search}%")
-                    ->orWhere('last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('middle_name', 'LIKE', "%{$search}%")
-                    ->orWhere('staff_id', 'LIKE', "%{$search}%");
-            });
-        }
-
-        // Filter by rank
-        if ($request->filled('rank_id') && $request->rank_id !== 'all') {
-            $employeesQuery->where('rank_id', $request->rank_id);
-        }
-
-        // Filter by job category via relation
-        if ($request->filled('job_category_id') && $request->job_category_id !== 'all') {
-            $employeesQuery->whereHas('jobDetail', function ($query) use ($request) {
-                $query->where('job_category_id', $request->job_category_id);
-            });
-        }
-
-        // Export to Excel
         if ($request->boolean('export')) {
-            $employees = $employeesQuery->get();
-            return Excel::download(new EmployeeExport(EmployeeResource::collection($employees)), 'employees.xlsx');
+            return $this->export($query);
         }
 
-        // Print to PDF
-        if ($request->boolean('print')) {
-            $employees = $employeesQuery->get();
-            return $this->pdf('print.employee.all', EmployeeResource::collection($employees), 'employees', 'landscape');
+        if ($request->boolean('archived')) {
+            $query->with('terminationReason');
+            return ArchivedEmployeeResource::collection(
+                $query->paginate($request->per_page ?? 10)
+            );
         }
 
-        if ($request->filled('archived') && $request->archived == 'true') {
-            // Paginated response
-            $employeesQuery->with('terminationReason');
-            return ArchivedEmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
-        }
+        return EmployeeResource::collection($query->paginate($request->per_page ?? 10));
+    }
 
-        return EmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
+    private function export($query)
+    {
+        $employees = $query->get();
+
+        return Excel::download(
+            new EmployeeExport(EmployeeResource::collection($employees)),
+            'employees.xlsx'
+        );
     }
 
     /**
@@ -149,6 +118,17 @@ class EmployeeController extends Controller
         return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->per_page ?? 10));
     }
 
+    public function getMyTeam(Request $request): AnonymousResourceCollection
+    {
+        $employee = Auth::user()?->employee;
+
+        $employeesQuery = Employee::query();
+
+        $employeesQuery->where('department_id', $employee->department_id);
+
+
+        return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->per_page ?? 10));
+    }
 
     /**
      * Store a newly created resource in storage.
@@ -156,6 +136,7 @@ class EmployeeController extends Controller
      * @param StoreEmployeeRequest $request
      *
      * @return EmployeeResource|JsonResponse
+     * @throws Throwable
      */
     public function store(StoreEmployeeRequest $request)
     {
@@ -180,14 +161,13 @@ class EmployeeController extends Controller
      * Display the specified resource.
      *
      * @param string $employeeId
-     *
-     * @return EmployeeResource
+     * @return JsonResponse
      */
-    public function show(string $employeeId): EmployeeResource
+    public function show(string $employeeId)
     {
-        $employee = Employee::query()->where('uuid', $employeeId)->first();
+        $employee = Employee::query()->where('uuid', $employeeId)->firstOrFail();
 
-        return new EmployeeResource($employee);
+        return ApiResponse::success(new EmployeeResource($employee));
     }
 
     /**
@@ -271,56 +251,30 @@ class EmployeeController extends Controller
      * Store a newly created resource in storage.
      *
      * @param UpdateEmployeeRequest $request
-     * @param $id
+     * @param Employee $employee
      * @return EmployeeResource|JsonResponse
+     * @throws Throwable
      */
-    public function update(UpdateEmployeeRequest $request, $id): EmployeeResource|JsonResponse
+    public function update(UpdateEmployeeRequest $request, Employee $employee): EmployeeResource|JsonResponse
     {
         DB::beginTransaction();
         try {
-            $user = Auth::user();
 
-            $employee = Employee::findOrFail($id);
-            $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
+            $changes = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $employee->update($request->all());
-                $employee->save();
+                $employee->update($changes);
             } else {
-                $this->infoDifference($employee, $request->all());
-                $this->requestUpdate($employee);
+                app(UpdateApprovalService::class)->update($employee, $changes, Auth::id());
             }
-
-            if ($request->has('file') && $request->file !== "null") {
-                $saveFile = new SaveFile($employee, $request->file('file'), $this->docPath, $this->allowedFiles);
-                $saveFile->save();
-            }
-
-            /*PreviousRank::updateOrCreate([
-                'rank_id' => $employee->rank_id,
-                'employee_id' => $employee->id
-            ], [
-                'rank_id' => $employee->rank_id,
-                'employee_id' => $employee->id,
-                'user_id' => Auth::id()
-            ]);*/
-
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated the personal details for ' . $employee->name,
-                'updated personal detail', [''], 'personal-details')
-                ->to($employee)
-                ->as($user);
-
-            Helper::updateSRMS($request->staff_id);
 
             DB::commit();
 
+            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
-
-            Log::info('Employee update failed', [$exception]);
-            return response()->json([
-                'message' => "Something went wrong"
-            ], 400);
+            Log::error('Update Dependant Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
@@ -419,7 +373,9 @@ class EmployeeController extends Controller
 
     public function getPhoto($fileName, MinioUploadService $minio)
     {
-        return $minio->getFile($fileName);
+        $name = $minio->getFile($fileName);
+
+        return response($name, 200)->header('Content-Type', 'image/jpeg');
     }
 
     public function onboardEmployee(Request $request)
@@ -467,5 +423,118 @@ class EmployeeController extends Controller
                 'message' => "Something went wrong"
             ], 400);
         }
+    }
+
+    /**
+     * @param Employee $employee
+     * @return JsonResponse
+     */
+    public function getSpecializations(Employee $employee)
+    {
+        return ApiResponse::success($employee->specializations, 'Specializations');
+    }
+
+    public function updateSpecializations(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'specializations' => ['required', 'array'],
+            'specializations.*' => ['string', 'distinct'],
+        ]);
+
+        $specializations = array_values(array_unique([
+            ...($employee->specializations ?? []),
+            ...$validated['specializations'],
+        ]));
+
+        $employee->update(['specializations' => $specializations]);
+
+        return ApiResponse::success([
+            'specializations' => $specializations,
+        ], 'Specializations updated successfully');
+    }
+
+    public function removeSpecialization(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'specialization' => ['required', 'string'],
+        ]);
+
+        $employee->specializations = array_values(array_filter(
+            $employee->specializations ?? [], fn($item) => $item !== $validated['specialization']
+        ));
+
+        $employee->save();
+
+        return ApiResponse::success($employee->specializations);
+    }
+
+    /**
+     * @param Employee $employee
+     * @return JsonResponse
+     */
+    public function getResearchInterests(Employee $employee)
+    {
+        return ApiResponse::success($employee->research_interests, 'Research Interests');
+    }
+
+    public function updateResearchInterests(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'research_interests' => ['required', 'array'],
+            'research_interests.*' => ['string', 'distinct'],
+        ]);
+
+        $research_interests = array_values(array_unique([
+            ...($employee->research_interests ?? []),
+            ...$validated['research_interests'],
+        ]));
+
+        $employee->update(['research_interests' => $research_interests]);
+
+        return ApiResponse::success([
+            'specializations' => $research_interests,
+        ], 'Research interests updated successfully');
+    }
+
+    public function removeResearchInterest(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'research_interest' => ['required', 'string'],
+        ]);
+
+        $employee->research_interests = array_values(array_filter(
+            $employee->research_interests ?? [], fn($item) => $item !== $validated['research_interest']
+        ));
+
+        $employee->save();
+
+        return ApiResponse::success($employee->research_interests);
+    }
+
+    public function employeeStats(string $uuid)
+    {
+        $stats = $this->empStats($uuid);
+
+        return ApiResponse::success($stats);
+    }
+
+    /**
+     * @param Employee $employee
+     * @return JsonResponse
+     */
+    public function getBiography(Employee $employee)
+    {
+        return ApiResponse::success($employee->bio, 'Biography');
+    }
+
+    public function updateBiography(Request $request, Employee $employee)
+    {
+        $validated = $request->validate([
+            'biography' => 'required|string|max:1500'
+        ]);
+
+        $employee->update(['bio' => $validated['biography']]);
+
+        return ApiResponse::success($employee->bio, 'Specializations updated successfully');
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Employee;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateContactDetailRequest extends FormRequest
@@ -24,7 +25,29 @@ class UpdateContactDetailRequest extends FormRequest
     public function rules()
     {
         return [
-            //
+            'address' => 'nullable|string',
+            'city' => 'nullable|string',
+            'country' => 'nullable|string',
+            'nationality' => 'nullable|string',
+            'other_email' => 'nullable|email',
+            'region' => 'nullable|string',
+            'telephone' => 'nullable|string',
+            'work_email' => 'nullable|email',
+            'work_telephone' => 'nullable|string',
+            'employee_uuid' => 'required|string|exists:employees,uuid',
+            'employee_id' => 'sometimes|exists:employees,id',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->employee_uuid) {
+            $employee = Employee::query()
+                ->where('uuid', $this->employee_uuid)
+                ->firstOrFail();
+            $this->merge([
+                'employee_id' => $employee->id,
+            ]);
+        }
     }
 }
