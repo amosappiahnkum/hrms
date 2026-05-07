@@ -11,7 +11,6 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExperienceController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InformationUpdateController;
-use App\Http\Controllers\JobDetailController;
 use App\Http\Controllers\LeaveManagementController;
 use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\LeaveTypeController;
@@ -39,7 +38,6 @@ Route::post('login', [AuthController::class, 'login']);
 Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
 
 Route::prefix('v1')->group(function () {
-    Route::get("get-photo/{fileName}", [EmployeeController::class, 'getPhoto']); // todo: authenticate
     foreach (glob(__DIR__ . '/staff-directory/*.php') as $file) {
         require $file;
     }
@@ -129,6 +127,14 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::apiResource('departments', DepartmentController::class);
 
         Route::post("upload-photo", [EmployeeController::class, 'uploadPhoto']);
+
+        Route::prefix('approvals')->group(function () {
+            Route::get('/', [InformationUpdateController::class, 'index']);
+            Route::get('mine', [InformationUpdateController::class, 'myRequest']);
+            Route::get('/{information_update}', [InformationUpdateController::class, 'show']);
+            Route::post('/{information_update}/approve', [InformationUpdateController::class, 'approve']);
+            Route::post('/{information_update}/reject', [InformationUpdateController::class, 'reject']);
+        });
     });
 
 });

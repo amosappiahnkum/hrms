@@ -30,6 +30,8 @@ class UpdateExperienceRequest extends FormRequest
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
             'city' => 'required|string',
+            'country' => 'required|string',
+            'job_type' => 'required|string',
             'company' => 'required|string',
             'job_title' => 'required|string',
             'from' => 'required|date',

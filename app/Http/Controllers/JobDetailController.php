@@ -9,6 +9,7 @@ use App\Models\ActivityLog;
 use App\Models\Employee;
 use App\Models\JobDetail;
 use App\Models\PreviousPosition;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use Carbon\Carbon;
 use Exception;
@@ -16,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class JobDetailController extends Controller
 {
@@ -41,40 +43,30 @@ class JobDetailController extends Controller
      *
      * @param UpdateJobDetailRequest $request
      * @param Employee $employee
-     * @return JobDetailResource|JsonResponse
-     * @throws \Throwable
+     * @return JsonResponse
+     * @throws Throwable
      */
-    public function update(UpdateJobDetailRequest $request, Employee $employee): JobDetailResource|JsonResponse
+
+    public function update(UpdateJobDetailRequest $request, Employee $employee): JsonResponse
     {
         DB::beginTransaction();
+
+        $jobDetail = $employee->jobDetail;
         try {
+
+            $changes = $request->validated();
+
             if ($this->isHrAdmin()) {
-                $employee->jobDetail->update($request->validated());
-                $employee->jobDetail->save();
+                $jobDetail->update($changes);
             } else {
-                $this->infoDifference($employee->jobDetail, $request->validated());
-                $this->requestUpdate($employee->jobDetail);
+                app(UpdateApprovalService::class)->update($jobDetail, $changes, Auth::id());
             }
 
-            /*         if ($request->has('position_id') && $request->position_id != 'null') {
-                         PreviousPosition::updateOrCreate([
-                             'position_id' => $request->position_id,
-                             'employee_id' => $jobDetail->employee_id
-                         ], [
-                             'position_id' => $request->position_id,
-                             'employee_id' => $jobDetail->employee_id,
-                             'user_id' => Auth::id()
-                         ]);
-                     }*/
-
             DB::commit();
-
-            return ApiResponse::success(JobDetailResource::make($employee->jobDetail));
+            return ApiResponse::success([]);
         } catch (Exception $exception) {
-            Log::error('Job Detail Update: ', [$exception]);
-            Db::rollBack();
-            return ApiResponse::error('Something went wrong', []);
+            Log::error('Update Job Detail Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
-
 }

@@ -7,6 +7,7 @@ use App\Http\Requests\StoreDependantRequest;
 use App\Http\Requests\UpdateDependantRequest;
 use App\Http\Resources\DependantResource;
 use App\Models\Dependant;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class DependantController extends Controller
 {
@@ -47,39 +49,33 @@ class DependantController extends Controller
      * Store a newly created resource in storage.
      *
      * @param StoreDependantRequest $request
-     * @return DependantResource|JsonResponse
-     * @throws \Throwable
+     * @return JsonResponse
      */
-    public function store(StoreDependantRequest $request): JsonResponse|DependantResource
+    public function store(StoreDependantRequest $request): JsonResponse
     {
-        DB::beginTransaction();
         try {
-            $user = Auth::user();
+            $validated = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $request['user_id'] = $user->id;
-                $dependant = Dependant::create($request->validated());
+                Dependant::create($validated);
             } else {
-                $dependant = Dependant::create(['user_id' => $user->id]);
 
-                $this->infoDifference($dependant, $request->validated());
-                $this->requestUpdate($dependant);
+                app(UpdateApprovalService::class)->create(
+                    new Dependant(),
+                    $validated,
+                    Auth::id()
+                );
             }
 
-            /* ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added emergency contact for ' . $employee->name,
-                 'created', [''], 'dependant')
-                 ->to($employee)
-                 ->as($user);*/
+            return ApiResponse::success(
+                null,
+                'Dependant creation request submitted for approval'
+            );
 
+        } catch (Throwable $e) {
+            Log::error('Add Dependant Error', ['error' => $e]);
 
-            DB::commit();
-            return new DependantResource($dependant);
-        } catch (Exception $exception) {
-            Log::error('Add Dependant Error: ', [$exception]);
-
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::error('Something went wrong');
         }
     }
 
@@ -89,27 +85,26 @@ class DependantController extends Controller
      * @param UpdateDependantRequest $request
      * @param Dependant $dependant
      * @return DependantResource|JsonResponse
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function update(UpdateDependantRequest $request, Dependant $dependant): JsonResponse|DependantResource
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
-                $dependant->update($request->all());
-                $dependant->save();
-            } else {
-                $this->infoDifference($dependant, $request->all());
-                $this->requestUpdate($dependant);
-            }
 
+            $changes = $request->validated();
+
+            if ($this->isHrAdmin()) {
+                $dependant->update($changes);
+            } else {
+                app(UpdateApprovalService::class)->update($dependant, $changes, Auth::id());
+            }
 
             DB::commit();
             return new DependantResource($dependant);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Log::error('Update Dependant Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
@@ -123,18 +118,22 @@ class DependantController extends Controller
      *
      * @param Dependant $dependant
      * @return JsonResponse|null
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function destroy(Dependant $dependant): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $dependant->informationUpdate()->delete();
-            $dependant->delete();
+
+//            if ($this->isHrAdmin()) {
+//                $dependant->delete();
+//            } else {
+                app(UpdateApprovalService::class)->delete($dependant, Auth::id());
+//            }
 
             DB::commit();
 
-            return ApiResponse::success(null, 'Dependant deleted.', ResponseAlias::HTTP_OK);
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
         } catch (Exception $exception) {
 
             Log::error('Delete Dependant Error: ', [$exception]);

@@ -7,18 +7,17 @@ use App\Http\Requests\StoreQualificationRequest;
 use App\Http\Requests\UpdateQualificationRequest;
 use App\Http\Resources\QualificationResource;
 use App\Models\Education;
-use App\Traits\InformationUpdate;
+use App\Services\UpdateApprovalService;
 use App\Traits\UsePrint;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class QualificationController extends Controller
 {
@@ -26,7 +25,7 @@ class QualificationController extends Controller
 
     protected array $allowedFiles = ['pdf', 'jpeg', 'png'];
 
-    use UsePrint, InformationUpdate;
+    use UsePrint;
 
     /**
      * Display a listing of the resource.
@@ -53,33 +52,34 @@ class QualificationController extends Controller
      *
      * @param StoreQualificationRequest $request
      * @return QualificationResource|JsonResponse
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function store(StoreQualificationRequest $request): JsonResponse|QualificationResource
     {
-        DB::beginTransaction();
+
         try {
-             if ($this->isHrAdmin()) {
-                $qualification = Education::create($request->validated());
+            $validated = $request->validated();
+
+            if ($this->isHrAdmin()) {
+                Education::create($validated);
             } else {
-                $qualification = Education::create();
-                $this->infoDifference($qualification, $request->validated());
-                $this->requestUpdate($qualification);
+
+                app(UpdateApprovalService::class)->create(
+                    new Education(),
+                    $validated,
+                    Auth::id()
+                );
             }
-            /* ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added emergency contact for ' . $employee->name,
-                 'created', [''], 'qualification')
-                 ->to($employee)
-                 ->as($user);*/
 
+            return ApiResponse::success(
+                null,
+                'Education creation request submitted for approval'
+            );
 
-            DB::commit();
-            return new QualificationResource($qualification);
-        } catch (Exception $exception) {
-            Log::error('Add Qualification Error: ', [$exception]);
+        } catch (Throwable $e) {
+            Log::error('Add Dependant Error', ['error' => $e]);
 
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::error('Something went wrong');
         }
     }
 
@@ -89,27 +89,26 @@ class QualificationController extends Controller
      * @param UpdateQualificationRequest $request
      * @param Education $qualification
      * @return QualificationResource|JsonResponse
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function update(UpdateQualificationRequest $request, Education $qualification): JsonResponse|QualificationResource
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
-                $qualification->update($request->all());
-                $qualification->save();
-            } else {
-                $this->infoDifference($qualification, $request->all());
-                $this->requestUpdate($qualification);
-            }
 
+            $changes = $request->validated();
+
+            if ($this->isHrAdmin()) {
+                $qualification->update($changes);
+            } else {
+                app(UpdateApprovalService::class)->update($qualification, $changes, Auth::id());
+            }
 
             DB::commit();
             return new QualificationResource($qualification);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Log::error('Update Dependant Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
@@ -123,21 +122,26 @@ class QualificationController extends Controller
      *
      * @param Education $qualification
      * @return JsonResponse|null
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function destroy(Education $qualification): ?JsonResponse
     {
+
         DB::beginTransaction();
         try {
-            $qualification->informationUpdate()->delete();
-            $qualification->delete();
+
+            if ($this->isHrAdmin()) {
+                $qualification->delete();
+            } else {
+                app(UpdateApprovalService::class)->delete($qualification, Auth::id());
+            }
 
             DB::commit();
 
-            return ApiResponse::success(null, 'Qualification deleted.', ResponseAlias::HTTP_OK);
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
         } catch (Exception $exception) {
 
-            Log::error('Delete Qualification Error: ', [$exception]);
+            Log::error('Delete qualification Error: ', [$exception]);
             return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
         }
     }

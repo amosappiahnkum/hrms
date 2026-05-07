@@ -23,7 +23,7 @@ class DependantResource extends JsonResource
             'phone_number' => $this->phone_number,
             'alt_phone_number' => $this->alt_phone_number,
             'dob' => $this->dob,
-            'info_update' => $this->informationUpdate,
+            'pending_update' => $this->pendingApproval()->exists(),
         ];
     }
 }

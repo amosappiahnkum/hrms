@@ -13,6 +13,7 @@ use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Requests\UpdateEmployeeLevelRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
 use App\Http\Resources\ArchivedEmployeeResource;
+use App\Http\Resources\DependantResource;
 use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Http\Resources\MiniEmployeeResource;
@@ -23,6 +24,7 @@ use App\Models\Employee;
 use App\Models\TerminationReason;
 use App\Notifications\EmailLinkedNotification;
 use App\Services\MinioUploadService;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use App\Traits\UsePrint;
 use Carbon\Carbon;
@@ -86,6 +88,7 @@ class EmployeeController extends Controller
             'employees.xlsx'
         );
     }
+
     /**
      * Display a listing of the resource.
      *
@@ -256,32 +259,22 @@ class EmployeeController extends Controller
     {
         DB::beginTransaction();
         try {
+
+            $changes = $request->validated();
+
             if ($this->isHrAdmin()) {
-                $employee->update($request->all());
-                $employee->save();
+                $employee->update($changes);
             } else {
-                $this->infoDifference($employee, $request->all());
-                $this->requestUpdate($employee);
+                app(UpdateApprovalService::class)->update($employee, $changes, Auth::id());
             }
-
-            if ($request->has('file') && $request->file !== "null") {
-                $saveFile = new SaveFile($employee, $request->file('file'), $this->docPath, $this->allowedFiles);
-                $saveFile->save();
-            }
-
-
-            Log::info('emp', [$request->staff_id, $employee?->contactDetail?->phone]);
-            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
 
             DB::commit();
 
-            return ApiResponse::success(EmployeeResource::make($employee));
+            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
+            return new EmployeeResource($employee);
         } catch (Exception $exception) {
-
-            Log::info('Employee update failed', [$exception]);
-            return response()->json([
-                'message' => "Something went wrong"
-            ], 400);
+            Log::error('Update Dependant Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
@@ -467,7 +460,7 @@ class EmployeeController extends Controller
         ]);
 
         $employee->specializations = array_values(array_filter(
-            $employee->specializations ?? [], fn ($item) => $item !== $validated['specialization']
+            $employee->specializations ?? [], fn($item) => $item !== $validated['specialization']
         ));
 
         $employee->save();
@@ -510,7 +503,7 @@ class EmployeeController extends Controller
         ]);
 
         $employee->research_interests = array_values(array_filter(
-            $employee->research_interests ?? [], fn ($item) => $item !== $validated['research_interest']
+            $employee->research_interests ?? [], fn($item) => $item !== $validated['research_interest']
         ));
 
         $employee->save();

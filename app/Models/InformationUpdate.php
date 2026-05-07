@@ -9,9 +9,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-class InformationUpdate extends Model
+class InformationUpdate extends AppModel
 {
-    use HasFactory, HasUuid;
+    use HasFactory;
 
     protected $fillable = [
         'information_id',
@@ -21,7 +21,11 @@ class InformationUpdate extends Model
         'status',
         'status_changed_date',
         'status_changed_by',
-        'requested_by'
+        'requested_by',
+        'type',
+        'reviewed_by',
+        'reviewed_at',
+        'rejection_reason'
     ];
 
     protected $casts = [
@@ -38,5 +42,10 @@ class InformationUpdate extends Model
     public function requestedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by');
+    }
+
+    public function reviewedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
     }
 }

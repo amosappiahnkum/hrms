@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CertificateType;
+use App\Traits\HasApprovalUpdates;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Education extends AppModel
 {
-    use HasFactory, SoftDeletes, HasUuid;
+    use HasFactory, SoftDeletes, HasUuid, HasApprovalUpdates;
 
     protected $fillable = [
         'employee_id',
@@ -33,6 +34,22 @@ class Education extends AppModel
         'type' => CertificateType::class
     ];
 
+    public function approvableFields(): array
+    {
+        return [
+            'employee_id' => ['show_in_diff' => true],
+            'education_level_id' => ['show_in_diff' => false],
+            'institution' => ['show_in_diff' => false],
+            'qualification' => ['show_in_diff' => false],
+            'date' => ['show_in_diff' => false],
+            'type' => ['show_in_diff' => false],
+            'cert_number' => ['show_in_diff' => false],
+            'field' => ['show_in_diff' => false],
+            'country' => ['show_in_diff' => false],
+            'user_id' => ['show_in_diff' => true],
+        ];
+    }
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
@@ -45,7 +62,7 @@ class Education extends AppModel
 
     public function photo(): MorphOne
     {
-        return $this->morphOne(Photo::class,'photoable');
+        return $this->morphOne(Photo::class, 'photoable');
     }
 
     /**

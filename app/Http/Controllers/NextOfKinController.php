@@ -7,9 +7,11 @@ use App\Http\Requests\UpdateNextOfKinRequest;
 use App\Http\Resources\NextOfKinResource;
 use App\Models\Employee;
 use App\Models\NextOfKin;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use Exception;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -25,10 +27,10 @@ class NextOfKinController extends Controller
     {
         if (!$employee->nextOfKin) {
             $nextOfKin = $employee->nextOfKin()->create();
-            return ApiResponse::success(NextOfKinResource::make($nextOfKin)) ;
+            return ApiResponse::success(NextOfKinResource::make($nextOfKin));
         }
 
-        return ApiResponse::success(NextOfKinResource::make($employee->nextOfKin)) ;
+        return ApiResponse::success(NextOfKinResource::make($employee->nextOfKin));
     }
 
     /**
@@ -39,23 +41,25 @@ class NextOfKinController extends Controller
      */
     public function update(UpdateNextOfKinRequest $request, Employee $employee): NextOfKinResource|JsonResponse
     {
+
         DB::beginTransaction();
 
+        $nextOfKin = $employee->nextOfKin;
         try {
-            if ($this->isHrAdmin()) {
-                $employee->nextOfKin->update($request->validated());
-                $employee->nextOfKin->save();
-            } else {
-                $this->infoDifference($employee->nextOfKin, $request->validated());
-                $this->requestUpdate($employee->nextOfKin);
-            }
+
+            $changes = $request->validated();
+
+//            if ($this->isHrAdmin()) {
+//                $nextOfKin->update($changes);
+//            } else {
+            app(UpdateApprovalService::class)->update($nextOfKin, $changes, Auth::id());
+//            }
 
             DB::commit();
-
-            return ApiResponse::success(NextOfKinResource::make($employee->nextOfKin));
+            return ApiResponse::success([]);
         } catch (Exception $exception) {
-            Log::error('Next of Kin Update: ', [$exception]);
-            return ApiResponse::error('Something went wrong', []);
+            Log::error('Update Next OF Kin Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 }

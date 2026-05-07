@@ -3,9 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Enums\Statuses;
+use App\Helpers\ApiResponse;
 use App\Http\Requests\UpdateInformationUpdateRequest;
+use App\Http\Resources\ApprovalDetailResource;
+use App\Http\Resources\ApprovalResource;
 use App\Http\Resources\InformationUpdateResource;
 use App\Models\InformationUpdate;
+use App\Services\UpdateApprovalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -25,29 +29,62 @@ class InformationUpdateController extends Controller
      */
     public function index(Request $request): JsonResponse|AnonymousResourceCollection
     {
-        if (!$this->can('approve-employee-update')) {
-            return response()->json([
-                'message' => 'Not enough permissions'
-            ], 400);
+        $query = InformationUpdate::query()
+            ->with(['information']) // load target model if exists
+            ->latest();
+
+        // 🔎 Filters
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
         }
 
-        $infoUpdates = InformationUpdate::query()
-            ->where('status', $request->status)
-            ->orderBy('created_at', 'asc')
-            ->paginate($request->per_page ?? 10);
+        if ($request->filled('type') && $request->type !== 'all') {
+            $query->where('type', $request->type);
+        }
 
-        return InformationUpdateResource::collection($infoUpdates);
+        if ($request->filled('model')) {
+            $query->where('information_type', $request->model);
+        }
+
+        if ($request->filled('requested_by')) {
+            $query->where('requested_by', $request->requested_by);
+        }
+
+        if ($request->filled('employee_id')) {
+            // since you're storing employee_id inside JSON
+            $query->where(function ($q) use ($request) {
+                $q->where('new_info->employee_id', $request->employee_id)
+                    ->orWhere('old_info->employee_id', $request->employee_id);
+            });
+        }
+
+        // 📅 date range
+        if ($request->filled('from') && $request->filled('to')) {
+            $query->whereBetween('created_at', [$request->from, $request->to]);
+        }
+
+        $updates = $query->paginate($request->per_page ?? 10);
+
+        return ApprovalResource::collection($updates);
     }
 
 
     /**
      * @param InformationUpdate $informationUpdate
      *
-     * @return InformationUpdateResource
+     * @return JsonResponse
      */
-    public function show(InformationUpdate $informationUpdate): InformationUpdateResource
+    public function show(InformationUpdate $informationUpdate)
     {
-        return new InformationUpdateResource($informationUpdate);
+        $informationUpdate->load([
+            'requestedBy:id,employee_id',
+            'requestedBy.employee:id,first_name,last_name',
+
+            'reviewedBy:id,employee_id',
+            'reviewedBy.employee:id,first_name,last_name',
+        ]);
+//        return response()->json($informationUpdate);
+        return ApiResponse::success(ApprovalDetailResource::make($informationUpdate));
     }
 
     /**
@@ -55,6 +92,7 @@ class InformationUpdateController extends Controller
      * @param InformationUpdate $informationUpdate
      *
      * @return JsonResponse
+     * @throws \Throwable
      */
     public function update(UpdateInformationUpdateRequest $request, InformationUpdate $informationUpdate): JsonResponse
     {
@@ -86,4 +124,81 @@ class InformationUpdateController extends Controller
             ], 400);
         }
     }
+
+    public function approve(InformationUpdate $informationUpdate): JsonResponse
+    {
+        try {
+            // 🔒 Optional but important
+//            $this->authorize('approve', $update);
+
+            app(UpdateApprovalService::class)->approve($informationUpdate, Auth::id());
+
+            return ApiResponse::success(
+                null,
+                'Approval successful'
+            );
+
+        } catch (\Throwable $e) {
+            Log::error('Approval failed', [
+                'update_id' => $informationUpdate->uuid,
+                'error' => $e
+            ]);
+
+            return ApiResponse::error('Unable to approve request');
+        }
+    }
+
+    public function reject(Request $request, InformationUpdate $informationUpdate): JsonResponse
+    {
+        $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        try {
+
+            // 🔒 Optional but important
+//            $this->authorize('approve', $update);
+
+            app(UpdateApprovalService::class)
+                ->reject(
+                    $informationUpdate,
+                    Auth::id(),
+                    $request->reason
+                );
+
+            return ApiResponse::success(
+                null,
+                'Request rejected'
+            );
+
+        } catch (\Throwable $e) {
+            Log::error('Rejection failed', [
+                'update_id' => $informationUpdate->uuid,
+                'error' => $e
+            ]);
+
+            return ApiResponse::error('Unable to reject request');
+        }
+    }
+
+    public function myRequest(Request $request): JsonResponse|AnonymousResourceCollection
+    {
+        $query = InformationUpdate::query()
+            ->with(['information']) // load target model if exists
+            ->where('requested_by', Auth::id())
+            ->latest();
+
+        // 🔎 Filters
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('type') && $request->type !== 'all') {
+            $query->where('type', $request->type);
+        }
+        $updates = $query->paginate($request->per_page ?? 10);
+
+        return ApprovalDetailResource::collection($updates);
+    }
+
 }

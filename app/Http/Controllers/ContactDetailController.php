@@ -6,9 +6,11 @@ use App\Helpers\ApiResponse;
 use App\Helpers\Helper;
 use App\Http\Requests\UpdateContactDetailRequest;
 use App\Http\Resources\ContactDetailResource;
+use App\Http\Resources\DependantResource;
 use App\Models\ActivityLog;
 use App\Models\ContactDetail;
 use App\Models\Employee;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use App\Traits\Notifier;
 use Exception;
@@ -49,33 +51,30 @@ class ContactDetailController extends Controller
      *
      * @param UpdateContactDetailRequest $request
      * @param Employee $employee
-     * @return ContactDetailResource|JsonResponse
+     * @return JsonResponse
      * @throws Throwable
      */
-    public function update(UpdateContactDetailRequest $request, Employee $employee): JsonResponse|ContactDetailResource
+
+    public function update(UpdateContactDetailRequest $request, Employee $employee)
     {
         DB::beginTransaction();
 
+        $contact = $employee->contactDetail;
         try {
+
+            $changes = $request->validated();
+
             if ($this->isHrAdmin()) {
-                $employee->contactDetail->update($request->validated());
-                $employee->contactDetail->save();
+                $contact->update($changes);
             } else {
-                $this->infoDifference($employee->contactDetail, $request->validated());
-                $this->requestUpdate($employee->contactDetail);
-
-                $phone = $this->cleanPhoneNumber($request->telephone);
-
-                Helper::updateSRMS($employee->staff_id, $phone);
+                app(UpdateApprovalService::class)->update($contact, $changes, Auth::id());
             }
 
             DB::commit();
-            return ApiResponse::success(ContactDetailResource::make($employee->contactDetail));
+            return ApiResponse::success([]);
         } catch (Exception $exception) {
-            DB::rollBack();
-
-            Log::error($exception);
-            return ApiResponse::error('Something went wrong', []);
+            Log::error('Update Contact Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 }

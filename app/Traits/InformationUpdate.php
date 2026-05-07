@@ -5,7 +5,9 @@ namespace App\Traits;
 use App\Notifications\InfoUpdateNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Traits\EnumeratesValues;
 use JsonException;
 
 trait InformationUpdate
@@ -38,24 +40,20 @@ trait InformationUpdate
         $this->newUpdate = $difference;
     }
 
-    public function requestUpdate(Model $model)
+    protected function requestUpdate(Model $model, array $changes)
     {
-        if (count($this->newUpdate) > 0) {
-            $reflection = new \ReflectionClass($model);
-
-            return $this->infoUpdate = $model->informationUpdate()->updateOrCreate([
-                'information_type' => $reflection->getShortName(),
-                'information_id' => $model->id,
-                'status' => 'pending'
-            ], [
-                'old_info' => $model->only(array_keys($this->newUpdate)),
-                'new_info' => $this->newUpdate,
-                'requested_by' => Auth::id()
-            ]);
-        }
-
-        return null;
+        return $model->informationUpdate()->updateOrCreate([
+            'information_type' => $model->getMorphClass(),
+            'information_id' => $model->id,
+            'status' => 'pending',
+        ], [
+                'old_info' => $model->only(array_keys($changes)),
+                'new_info' => $changes,
+                'requested_by' => Auth::id(),
+            ]
+        );
     }
+
 
     public function notify($data, $employeeId, array $modelInfo): void
     {

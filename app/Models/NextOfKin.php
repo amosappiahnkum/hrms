@@ -2,20 +2,19 @@
 
 namespace App\Models;
 
+use App\Traits\HasApprovalUpdates;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class NextOfKin extends AppModel
 {
-    use HasFactory, SoftDeletes, HasUuid;
+    use HasFactory, SoftDeletes, HasUuid, HasApprovalUpdates;
 
     protected $fillable = [
         'name',
-        'employee_id',
         'phone_number',
         'alt_phone_number',
         'address',
@@ -23,6 +22,19 @@ class NextOfKin extends AppModel
         'email',
         'user_id',
     ];
+
+    public function approvableFields(): array
+    {
+        return [
+            'name' => ['show_in_diff' => true],
+            'employee_id' => ['show_in_diff' => false],
+            'phone_number' => ['show_in_diff' => true],
+            'alt_phone_number' => ['show_in_diff' => true],
+            'address' => ['show_in_diff' => true],
+            'email' => ['show_in_diff' => true],
+            'user_id' => ['show_in_diff' => false],
+        ];
+    }
 
     /**
      * @return BelongsTo

@@ -7,7 +7,7 @@ use App\Http\Requests\StoreEmergencyContactRequest;
 use App\Http\Requests\UpdateEmergencyContactRequest;
 use App\Http\Resources\EmergencyContactResource;
 use App\Models\EmergencyContact;
-use App\Traits\InformationUpdate;
+use App\Services\UpdateApprovalService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,10 +18,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class EmergencyContactController extends Controller
 {
-    use InformationUpdate;
 
     /**
      * Display a listing of the resource.
@@ -48,31 +48,32 @@ class EmergencyContactController extends Controller
      *
      * @param StoreEmergencyContactRequest $request
      * @return EmergencyContactResource|JsonResponse
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function store(StoreEmergencyContactRequest $request): JsonResponse|EmergencyContactResource
     {
-        DB::beginTransaction();
         try {
-            $user = Auth::user();
+            $validated = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $emergencyContact = EmergencyContact::create($request->validated());
+                EmergencyContact::create($validated);
             } else {
-                $emergencyContact = EmergencyContact::create(['user_id' => $user->id]);
-
-                $this->infoDifference($emergencyContact, $request->validated());
-                $this->requestUpdate($emergencyContact);
+                app(UpdateApprovalService::class)->create(
+                    new EmergencyContact(),
+                    $validated,
+                    Auth::id()
+                );
             }
 
-            DB::commit();
-            return new EmergencyContactResource($emergencyContact);
-        } catch (Exception $exception) {
-            Log::error('Add EmergencyContact Error: ', [$exception]);
+            return ApiResponse::success(
+                null,
+                'Emergency Contact creation request submitted for approval'
+            );
 
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+        } catch (Throwable $e) {
+            Log::error('Add EmergencyContact Error', ['error' => $e]);
+
+            return ApiResponse::error('Something went wrong');
         }
     }
 
@@ -82,33 +83,31 @@ class EmergencyContactController extends Controller
      * @param UpdateEmergencyContactRequest $request
      * @param EmergencyContact $emergencyContact
      * @return EmergencyContactResource|JsonResponse
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function update(UpdateEmergencyContactRequest $request, EmergencyContact $emergencyContact): JsonResponse|EmergencyContactResource
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
-                $emergencyContact->update($request->all());
-                $emergencyContact->save();
-            } else {
-                $this->infoDifference($emergencyContact, $request->all());
-                $this->requestUpdate($emergencyContact);
-            }
 
+            $changes = $request->validated();
+
+            if ($this->isHrAdmin()) {
+                $emergencyContact->update($changes);
+            } else {
+                app(UpdateApprovalService::class)->update($emergencyContact, $changes, Auth::id());
+            }
 
             DB::commit();
             return new EmergencyContactResource($emergencyContact);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Log::error('Update Dependant Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
     public function show(EmergencyContact $emergencyContact)
     {
-        Log::info('osikani', [$emergencyContact]);
         return ApiResponse::success(EmergencyContactResource::make($emergencyContact));
     }
 
@@ -117,18 +116,22 @@ class EmergencyContactController extends Controller
      *
      * @param EmergencyContact $emergencyContact
      * @return JsonResponse|null
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function destroy(EmergencyContact $emergencyContact): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $emergencyContact->informationUpdate()->delete();
-            $emergencyContact->delete();
+
+            if ($this->isHrAdmin()) {
+                $emergencyContact->delete();
+            } else {
+                app(UpdateApprovalService::class)->delete($emergencyContact, Auth::id());
+            }
 
             DB::commit();
 
-            return ApiResponse::success(null, 'EmergencyContact deleted.', ResponseAlias::HTTP_OK);
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
         } catch (Exception $exception) {
 
             Log::error('Delete EmergencyContact Error: ', [$exception]);
