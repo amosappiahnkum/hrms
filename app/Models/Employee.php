@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Scopes\EmployeeScope;
+use App\Traits\HasApprovalUpdates;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,9 +13,9 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 
-class Employee extends ApplicationModel
+class Employee extends AppModel
 {
-    use HasFactory, SoftDeletes, HasUuid;
+    use SoftDeletes, HasUuid, EmployeeScope, HasApprovalUpdates;
 
     /**
      * @var string[]
@@ -21,6 +23,7 @@ class Employee extends ApplicationModel
     protected $appends = [
         'name'
     ];
+
 
     /**
      * @var string[]
@@ -52,13 +55,46 @@ class Employee extends ApplicationModel
         'secondment_staff',
         "current_status",
         "level",
+        "termination_reason_id",
+        "termination_date",
+        "terminated_by",
+        "photo",
+        "onboarding",
+        "bio",
+        "research_interests",
+        "specializations",
+    ];
+
+    public function approvableFields(): array
+    {
+        return [
+            'title' => ['show_in_diff' => true],
+            'first_name' => ['show_in_diff' => true],
+            'middle_name' => ['show_in_diff' => true],
+            'last_name' => ['show_in_diff' => true],
+            'staff_id' => ['show_in_diff' => true],
+            'job_type' => ['show_in_diff' => true],
+            'dob' => ['show_in_diff' => true],
+            'gender' => ['show_in_diff' => true],
+            'marital_status' => ['show_in_diff' => true],
+            'ssnit_number' => ['show_in_diff' => true],
+            'department_id' => ['show_in_diff' => false],
+            'rank_id' => ['show_in_diff' => false],
+        ];
+    }
+
+    protected $attributes = [
+        'specializations' => '[]',
+        'research_interests' => '[]',
     ];
 
     /**
      * @var string[]
      */
     protected $casts = [
-        'marital_status' => 'string'
+        'marital_status' => 'string',
+        'specializations' => 'array',
+        'research_interests' => 'array',
     ];
 
     /**
@@ -67,6 +103,11 @@ class Employee extends ApplicationModel
     public function getNameAttribute(): string
     {
         return $this->first_name . " " . $this->middle_name . " " . $this->last_name;
+    }
+
+    public function terminationReason(): BelongsTo
+    {
+        return $this->belongsTo(TerminationReason::class);
     }
 
     /**
@@ -150,6 +191,16 @@ class Employee extends ApplicationModel
         return $this->hasMany(Education::class);
     }
 
+    public function latestQualification()
+    {
+        return $this->hasOne(Education::class)->latestOfMany('date');
+    }
+
+    public function latestPosition()
+    {
+        return $this->hasOne(PreviousPosition::class)->latestOfMany('start');
+    }
+
     /**
      * @return HasOne
      */
@@ -216,8 +267,33 @@ class Employee extends ApplicationModel
         return $this->hasMany(Experience::class);
     }
 
+    public function previousPositions(): HasMany
+    {
+        return $this->hasMany(PreviousPosition::class);
+    }
+
     public function grantAndFunds()
     {
         return $this->hasMany(GrantAndFund::class);
+    }
+
+    public function awards()
+    {
+        return $this->hasMany(Award::class);
+    }
+
+    public function achievements()
+    {
+        return $this->hasMany(Achievement::class);
+    }
+
+    public function affiliations()
+    {
+        return $this->hasMany(Affiliation::class);
+    }
+
+    public function highestQualification()
+    {
+        return $this->hasOne(Education::class)->ofMany('education_level_rank', 'max');
     }
 }

@@ -13,12 +13,12 @@ return new class extends Migration
      *
      * @return void
      */
-    public function up()
+    public function up(): void
     {
         Schema::create('projects', function (Blueprint $table) {
             $table->id();
             $table->string('title');
-            $table->string('year', 10);
+            $table->year('start_year');
             $table->string('location')->nullable();
             $table->string('significance')->nullable();
             $table->string('description')->nullable();

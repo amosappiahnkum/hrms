@@ -2,16 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\HasApprovalUpdates;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class EmergencyContact extends Model
+class EmergencyContact extends AppModel
 {
-    use HasFactory, SoftDeletes, HasUuid;
+    use HasFactory, SoftDeletes, HasUuid, HasApprovalUpdates;
 
     protected $fillable = [
         'employee_id',
@@ -22,6 +22,19 @@ class EmergencyContact extends Model
         'email',
         'user_id',
     ];
+
+    public function approvableFields(): array
+    {
+        return [
+            'employee_id' => ['show_in_diff' => false],
+            'name' => ['show_in_diff' => true],
+            'relationship' => ['show_in_diff' => true],
+            'phone_number' => ['show_in_diff' => true],
+            'alt_phone_number' => ['show_in_diff' => true],
+            'email' => ['show_in_diff' => true],
+            'user_id' => ['show_in_diff' => false],
+        ];
+    }
 
     /**
      * @return BelongsTo

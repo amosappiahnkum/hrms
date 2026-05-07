@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Helpers\Helper;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -29,7 +30,7 @@ class EmployeeDirectoryResource extends JsonResource
             'qualification' => $this->qualification,
             'rank' => $this->rank->name,
             'department' => $this->department->name,
-            'photo' => $this->photo ? '/storage/images/employees/' . $this->photo->file_name : null,
+            'photo' => Helper::getPhotoURL($this->photo),
         ];
     }
 }

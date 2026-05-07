@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\scopes\ActivityLogScope;
+use App\Scopes\ActivityLogScope;
 use App\Traits\HasUuid;
 use Exception;
 use Illuminate\Database\Eloquent\Factories\HasFactory;

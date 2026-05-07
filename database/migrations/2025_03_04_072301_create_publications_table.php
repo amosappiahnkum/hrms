@@ -18,7 +18,7 @@ return new class extends Migration
         Schema::create('publications', function (Blueprint $table) {
             $table->id();
             $table->string('title');
-            $table->json('authors');
+            $table->jsonb('authors');
             $table->date('publication_date')->nullable();
             $table->string('publisher')->nullable();
             $table->string('edition')->nullable();

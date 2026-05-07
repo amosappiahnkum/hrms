@@ -2,25 +2,27 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\StoreExperienceRequest;
 use App\Http\Requests\UpdateExperienceRequest;
+use App\Http\Resources\DependantResource;
 use App\Http\Resources\ExperienceResource;
-use App\Models\Employee;
 use App\Models\Experience;
-use App\Traits\InformationUpdate;
+use App\Services\UpdateApprovalService;
 use App\Traits\UsePrint;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class ExperienceController extends Controller
 {
-    use UsePrint, InformationUpdate;
+    use UsePrint;
 
     /**
      * Display a listing of the resource.
@@ -32,8 +34,11 @@ class ExperienceController extends Controller
     {
         $experiences = Experience::query();
 
-        $employee = Employee::query()->where('uuid', $request->employeeId)->first();
-        $experiences->where('employee_id', $employee->id);
+        $experiences->when($request->employee_uuid, function ($query, $employee_uuid) {
+            $query->whereHas('employee', function ($q) use ($employee_uuid) {
+                $q->where('uuid', $employee_uuid);
+            });
+        })->orderByDesc('from');
 
         return ExperienceResource::collection($experiences->paginate($request->per_page ?? 10));
     }
@@ -43,36 +48,33 @@ class ExperienceController extends Controller
      *
      * @param StoreExperienceRequest $request
      * @return ExperienceResource|JsonResponse
+     * @throws \Throwable
      */
     public function store(StoreExperienceRequest $request): JsonResponse|ExperienceResource
     {
-        DB::beginTransaction();
         try {
-            $user = Auth::user();
-            $employee = Employee::query()->where('uuid', $request->employee_id)->first();
-            $request['to'] = self::formatDate($request['to']);
-            $request['from'] = self::formatDate($request['from']);
+            $validated = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $request['user_id'] = $user->id;
-                $experience = $employee->experiences()->create($request->all());
+                Experience::create($validated);
             } else {
-                $experience = $employee->experiences()->create(['user_id' => $user->id]);
 
-                $this->infoDifference($experience, $request->all());
-                $this->requestUpdate($experience);
+                app(UpdateApprovalService::class)->create(
+                    new Experience(),
+                    $validated,
+                    Auth::id()
+                );
             }
 
-            DB::commit();
+            return ApiResponse::success(
+                null,
+                'Experience creation request submitted for approval'
+            );
 
-            return new ExperienceResource($experience);
-        } catch (Exception $exception) {
-            DB::rollBack();
-            Log::error('Add Experience Error: ', [$exception]);
+        } catch (Throwable $e) {
+            Log::error('Add Experience Error', ['error' => $e]);
 
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::error('Something went wrong');
         }
     }
 
@@ -80,22 +82,11 @@ class ExperienceController extends Controller
      * Display the specified resource.
      *
      * @param Experience $experience
-     * @return Response
+     * @return JsonResponse
      */
     public function show(Experience $experience)
     {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param Experience $experience
-     * @return Response
-     */
-    public function edit(Experience $experience)
-    {
-        //
+        return ApiResponse::success(ExperienceResource::make($experience));
     }
 
     /**
@@ -103,21 +94,56 @@ class ExperienceController extends Controller
      *
      * @param UpdateExperienceRequest $request
      * @param Experience $experience
-     * @return Response
+     * @return ExperienceResource|JsonResponse
+     * @throws \Throwable
      */
     public function update(UpdateExperienceRequest $request, Experience $experience)
     {
-        //
+        DB::beginTransaction();
+        try {
+
+            $changes = $request->validated();
+
+            if ($this->isHrAdmin()) {
+                $experience->update($changes);
+            } else {
+                app(UpdateApprovalService::class)->update($experience, $changes, Auth::id());
+            }
+
+            DB::commit();
+            return new ExperienceResource($experience);
+        } catch (Exception $exception) {
+            Log::error('Update $experience Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
+        }
     }
 
     /**
      * Remove the specified resource from storage.
      *
      * @param Experience $experience
-     * @return Response
+     * @return JsonResponse
+     * @throws \Throwable
      */
     public function destroy(Experience $experience)
     {
-        //
+
+        DB::beginTransaction();
+        try {
+
+            if ($this->isHrAdmin()) {
+                $experience->delete();
+            } else {
+                app(UpdateApprovalService::class)->delete($experience, Auth::id());
+            }
+
+            DB::commit();
+
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
+        } catch (Exception $exception) {
+
+            Log::error('Delete $experience Error: ', [$exception]);
+            return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
+        }
     }
 }

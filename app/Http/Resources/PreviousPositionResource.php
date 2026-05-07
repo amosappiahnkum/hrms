@@ -2,26 +2,30 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use JsonSerializable;
 
 class PreviousPositionResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return array|\Illuminate\Contracts\Support\Arrayable|\JsonSerializable
+     * @param  Request  $request
+     * @return array
      */
-    public function toArray($request)
+    public function toArray($request): array
     {
         return [
-            'id' => $this->id,
-            'employee_id' => $this->employee_id,
-            'position_id' => $this->position_id,
+            'uuid' => $this->uuid,
+            'employee_uuid' => $this->employee->uuid,
+            'position_uuid' => $this->position->uuid,
+            'department_uuid' => $this->department?->uuid,
+            'department' => $this->department?->name,
             'name' => $this->position->name,
             'start' => $this->start,
-            'end' => $this->end,
-            'user_id' => $this->user_id
+            'end' => $this->end
         ];
     }
 }

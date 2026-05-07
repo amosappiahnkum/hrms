@@ -2,21 +2,24 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\StoreDependantRequest;
 use App\Http\Requests\UpdateDependantRequest;
 use App\Http\Resources\DependantResource;
-use App\Models\ActivityLog;
 use App\Models\Dependant;
-use App\Models\Employee;
+use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
-use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class DependantController extends Controller
 {
@@ -27,15 +30,17 @@ class DependantController extends Controller
      *
      * @param Request $request
      *
-     * @return AnonymousResourceCollection
+     * @return AnonymousResourceCollection|Response|BinaryFileResponse
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): Response|BinaryFileResponse|AnonymousResourceCollection
     {
         $dependants = Dependant::query();
 
-        $employee = Employee::query()->where('uuid', $request->employeeId)->first();
-
-        $dependants->where('employee_id', $employee->id);
+        $dependants->when($request->employee_uuid, function ($query, $employee_uuid) {
+            $query->whereHas('employee', function ($q) use ($employee_uuid) {
+                $q->where('uuid', $employee_uuid);
+            });
+        });
 
         return DependantResource::collection($dependants->paginate($request->per_page ?? 10));
     }
@@ -44,115 +49,95 @@ class DependantController extends Controller
      * Store a newly created resource in storage.
      *
      * @param StoreDependantRequest $request
-     * @return DependantResource|JsonResponse
+     * @return JsonResponse
      */
-    public function store(StoreDependantRequest $request): DependantResource|JsonResponse
+    public function store(StoreDependantRequest $request): JsonResponse
     {
-        DB::beginTransaction();
         try {
-            $user = Auth::user();
-
-            $employee = Employee::query()->where('uuid', $request->employee_id)->first();
-
-            $request['dob'] = $request->dob != null ? Carbon::parse($request->dob)->format('Y-m-d') : null;
+            $validated = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $request['user_id'] = $user->id;
-                $dependant = $employee->dependants()->create($request->all());
+                Dependant::create($validated);
             } else {
-                $dependant = $employee->dependants()->create([
-                    'user_id' => $user->id
-                ]);
 
-                $this->infoDifference($dependant, $request->all());
-                $this->requestUpdate($dependant);
+                app(UpdateApprovalService::class)->create(
+                    new Dependant(),
+                    $validated,
+                    Auth::id()
+                );
             }
 
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' added a dependant for ' . $employee->name,
-                'updated dependant', [''], 'dependant')
-                ->to($employee)
-                ->as($user);
+            return ApiResponse::success(
+                null,
+                'Dependant creation request submitted for approval'
+            );
 
-            DB::commit();
+        } catch (Throwable $e) {
+            Log::error('Add Dependant Error', ['error' => $e]);
 
-            return new DependantResource($dependant);
-        } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::error('Something went wrong');
         }
     }
 
     /**
-     * Display the specified resource.
+     * Update the specified resource in storage.
      *
      * @param UpdateDependantRequest $request
-     * @param $id
+     * @param Dependant $dependant
      * @return DependantResource|JsonResponse
+     * @throws Throwable
      */
-    public function update(UpdateDependantRequest $request, $id): JsonResponse|DependantResource
+    public function update(UpdateDependantRequest $request, Dependant $dependant): JsonResponse|DependantResource
     {
         DB::beginTransaction();
         try {
-            $user = Auth::user();
 
-            $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
-
-            $dependant = Dependant::findOrFail($id);
+            $changes = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $dependant->update($request->all());
-                $dependant->save();
+                $dependant->update($changes);
             } else {
-                $this->infoDifference($dependant, $request->all());
-                $this->requestUpdate($dependant);
+                app(UpdateApprovalService::class)->update($dependant, $changes, Auth::id());
             }
 
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' updated dependant for ' . $dependant->employee->name,
-                'updated dependant', [''], 'dependant')
-                ->to($dependant->employee)
-                ->as($user);
-
             DB::commit();
-
             return new DependantResource($dependant);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            Log::error('Update Dependant Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
+    }
+
+    public function show(Dependant $dependant)
+    {
+        return ApiResponse::success(DependantResource::make($dependant));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param $id
+     * @param Dependant $dependant
      * @return JsonResponse|null
+     * @throws Throwable
      */
-    public function destroy($id): ?JsonResponse
+    public function destroy(Dependant $dependant): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $user = Auth::user();
 
-            $dependant = Dependant::findOrFail($id);
-            $dependant->informationUpdate()->delete();
-            $dependant->delete();
-
-            ActivityLog::add(($user?->employee?->name ?? $user->username) . ' deleted dependant for ' . $dependant->employee->name,
-                'delete', [''], 'dependant')
-                ->to($dependant->employee)
-                ->as($user);
+//            if ($this->isHrAdmin()) {
+//                $dependant->delete();
+//            } else {
+                app(UpdateApprovalService::class)->delete($dependant, Auth::id());
+//            }
 
             DB::commit();
 
-            return response()->json([
-                'message' => 'Emergency Contact Deleted'
-            ]);
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+
+            Log::error('Delete Dependant Error: ', [$exception]);
+            return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
         }
     }
 }

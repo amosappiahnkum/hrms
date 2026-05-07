@@ -4,9 +4,8 @@ namespace App\Models;
 
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 
-class GrantAndFund extends Model
+class GrantAndFund extends AppModel
 {
     use HasFactory, HasUuid;
 
@@ -17,6 +16,9 @@ class GrantAndFund extends Model
         'benefactor',
         'date',
         'description',
+        'start',
+        'end',
+        'currency',
         'employee_id',
         'user_id'
     ];
