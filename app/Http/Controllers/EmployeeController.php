@@ -270,7 +270,7 @@ class EmployeeController extends Controller
 
             DB::commit();
 
-            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
+//            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
             Log::error('Update Dependant Error', ['error' => $exception]);

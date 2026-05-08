@@ -34,10 +34,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Public routes
-Route::post('login', [AuthController::class, 'login']);
 Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
 
 Route::prefix('v1')->group(function () {
+    Route::post('login', [AuthController::class, 'login']);
     foreach (glob(__DIR__ . '/staff-directory/*.php') as $file) {
         require $file;
     }
