@@ -1,16 +1,20 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\QuestionBank;
 
+use App\Helpers\ApiResponse;
+use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQuestionRequest;
 use App\Http\Requests\UpdateQuestionRequest;
+use App\Http\Resources\QuestionResource;
 use App\Models\QuestionBank\Question;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class QuestionController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(Request $request): AnonymousResourceCollection
     {
         $query = Question::with(['category', 'options']);
 
@@ -42,7 +46,7 @@ class QuestionController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate($request->input('per_page', 15));
 
-        return response()->json($questions);
+        return QuestionResource::collection($questions);
     }
 
     /**
@@ -68,10 +72,8 @@ class QuestionController extends Controller
             }
         }
 
-        return response()->json([
-            'message' => 'Question created successfully',
-            'data' => $question->load(['category', 'options']),
-        ], 201);
+        $question->load(['category', 'options']);
+        return ApiResponse::success(QuestionResource::make($question));
     }
 
     /**
@@ -79,9 +81,8 @@ class QuestionController extends Controller
      */
     public function show(Question $question): JsonResponse
     {
-        return response()->json([
-            'data' => $question->load(['category', 'options', 'usages.usable']),
-        ]);
+        $question->load(['category', 'options']);
+        return ApiResponse::success(QuestionResource::make($question));
     }
 
     /**
@@ -111,10 +112,7 @@ class QuestionController extends Controller
             }
         }
 
-        return response()->json([
-            'message' => 'Question updated successfully',
-            'data' => $question->load(['category', 'options']),
-        ]);
+        return ApiResponse::success(QuestionResource::make($question));
     }
 
     /**

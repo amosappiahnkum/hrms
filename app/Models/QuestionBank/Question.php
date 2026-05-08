@@ -3,6 +3,7 @@
 namespace App\Models\QuestionBank;
 
 use App\Enums\QuestionType;
+use App\Models\AppModel;
 use Database\Factories\QuestionBank\QuestionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
-class Question extends Model
+class Question extends AppModel
 {
     /** @use HasFactory<QuestionFactory> */
     use HasFactory;

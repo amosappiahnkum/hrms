@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
 use App\Helpers\ApiResponse;
+use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateNextOfKinRequest;
 use App\Http\Resources\NextOfKinResource;
 use App\Models\Employee;
-use App\Models\NextOfKin;
 use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use Exception;

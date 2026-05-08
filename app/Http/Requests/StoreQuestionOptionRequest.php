@@ -11,7 +11,7 @@ class StoreQuestionOptionRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -22,7 +22,28 @@ class StoreQuestionOptionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'question_id' => [
+                'required',
+                'exists:questions,id'
+            ],
+
+            'option_text' => [
+                'required',
+                'string',
+                'max:255'
+            ],
+
+            'option_value' => [
+                'nullable',
+                'string',
+                'max:255'
+            ],
+
+            'order' => [
+                'nullable',
+                'integer',
+                'min:0'
+            ],
         ];
     }
 }

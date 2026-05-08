@@ -1,12 +1,13 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
 use App\Helpers\ApiResponse;
-use App\Http\Requests\StoreAffiliationRequest;
-use App\Http\Requests\UpdateAffiliationRequest;
-use App\Http\Resources\AffiliationResource;
-use App\Models\Affiliation;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreProjectRequest;
+use App\Http\Requests\UpdateProjectRequest;
+use App\Http\Resources\ProjectResource;
+use App\Models\Project;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
-class AffiliationController extends Controller
+class ProjectController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -26,30 +27,30 @@ class AffiliationController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $affiliations = Affiliation::query();
+        $projects = Project::query();
 
-        $affiliations->when($request->employee_uuid, function ($query, $employee_uuid) {
+        $projects->when($request->employee_uuid, function ($query, $employee_uuid) {
             $query->whereHas('employee', function ($q) use ($employee_uuid) {
                 $q->where('uuid', $employee_uuid);
             });
-        })->orderByDesc('start');
+        })->orderByDesc('start_year');
 
-        return AffiliationResource::collection($affiliations->paginate($request->per_page ?? 10));
+        return ProjectResource::collection($projects->paginate($request->per_page ?? 10));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param StoreAffiliationRequest $request
-     * @return AffiliationResource|JsonResponse
+     * @param StoreProjectRequest $request
+     * @return ProjectResource|JsonResponse
      * @throws \Throwable
      */
-    public function store(StoreAffiliationRequest $request): AffiliationResource|JsonResponse
+    public function store(StoreProjectRequest $request): ProjectResource|JsonResponse
     {
         try {
-            $affiliation = Affiliation::create($request->validated());
+            $project = Project::create($request->validated());
 
-            return ApiResponse::success(AffiliationResource::make($affiliation));
+            return ApiResponse::success(ProjectResource::make($project));
         }catch (Exception $exception){
 
             Log::error($exception->getMessage());
@@ -60,17 +61,17 @@ class AffiliationController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param UpdateAffiliationRequest $request
-     * @param Affiliation $affiliation
-     * @return AffiliationResource|JsonResponse
+     * @param UpdateProjectRequest $request
+     * @param Project $project
+     * @return ProjectResource|JsonResponse
      * @throws \Throwable
      */
-    public function update(UpdateAffiliationRequest $request, Affiliation $affiliation): JsonResponse|AffiliationResource
+    public function update(UpdateProjectRequest $request, Project $project): JsonResponse|ProjectResource
     {
         try {
-            $affiliation->update($request->validated());
+            $project->update($request->validated());
 
-            return ApiResponse::success(AffiliationResource::make($affiliation));
+            return ApiResponse::success(ProjectResource::make($project));
         }catch (Exception $exception){
             Log::error($exception->getMessage());
 
@@ -78,25 +79,25 @@ class AffiliationController extends Controller
         }
     }
 
-    public function show(Affiliation $affiliation)
+    public function show(Project $project)
     {
-        return ApiResponse::success(AffiliationResource::make($affiliation));
+        return ApiResponse::success(ProjectResource::make($project));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param Affiliation $affiliation
+     * @param Project $project
      * @return JsonResponse|null
      * @throws \Throwable
      */
-    public function destroy(Affiliation $affiliation): ?JsonResponse
+    public function destroy(Project $project): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $affiliation->delete();
+            $project->delete();
             DB::commit();
-            return ApiResponse::success(null, 'Affiliation deleted.', ResponseAlias::HTTP_OK);
+            return ApiResponse::success(null, 'Project deleted.', ResponseAlias::HTTP_OK);
         }catch (Exception $exception){
 
             Log::error($exception->getMessage());

@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
 use App\Helpers\ApiResponse;
+use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDependantRequest;
 use App\Http\Requests\UpdateDependantRequest;
 use App\Http\Resources\DependantResource;

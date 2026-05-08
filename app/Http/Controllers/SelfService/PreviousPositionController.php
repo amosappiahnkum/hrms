@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
 use App\Helpers\ApiResponse;
+use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreviousPositionRequest;
 use App\Http\Requests\UpdatePreviousPositionRequest;
 use App\Http\Resources\PreviousPositionResource;
@@ -11,7 +12,6 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;

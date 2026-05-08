@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
+use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreviousRankRequest;
 use App\Http\Requests\UpdatePreviousRankRequest;
 use App\Http\Resources\PreviousRankResource;

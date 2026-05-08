@@ -1,71 +1,66 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
 use App\Helpers\ApiResponse;
-use App\Http\Requests\StoreQualificationRequest;
-use App\Http\Requests\UpdateQualificationRequest;
-use App\Http\Resources\QualificationResource;
-use App\Models\Education;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreEmergencyContactRequest;
+use App\Http\Requests\UpdateEmergencyContactRequest;
+use App\Http\Resources\EmergencyContactResource;
+use App\Models\EmergencyContact;
 use App\Services\UpdateApprovalService;
-use App\Traits\UsePrint;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 use Throwable;
 
-class QualificationController extends Controller
+class EmergencyContactController extends Controller
 {
-    protected string $docPath = 'docs/qualifications';
-
-    protected array $allowedFiles = ['pdf', 'jpeg', 'png'];
-
-    use UsePrint;
 
     /**
      * Display a listing of the resource.
      *
      * @param Request $request
      *
-     * @return AnonymousResourceCollection
+     * @return AnonymousResourceCollection|Response|BinaryFileResponse
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): Response|BinaryFileResponse|AnonymousResourceCollection
     {
-        $educations = Education::query();
+        $emergencyContacts = EmergencyContact::query();
 
-        $educations->when($request->employee_uuid, function ($query, $employee_uuid) {
+        $emergencyContacts->when($request->employee_uuid, function ($query, $employee_uuid) {
             $query->whereHas('employee', function ($q) use ($employee_uuid) {
                 $q->where('uuid', $employee_uuid);
             });
-        })->orderByDesc('date');
+        });
 
-        return QualificationResource::collection($educations->paginate($request->per_page ?? 10));
+        return EmergencyContactResource::collection($emergencyContacts->paginate($request->per_page ?? 10));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param StoreQualificationRequest $request
-     * @return QualificationResource|JsonResponse
+     * @param StoreEmergencyContactRequest $request
+     * @return EmergencyContactResource|JsonResponse
      * @throws Throwable
      */
-    public function store(StoreQualificationRequest $request): JsonResponse|QualificationResource
+    public function store(StoreEmergencyContactRequest $request): JsonResponse|EmergencyContactResource
     {
-
         try {
             $validated = $request->validated();
 
             if ($this->isHrAdmin()) {
-                Education::create($validated);
+                EmergencyContact::create($validated);
             } else {
-
                 app(UpdateApprovalService::class)->create(
-                    new Education(),
+                    new EmergencyContact(),
                     $validated,
                     Auth::id()
                 );
@@ -73,11 +68,11 @@ class QualificationController extends Controller
 
             return ApiResponse::success(
                 null,
-                'Education creation request submitted for approval'
+                'Emergency Contact creation request submitted for approval'
             );
 
         } catch (Throwable $e) {
-            Log::error('Add Dependant Error', ['error' => $e]);
+            Log::error('Add EmergencyContact Error', ['error' => $e]);
 
             return ApiResponse::error('Something went wrong');
         }
@@ -86,12 +81,12 @@ class QualificationController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param UpdateQualificationRequest $request
-     * @param Education $qualification
-     * @return QualificationResource|JsonResponse
+     * @param UpdateEmergencyContactRequest $request
+     * @param EmergencyContact $emergencyContact
+     * @return EmergencyContactResource|JsonResponse
      * @throws Throwable
      */
-    public function update(UpdateQualificationRequest $request, Education $qualification): JsonResponse|QualificationResource
+    public function update(UpdateEmergencyContactRequest $request, EmergencyContact $emergencyContact): JsonResponse|EmergencyContactResource
     {
         DB::beginTransaction();
         try {
@@ -99,41 +94,40 @@ class QualificationController extends Controller
             $changes = $request->validated();
 
             if ($this->isHrAdmin()) {
-                $qualification->update($changes);
+                $emergencyContact->update($changes);
             } else {
-                app(UpdateApprovalService::class)->update($qualification, $changes, Auth::id());
+                app(UpdateApprovalService::class)->update($emergencyContact, $changes, Auth::id());
             }
 
             DB::commit();
-            return new QualificationResource($qualification);
+            return new EmergencyContactResource($emergencyContact);
         } catch (Exception $exception) {
             Log::error('Update Dependant Error', ['error' => $exception]);
             return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
-    public function show(Education $qualification)
+    public function show(EmergencyContact $emergencyContact)
     {
-        return ApiResponse::success(QualificationResource::make($qualification));
+        return ApiResponse::success(EmergencyContactResource::make($emergencyContact));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param Education $qualification
+     * @param EmergencyContact $emergencyContact
      * @return JsonResponse|null
      * @throws Throwable
      */
-    public function destroy(Education $qualification): ?JsonResponse
+    public function destroy(EmergencyContact $emergencyContact): ?JsonResponse
     {
-
         DB::beginTransaction();
         try {
 
             if ($this->isHrAdmin()) {
-                $qualification->delete();
+                $emergencyContact->delete();
             } else {
-                app(UpdateApprovalService::class)->delete($qualification, Auth::id());
+                app(UpdateApprovalService::class)->delete($emergencyContact, Auth::id());
             }
 
             DB::commit();
@@ -141,7 +135,7 @@ class QualificationController extends Controller
             return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
         } catch (Exception $exception) {
 
-            Log::error('Delete qualification Error: ', [$exception]);
+            Log::error('Delete EmergencyContact Error: ', [$exception]);
             return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
         }
     }
