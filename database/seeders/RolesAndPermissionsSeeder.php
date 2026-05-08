@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use JsonException;
 use Spatie\Permission\Models\Permission;
@@ -27,27 +28,30 @@ class RolesAndPermissionsSeeder extends Seeder
 
         foreach ($permissions as $permission) {
             foreach ($permission->roles as $roleItem) {
-                $role = Role::query()->where('name', $roleItem)->first();
+                Log::info('role', ['name' => $roleItem]);
 
-                if (!$role) {
-                    $role = new Role();
-                    $role->name = $roleItem;
-                    $role->uuid = Str::uuid();
-                    $role->save();
-                }
+
+                $role = Role::firstOrCreate(
+                    [
+                        'name' => $roleItem,
+                        'guard_name' => 'web',
+                    ],
+                    [
+                        'uuid' => Str::uuid(),
+                    ]
+                );
 
                 foreach ($permission->permissions as $item) {
-                    $rolePermission = Permission::query()
-                        ->where('name', $item)
-                        ->where('group', $permission->group)->first();
-
-                    if (!$rolePermission) {
-                        $rolePermission = new Permission();
-                        $rolePermission->name = $item;
-                        $rolePermission->group = $permission->group;
-                        $rolePermission->uuid = Str::uuid();
-                        $rolePermission->save();
-                    }
+                    $rolePermission = Permission::firstOrCreate(
+                        [
+                            'name' => $item,
+                            'group' => $permission->group,
+                            'guard_name' => 'web',
+                        ],
+                        [
+                            'uuid' => Str::uuid(),
+                        ]
+                    );
 
                     $role->givePermissionTo($rolePermission);
                 }
@@ -64,7 +68,7 @@ class RolesAndPermissionsSeeder extends Seeder
         }
         $superAdminRole->givePermissionTo(Permission::all());
 
-        $user = User::query()->where('username', 'israelnkum')->first();
+        $user = User::query()->where('username', 'system.user')->first();
         $user?->assignRole($superAdminRole);
     }
 }
