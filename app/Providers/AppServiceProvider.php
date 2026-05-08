@@ -37,9 +37,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (env('APP_ENV') != 'local') {
-            URL::forceScheme('https');
-        }
+//        if (env('APP_ENV') != 'local') {
+//            URL::forceScheme('https');
+//        }
 
         JsonResource::withoutWrapping();
         RateLimiter::for("login", static function () {
