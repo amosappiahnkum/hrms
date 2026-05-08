@@ -1,12 +1,13 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
 use App\Helpers\ApiResponse;
-use App\Http\Requests\StoreAchievementRequest;
-use App\Http\Requests\UpdateAchievementRequest;
-use App\Http\Resources\AchievementResource;
-use App\Models\Achievement;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreGrantAndFundRequest;
+use App\Http\Requests\UpdateGrantAndFundRequest;
+use App\Http\Resources\GrantAndFundResource;
+use App\Models\GrantAndFund;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
-class AchievementController extends Controller
+class GrantAndFundController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -26,30 +27,30 @@ class AchievementController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $achievements = Achievement::query();
+        $grantAndFunds = GrantAndFund::query();
 
-        $achievements->when($request->employee_uuid, function ($query, $employee_uuid) {
+        $grantAndFunds->when($request->employee_uuid, function ($query, $employee_uuid) {
             $query->whereHas('employee', function ($q) use ($employee_uuid) {
                 $q->where('uuid', $employee_uuid);
             });
-        })->orderByDesc('year');
+        })->orderByDesc('start');
 
-        return AchievementResource::collection($achievements->paginate($request->per_page ?? 10));
+        return GrantAndFundResource::collection($grantAndFunds->paginate($request->per_page ?? 10));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param StoreAchievementRequest $request
-     * @return AchievementResource|JsonResponse
+     * @param StoreGrantAndFundRequest $request
+     * @return GrantAndFundResource|JsonResponse
      * @throws \Throwable
      */
-    public function store(StoreAchievementRequest $request): AchievementResource|JsonResponse
+    public function store(StoreGrantAndFundRequest $request): GrantAndFundResource|JsonResponse
     {
         try {
-            $achievement = Achievement::create($request->validated());
+            $grant = GrantAndFund::create($request->validated());
 
-            return ApiResponse::success(AchievementResource::make($achievement));
+            return ApiResponse::success(GrantAndFundResource::make($grant));
         }catch (Exception $exception){
 
             Log::error($exception->getMessage());
@@ -60,17 +61,17 @@ class AchievementController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param UpdateAchievementRequest $request
-     * @param Achievement $achievement
-     * @return AchievementResource|JsonResponse
+     * @param UpdateGrantAndFundRequest $request
+     * @param GrantAndFund $grant
+     * @return GrantAndFundResource|JsonResponse
      * @throws \Throwable
      */
-    public function update(UpdateAchievementRequest $request, Achievement $achievement): JsonResponse|AchievementResource
+    public function update(UpdateGrantAndFundRequest $request, GrantAndFund $grant): JsonResponse|GrantAndFundResource
     {
         try {
-            $achievement->update($request->validated());
+            $grant->update($request->validated());
 
-            return ApiResponse::success(AchievementResource::make($achievement));
+            return ApiResponse::success(GrantAndFundResource::make($grant));
         }catch (Exception $exception){
             Log::error($exception->getMessage());
 
@@ -78,25 +79,25 @@ class AchievementController extends Controller
         }
     }
 
-    public function show(Achievement $achievement)
+    public function show(GrantAndFund $grant)
     {
-        return ApiResponse::success(AchievementResource::make($achievement));
+        return ApiResponse::success(GrantAndFundResource::make($grant));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param Achievement $achievement
+     * @param GrantAndFund $grant
      * @return JsonResponse|null
      * @throws \Throwable
      */
-    public function destroy(Achievement $achievement): ?JsonResponse
+    public function destroy(GrantAndFund $grant): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $achievement->delete();
+            $grant->delete();
             DB::commit();
-            return ApiResponse::success(null, 'Achievement deleted.', ResponseAlias::HTTP_OK);
+            return ApiResponse::success(null, 'GrantAndFund deleted.', ResponseAlias::HTTP_OK);
         }catch (Exception $exception){
 
             Log::error($exception->getMessage());

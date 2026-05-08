@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\QuestionBank;
 
+use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQuestionUsageRequest;
 use App\Http\Requests\UpdateQuestionUsageRequest;
 use App\Models\QuestionBank\QuestionUsage;

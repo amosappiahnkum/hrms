@@ -1,12 +1,13 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
 use App\Helpers\ApiResponse;
-use App\Http\Requests\StoreAwardRequest;
-use App\Http\Requests\UpdateAwardRequest;
-use App\Http\Resources\AwardResource;
-use App\Models\Award;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreAffiliationRequest;
+use App\Http\Requests\UpdateAffiliationRequest;
+use App\Http\Resources\AffiliationResource;
+use App\Models\Affiliation;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
-class AwardController extends Controller
+class AffiliationController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -26,30 +27,30 @@ class AwardController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $awards = Award::query();
+        $affiliations = Affiliation::query();
 
-        $awards->when($request->employee_uuid, function ($query, $employee_uuid) {
+        $affiliations->when($request->employee_uuid, function ($query, $employee_uuid) {
             $query->whereHas('employee', function ($q) use ($employee_uuid) {
                 $q->where('uuid', $employee_uuid);
             });
-        })->orderByDesc('year');
+        })->orderByDesc('start');
 
-        return AwardResource::collection($awards->paginate($request->per_page ?? 10));
+        return AffiliationResource::collection($affiliations->paginate($request->per_page ?? 10));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param StoreAwardRequest $request
-     * @return AwardResource|JsonResponse
+     * @param StoreAffiliationRequest $request
+     * @return AffiliationResource|JsonResponse
      * @throws \Throwable
      */
-    public function store(StoreAwardRequest $request): AwardResource|JsonResponse
+    public function store(StoreAffiliationRequest $request): AffiliationResource|JsonResponse
     {
         try {
-            $award = Award::create($request->validated());
+            $affiliation = Affiliation::create($request->validated());
 
-            return ApiResponse::success(AwardResource::make($award));
+            return ApiResponse::success(AffiliationResource::make($affiliation));
         }catch (Exception $exception){
 
             Log::error($exception->getMessage());
@@ -60,17 +61,17 @@ class AwardController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param UpdateAwardRequest $request
-     * @param Award $award
-     * @return AwardResource|JsonResponse
+     * @param UpdateAffiliationRequest $request
+     * @param Affiliation $affiliation
+     * @return AffiliationResource|JsonResponse
      * @throws \Throwable
      */
-    public function update(UpdateAwardRequest $request, Award $award): JsonResponse|AwardResource
+    public function update(UpdateAffiliationRequest $request, Affiliation $affiliation): JsonResponse|AffiliationResource
     {
         try {
-            $award->update($request->validated());
+            $affiliation->update($request->validated());
 
-            return ApiResponse::success(AwardResource::make($award));
+            return ApiResponse::success(AffiliationResource::make($affiliation));
         }catch (Exception $exception){
             Log::error($exception->getMessage());
 
@@ -78,25 +79,25 @@ class AwardController extends Controller
         }
     }
 
-    public function show(Award $award)
+    public function show(Affiliation $affiliation)
     {
-        return ApiResponse::success(AwardResource::make($award));
+        return ApiResponse::success(AffiliationResource::make($affiliation));
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param Award $award
+     * @param Affiliation $affiliation
      * @return JsonResponse|null
      * @throws \Throwable
      */
-    public function destroy(Award $award): ?JsonResponse
+    public function destroy(Affiliation $affiliation): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $award->delete();
+            $affiliation->delete();
             DB::commit();
-            return ApiResponse::success(null, 'Award deleted.', ResponseAlias::HTTP_OK);
+            return ApiResponse::success(null, 'Affiliation deleted.', ResponseAlias::HTTP_OK);
         }catch (Exception $exception){
 
             Log::error($exception->getMessage());

@@ -1,17 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\SelfService;
 
 use App\Helpers\ApiResponse;
+use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateJobDetailRequest;
 use App\Http\Resources\JobDetailResource;
-use App\Models\ActivityLog;
 use App\Models\Employee;
-use App\Models\JobDetail;
-use App\Models\PreviousPosition;
 use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
-use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;

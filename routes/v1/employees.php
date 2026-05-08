@@ -1,15 +1,15 @@
 <?php
 
-use App\Http\Controllers\AchievementController;
-use App\Http\Controllers\AffiliationController;
-use App\Http\Controllers\AwardController;
 use App\Http\Controllers\ContactDetailController;
 use App\Http\Controllers\EmployeeController;
-use App\Http\Controllers\GrantAndFundController;
-use App\Http\Controllers\JobDetailController;
-use App\Http\Controllers\NextOfKinController;
-use App\Http\Controllers\ProjectController;
-use App\Http\Controllers\PublicationController;
+use App\Http\Controllers\SelfService\AchievementController;
+use App\Http\Controllers\SelfService\AffiliationController;
+use App\Http\Controllers\SelfService\AwardController;
+use App\Http\Controllers\SelfService\GrantAndFundController;
+use App\Http\Controllers\SelfService\JobDetailController;
+use App\Http\Controllers\SelfService\NextOfKinController;
+use App\Http\Controllers\SelfService\ProjectController;
+use App\Http\Controllers\SelfService\PublicationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('employees')->group(function () {

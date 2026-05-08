@@ -1,9 +1,11 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\QuestionBank;
 
+use App\Helpers\ApiResponse;
+use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQuestionCategoryRequest;
-use App\Http\Requests\UpdateQuestionCategoryRequest;
+use App\Http\Resources\QuestionCategoryResource;
 use App\Models\QuestionBank\QuestionCategory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,28 +15,15 @@ class QuestionCategoryController extends Controller
     /**
      * Display a listing of categories
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request)
     {
-        $query = QuestionCategory::withCount('questions');
+        $categories = QuestionCategory::query()
+            ->with(['parent', 'children'])
+            ->latest()
+            ->paginate();
 
-        // Filter by active status
-        if ($request->has('is_active')) {
-            $query->where('is_active', $request->boolean('is_active'));
-        }
 
-        // Include children if requested
-        if ($request->boolean('with_children')) {
-            $query->with('children');
-        }
-
-        // Root categories only
-        if ($request->boolean('roots_only')) {
-            $query->whereNull('parent_id');
-        }
-
-        $categories = $query->orderBy('name')->get();
-
-        return response()->json(['data' => $categories]);
+        return QuestionCategoryResource::collection($categories);
     }
 
     /**
@@ -44,20 +33,23 @@ class QuestionCategoryController extends Controller
     {
         $category = QuestionCategory::create($request->validated());
 
-        return response()->json([
-            'message' => 'Category created successfully',
-            'data' => $category,
-        ], 201);
+        return ApiResponse::success(
+            QuestionCategoryResource::make($category),
+            'Question Category created successfully.',
+            201
+        );
     }
 
     /**
      * Display the specified category
      */
-    public function show(QuestionCategory $category): JsonResponse
+    public function show(QuestionCategory $questionCategory): JsonResponse
     {
-        return response()->json([
-            'data' => $category->load(['parent', 'children', 'questions']),
-        ]);
+        $questionCategory->load(['parent', 'children']);
+        return ApiResponse::success(
+            QuestionCategoryResource::make($questionCategory),
+            'Category'
+        );
     }
 
     /**
@@ -67,10 +59,7 @@ class QuestionCategoryController extends Controller
     {
         $category->update($request->validated());
 
-        return response()->json([
-            'message' => 'Category updated successfully',
-            'data' => $category,
-        ]);
+        return ApiResponse::success(QuestionCategoryResource::make($category));
     }
 
     /**
@@ -94,8 +83,6 @@ class QuestionCategoryController extends Controller
 
         $category->delete();
 
-        return response()->json([
-            'message' => 'Category deleted successfully',
-        ]);
+        return ApiResponse::success([], 'Category deleted successfully');
     }
 }
