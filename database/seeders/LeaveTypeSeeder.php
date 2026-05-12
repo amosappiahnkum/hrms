@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\LeaveType;
+use App\Models\Config\LeaveType;
 use Illuminate\Database\Seeder;
 
 class LeaveTypeSeeder extends Seeder

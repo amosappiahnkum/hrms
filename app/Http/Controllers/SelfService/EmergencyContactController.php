@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreEmergencyContactRequest;
 use App\Http\Requests\UpdateEmergencyContactRequest;
 use App\Http\Resources\EmergencyContactResource;
-use App\Models\EmergencyContact;
+use App\Models\SelfService\EmergencyContact;
 use App\Services\UpdateApprovalService;
 use Exception;
 use Illuminate\Http\JsonResponse;

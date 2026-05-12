@@ -2,13 +2,10 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Department;
 use App\Models\JobCategory;
 use App\Models\Position;
-use App\Models\Rank;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
-use function Symfony\Component\Translation\t;
 
 class UpdateJobDetailRequest extends FormRequest
 {

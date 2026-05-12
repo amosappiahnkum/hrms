@@ -3,13 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\ApiResponse;
-use App\Helpers\Helper;
 use App\Http\Requests\UpdateContactDetailRequest;
 use App\Http\Resources\ContactDetailResource;
-use App\Http\Resources\DependantResource;
-use App\Models\ActivityLog;
-use App\Models\ContactDetail;
-use App\Models\Employee;
+use App\Models\SelfService\Employee;
 use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use App\Traits\Notifier;

@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\InfoUpdateResource;
 use App\Http\Resources\NotificationResource;
-use App\Models\Employee;
 use App\Models\InformationUpdate;
+use App\Models\SelfService\Employee;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

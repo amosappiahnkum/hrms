@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAwardRequest;
 use App\Http\Requests\UpdateAwardRequest;
 use App\Http\Resources\AwardResource;
-use App\Models\Award;
+use App\Models\SelfService\Award;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

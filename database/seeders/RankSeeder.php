@@ -2,8 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Rank;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\SelfService\Rank;
 use Illuminate\Database\Seeder;
 
 class RankSeeder extends Seeder

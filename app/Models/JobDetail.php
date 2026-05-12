@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\SelfService\Employee;
 use App\Traits\HasApprovalUpdates;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;

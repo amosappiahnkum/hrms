@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAchievementRequest;
 use App\Http\Requests\UpdateAchievementRequest;
 use App\Http\Resources\AchievementResource;
-use App\Models\Achievement;
+use App\Models\SelfService\Achievement;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

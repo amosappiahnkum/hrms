@@ -12,41 +12,67 @@ use App\Http\Controllers\SelfService\ProjectController;
 use App\Http\Controllers\SelfService\PublicationController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('employees')->group(function () {
-    /*Specializations*/
-    Route::get('/{employee}/specializations', [EmployeeController::class, 'getSpecializations']);
-    Route::put('/{employee}/specializations', [EmployeeController::class, 'updateSpecializations']);
-    Route::put('/{employee}/remove-specialization', [EmployeeController::class, 'removeSpecialization']);
+// Core employee resource
+Route::middleware('feature:employees.enabled')->group(function () {
+    Route::apiResource('/employees', EmployeeController::class);
+    Route::get('/my-colleagues', [EmployeeController::class, 'getMyTeam']);
 
-    Route::get('/{employee}/biography', [EmployeeController::class, 'getBiography']);
-    Route::put('/{employee}/biography', [EmployeeController::class, 'updateBiography']);
+    Route::prefix('employees')->group(function () {
+        Route::get('/search', [EmployeeController::class, 'searchEmployees']);
+        Route::post('/update-onboarding', [EmployeeController::class, 'onboardEmployee']);
+        Route::post('update-level', [EmployeeController::class, 'updateEmployeeLevel']);
+        Route::post('update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
 
-    Route::get('/{employee}/next-of-kin', [NextOfKinController::class, 'show']);
-    Route::put('/{employee}/next-of-kin', [NextOfKinController::class, 'update']);
+        Route::get('/{employee}/contact', [ContactDetailController::class, 'show']);
+        Route::put('/{employee}/contact', [ContactDetailController::class, 'update']);
 
-    Route::get('/{employee}/contact', [ContactDetailController::class, 'show']);
-    Route::put('/{employee}/contact', [ContactDetailController::class, 'update']);
+        Route::get('/{employee}/job-detail', [JobDetailController::class, 'show']);
+        Route::put('/{employee}/job-detail', [JobDetailController::class, 'update']);
 
-    Route::get('/{employee}/job-detail', [JobDetailController::class, 'show']);
-    Route::put('/{employee}/job-detail', [JobDetailController::class, 'update']);
+        Route::middleware('feature:employees.biography')->group(function () {
+            Route::get('/{employee}/biography', [EmployeeController::class, 'getBiography']);
+            Route::put('/{employee}/biography', [EmployeeController::class, 'updateBiography']);
+        });
 
-    /*ResearchInterest*/
-    Route::get('/{employee}/research-interests', [EmployeeController::class, 'getResearchInterests']);
-    Route::put('/{employee}/research-interests', [EmployeeController::class, 'updateResearchInterests']);
-    Route::put('/{employee}/remove-research-interest', [EmployeeController::class, 'removeResearchInterest']);
+        Route::middleware('feature:employees.specializations')->group(function () {
+            Route::get('/{employee}/specializations', [EmployeeController::class, 'getSpecializations']);
+            Route::put('/{employee}/specializations', [EmployeeController::class, 'updateSpecializations']);
+            Route::put('/{employee}/remove-specialization', [EmployeeController::class, 'removeSpecialization']);
+        });
 
-    Route::post('/update-onboarding', [EmployeeController::class, 'onboardEmployee']);
-    Route::get('/search', [EmployeeController::class, 'searchEmployees']);
-    Route::post('update-level', [EmployeeController::class, 'updateEmployeeLevel']);
-    Route::post('update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
+        Route::middleware('feature:employees.research_interests')->group(function () {
+            Route::get('/{employee}/research-interests', [EmployeeController::class, 'getResearchInterests']);
+            Route::put('/{employee}/research-interests', [EmployeeController::class, 'updateResearchInterests']);
+            Route::put('/{employee}/remove-research-interest', [EmployeeController::class, 'removeResearchInterest']);
+        });
+
+        // Self-service sections on the employee profile
+        Route::middleware('feature:self_service.enabled')->group(function () {
+            Route::middleware('feature:self_service.next_of_kin')->group(function () {
+                Route::get('/{employee}/next-of-kin', [NextOfKinController::class, 'show']);
+                Route::put('/{employee}/next-of-kin', [NextOfKinController::class, 'update']);
+            });
+        });
+    });
 });
 
-Route::get('/my-colleagues', [EmployeeController::class, 'getMyTeam']);
+// Self-service resource collections (gated by module + sub-feature)
+Route::middleware('feature:self_service.enabled')->group(function () {
+    Route::middleware('feature:self_service.awards')
+        ->apiResource('/awards', AwardController::class);
 
-Route::apiResource('/employees', EmployeeController::class);
-Route::apiResource('/awards', AwardController::class);
-Route::apiResource('/achievements', AchievementController::class);
-Route::apiResource('/affiliations', AffiliationController::class);
-Route::apiResource('/grants', GrantAndFundController::class);
-Route::apiResource('projects', ProjectController::class);
-Route::apiResource('publications', PublicationController::class);
+    Route::middleware('feature:self_service.achievements')
+        ->apiResource('/achievements', AchievementController::class);
+
+    Route::middleware('feature:self_service.affiliations')
+        ->apiResource('/affiliations', AffiliationController::class);
+
+    Route::middleware('feature:self_service.grants')
+        ->apiResource('/grants', GrantAndFundController::class);
+
+    Route::middleware('feature:self_service.projects')
+        ->apiResource('projects', ProjectController::class);
+
+    Route::middleware('feature:self_service.publications')
+        ->apiResource('publications', PublicationController::class);
+});

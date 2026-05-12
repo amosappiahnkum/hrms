@@ -1,8 +1,8 @@
 <?php
 
-use App\Models\Employee;
 use App\Models\JobCategory;
 use App\Models\Position;
+use App\Models\SelfService\Employee;
 use App\Models\SubUnit;
 use App\Models\User;
 use Illuminate\Database\Migrations\Migration;

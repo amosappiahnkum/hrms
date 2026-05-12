@@ -2,11 +2,10 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Department;
-use App\Models\Rank;
+use App\Models\Config\Department;
+use App\Models\SelfService\Rank;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class UpdateEmployeeRequest extends FormRequest

@@ -13,10 +13,10 @@ use App\Http\Resources\PublicDepartmentResource;
 use App\Http\Resources\PublicRankResource;
 use App\Http\Resources\QualificationResource;
 use App\Http\Resources\StaffDirectory\EmployeeResource;
-use App\Models\Department;
-use App\Models\Employee;
+use App\Models\Config\Department;
 use App\Models\Faculty;
-use App\Models\Rank;
+use App\Models\SelfService\Employee;
+use App\Models\SelfService\Rank;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 

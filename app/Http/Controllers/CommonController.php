@@ -3,14 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\EmployeeResource;
-use App\Models\Department;
-use App\Models\EducationLevel;
-use App\Models\Employee;
+use App\Models\Config\Department;
+use App\Models\Config\EducationLevel;
+use App\Models\Config\LeaveType;
+use App\Models\Faculty;
 use App\Models\Holiday;
 use App\Models\InformationUpdate;
+use App\Models\JobCategory;
 use App\Models\LeaveRequest;
-use App\Models\LeaveType;
+use App\Models\Office;
 use App\Models\Position;
+use App\Models\SelfService\Employee;
+use App\Models\SubUnit;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -164,6 +168,26 @@ class CommonController extends Controller
     public function getEducationalLevels(): Collection
     {
         return EducationLevel::query()->select(['id', 'name'])->get();
+    }
+
+    public function getSubUnits(): Collection
+    {
+        return SubUnit::query()->select(['id', 'name'])->orderBy('name')->get();
+    }
+
+    public function getJobCategories(): Collection
+    {
+        return JobCategory::query()->select(['id', 'name'])->orderBy('name')->get();
+    }
+
+    public function getFaculties(): Collection
+    {
+        return Faculty::query()->select(['id', 'name'])->orderBy('name')->get();
+    }
+
+    public function getOffices(): Collection
+    {
+        return Office::query()->select(['id', 'name'])->orderBy('name')->get();
     }
 
     public function getTimeAndAttendanceDashboardData(): array

@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQualificationRequest;
 use App\Http\Requests\UpdateQualificationRequest;
 use App\Http\Resources\QualificationResource;
-use App\Models\Education;
+use App\Models\SelfService\Education;
 use App\Services\UpdateApprovalService;
 use App\Traits\UsePrint;
 use Exception;

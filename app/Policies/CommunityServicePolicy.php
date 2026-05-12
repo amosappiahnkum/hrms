@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\CommunityService;
+use App\Models\SelfService\CommunityService;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
@@ -25,7 +25,7 @@ class CommunityServicePolicy
      * Determine whether the user can view the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\CommunityService  $communityService
+     * @param  \App\Models\SelfService\CommunityService  $communityService
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, CommunityService $communityService)
@@ -48,7 +48,7 @@ class CommunityServicePolicy
      * Determine whether the user can update the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\CommunityService  $communityService
+     * @param  \App\Models\SelfService\CommunityService  $communityService
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, CommunityService $communityService)
@@ -60,7 +60,7 @@ class CommunityServicePolicy
      * Determine whether the user can delete the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\CommunityService  $communityService
+     * @param  \App\Models\SelfService\CommunityService  $communityService
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, CommunityService $communityService)
@@ -72,7 +72,7 @@ class CommunityServicePolicy
      * Determine whether the user can restore the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\CommunityService  $communityService
+     * @param  \App\Models\SelfService\CommunityService  $communityService
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function restore(User $user, CommunityService $communityService)
@@ -84,7 +84,7 @@ class CommunityServicePolicy
      * Determine whether the user can permanently delete the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\CommunityService  $communityService
+     * @param  \App\Models\SelfService\CommunityService  $communityService
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function forceDelete(User $user, CommunityService $communityService)

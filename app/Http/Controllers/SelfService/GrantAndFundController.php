@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreGrantAndFundRequest;
 use App\Http\Requests\UpdateGrantAndFundRequest;
 use App\Http\Resources\GrantAndFundResource;
-use App\Models\GrantAndFund;
+use App\Models\SelfService\GrantAndFund;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,13 +27,14 @@ class GrantAndFundController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $grantAndFunds = GrantAndFund::query();
+        $grantAndFunds = GrantAndFund::query()->with('dynamicValues.field');
 
         $grantAndFunds->when($request->employee_uuid, function ($query, $employee_uuid) {
             $query->whereHas('employee', function ($q) use ($employee_uuid) {
                 $q->where('uuid', $employee_uuid);
             });
         })->orderByDesc('start');
+
 
         return GrantAndFundResource::collection($grantAndFunds->paginate($request->per_page ?? 10));
     }
@@ -50,7 +51,7 @@ class GrantAndFundController extends Controller
         try {
             $grant = GrantAndFund::create($request->validated());
 
-            return ApiResponse::success(GrantAndFundResource::make($grant));
+            return ApiResponse::success(GrantAndFundResource::make($grant->load('dynamicValues.field')));
         }catch (Exception $exception){
 
             Log::error($exception->getMessage());
@@ -71,7 +72,7 @@ class GrantAndFundController extends Controller
         try {
             $grant->update($request->validated());
 
-            return ApiResponse::success(GrantAndFundResource::make($grant));
+            return ApiResponse::success(GrantAndFundResource::make($grant->load('dynamicValues.field')));
         }catch (Exception $exception){
             Log::error($exception->getMessage());
 
@@ -81,7 +82,7 @@ class GrantAndFundController extends Controller
 
     public function show(GrantAndFund $grant)
     {
-        return ApiResponse::success(GrantAndFundResource::make($grant));
+        return ApiResponse::success(GrantAndFundResource::make($grant->load('dynamicValues.field')));
     }
 
     /**

@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\Employee;
-use App\Models\LeaveType;
+use App\Models\Config\LeaveType;
+use App\Models\SelfService\Employee;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;

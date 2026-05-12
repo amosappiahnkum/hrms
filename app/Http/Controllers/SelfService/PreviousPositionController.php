@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreviousPositionRequest;
 use App\Http\Requests\UpdatePreviousPositionRequest;
 use App\Http\Resources\PreviousPositionResource;
-use App\Models\PreviousPosition;
+use App\Models\Training\PreviousPosition;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

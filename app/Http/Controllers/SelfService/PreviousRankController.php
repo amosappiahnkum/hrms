@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreviousRankRequest;
 use App\Http\Requests\UpdatePreviousRankRequest;
 use App\Http\Resources\PreviousRankResource;
-use App\Models\PreviousRank;
+use App\Models\Training\PreviousRank;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

@@ -2,18 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\EmployeeExport;
 use App\Exports\LeaveRequestExport;
 use App\Helpers\LeaveHelper;
 use App\Http\Requests\HrChangeLeaveStatusRequest;
 use App\Http\Requests\StoreLeaveRequestRequest;
-use App\Http\Resources\EmployeeResource;
 use App\Http\Resources\LeaveRequestResource;
 use App\Http\Resources\UpcomingLeaveResource;
 use App\Models\ActivityLog;
+use App\Models\Config\LeaveType;
+use App\Models\Config\LeaveTypeLevelConfig;
 use App\Models\LeaveRequest;
-use App\Models\LeaveType;
-use App\Models\LeaveTypeLevelConfig;
 use App\Notifications\LeaveRequestNotification;
 use App\Notifications\LeaveStatusNotification;
 use App\Notifications\NotifyHodNotification;

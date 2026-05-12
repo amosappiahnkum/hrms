@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\LeaveType;
+use App\Models\Config\LeaveType;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
@@ -25,7 +25,7 @@ class LeaveTypePolicy
      * Determine whether the user can view the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\LeaveType  $leaveType
+     * @param  \App\Models\Config\LeaveType  $leaveType
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, LeaveType $leaveType)
@@ -48,7 +48,7 @@ class LeaveTypePolicy
      * Determine whether the user can update the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\LeaveType  $leaveType
+     * @param  \App\Models\Config\LeaveType  $leaveType
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, LeaveType $leaveType)
@@ -60,7 +60,7 @@ class LeaveTypePolicy
      * Determine whether the user can delete the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\LeaveType  $leaveType
+     * @param  \App\Models\Config\LeaveType  $leaveType
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, LeaveType $leaveType)
@@ -72,7 +72,7 @@ class LeaveTypePolicy
      * Determine whether the user can restore the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\LeaveType  $leaveType
+     * @param  \App\Models\Config\LeaveType  $leaveType
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function restore(User $user, LeaveType $leaveType)
@@ -84,7 +84,7 @@ class LeaveTypePolicy
      * Determine whether the user can permanently delete the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\LeaveType  $leaveType
+     * @param  \App\Models\Config\LeaveType  $leaveType
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function forceDelete(User $user, LeaveType $leaveType)

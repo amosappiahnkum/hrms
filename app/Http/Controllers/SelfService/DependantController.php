@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDependantRequest;
 use App\Http\Requests\UpdateDependantRequest;
 use App\Http\Resources\DependantResource;
-use App\Models\Dependant;
+use App\Models\SelfService\Dependant;
 use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use Exception;

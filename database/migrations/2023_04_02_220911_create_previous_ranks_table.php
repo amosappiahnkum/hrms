@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\Employee;
-use App\Models\Rank;
+use App\Models\SelfService\Employee;
+use App\Models\SelfService\Rank;
 use App\Models\User;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;

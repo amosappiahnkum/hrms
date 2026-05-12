@@ -6,7 +6,7 @@ use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateNextOfKinRequest;
 use App\Http\Resources\NextOfKinResource;
-use App\Models\Employee;
+use App\Models\SelfService\Employee;
 use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use Exception;

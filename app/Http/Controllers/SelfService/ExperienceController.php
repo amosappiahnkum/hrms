@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreExperienceRequest;
 use App\Http\Requests\UpdateExperienceRequest;
 use App\Http\Resources\ExperienceResource;
-use App\Models\Experience;
+use App\Models\SelfService\Experience;
 use App\Services\UpdateApprovalService;
 use App\Traits\UsePrint;
 use Exception;

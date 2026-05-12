@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAffiliationRequest;
 use App\Http\Requests\UpdateAffiliationRequest;
 use App\Http\Resources\AffiliationResource;
-use App\Models\Affiliation;
+use App\Models\SelfService\Affiliation;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

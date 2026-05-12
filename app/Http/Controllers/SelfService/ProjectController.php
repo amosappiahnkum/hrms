@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreProjectRequest;
 use App\Http\Requests\UpdateProjectRequest;
 use App\Http\Resources\ProjectResource;
-use App\Models\Project;
+use App\Models\SelfService\Project;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

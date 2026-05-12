@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Models\Config\LeaveType;
 use App\Models\JobCategory;
-use App\Models\LeaveType;
 use Illuminate\Database\Seeder;
 
 class LeaveTypeLevelConfigSeeder extends Seeder
