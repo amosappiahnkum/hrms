@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\EmployeeExport;
 use App\Helpers\ApiResponse;
+use App\Helpers\Helper;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\TerminateEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeJobTypeRequest;
@@ -282,7 +283,7 @@ class EmployeeController extends Controller
 
             DB::commit();
 
-//            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
+            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
             Log::error('Update Dependant Error', ['error' => $exception]);
