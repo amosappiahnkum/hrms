@@ -48,7 +48,7 @@ class AuthResponseResource extends JsonResource
                 "gender" => $this->employee?->gender,
                 "marital_status" => $this->employee?->marital_status,
                 "phone_number" => $this->employee?->phone_number,
-                "display_picture" => Helper::getPhotoURL($this->employee?->photo),
+                "display_picture" => Helper::getTempPhoto($this->employee?->photo),
                 "job_type" => $this->employee?->job_type,
                 "job_category_id" => $this->employee?->jobDetail?->job_category_id,
                 "employee_id" => $this?->employee?->uuid ?? null,

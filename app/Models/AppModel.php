@@ -11,6 +11,10 @@ class AppModel extends Model
 {
     use HasUuid;
 
+    protected $fillable = [
+        'photo',
+    ];
+
     public function getRouteKeyName(): string
     {
         return 'uuid';
