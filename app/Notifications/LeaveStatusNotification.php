@@ -43,8 +43,10 @@ class LeaveStatusNotification extends Notification implements ShouldQueue
      */
     public function toMail($notifiable): MailMessage
     {
+
         $mail = (new MailMessage)
             ->subject($this->data['subject'] ?? '')
+            ->cc($this->data['cc'] ?? [])
             ->greeting($this->data['greeting'] ?? '');
 
         foreach ($this->data['lines'] ?? [] as $line) {

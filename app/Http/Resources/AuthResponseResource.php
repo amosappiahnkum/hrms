@@ -18,6 +18,7 @@ class AuthResponseResource extends JsonResource
         $all = Setting::query()
             ->where('group', 'app')
             ->orWhere('key', 'like', 'features.%')
+            ->orWhere('key', 'like', 'forms.%')
             ->get();
 
         return [
@@ -26,6 +27,9 @@ class AuthResponseResource extends JsonResource
                 ->toArray(),
             'features' => $all->filter(fn($s) => str_starts_with($s->key, 'features.'))
                 ->mapWithKeys(fn($s) => [str_replace('features.', '', $s->key) => $s->value])
+                ->toArray(),
+            'forms' => $all->filter(fn($s) => str_starts_with($s->key, 'forms.'))
+                ->mapWithKeys(fn($s) => [str_replace('forms.', '', $s->key) => $s->value])
                 ->toArray(),
         ];
     }

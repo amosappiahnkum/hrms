@@ -4,18 +4,27 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\LoginRequest;
+use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Resources\AuthResponseResource;
 use App\Models\SelfService\Employee;
 use App\Models\User;
+use Exception;
+use Illuminate\Contracts\Routing\ResponseFactory;
+use Illuminate\Foundation\Application;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Pipeline\Pipeline;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Laravel\Fortify\Actions\AttemptToAuthenticate;
 use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
 use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
+use Throwable;
+use function response;
 
 class AuthController extends Controller
 {
@@ -48,7 +57,7 @@ class AuthController extends Controller
                 'message' => 'Logged in successfully',
                 'user'    => new AuthResponseResource(Auth::user()),
             ]);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::error($exception->getMessage());
             return response()->json(['message' => 'Unauthorized'], 401);
         }
@@ -143,7 +152,7 @@ class AuthController extends Controller
             </html>
         ", 200);
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
 
             return response()->make("
             <!DOCTYPE html>
@@ -184,6 +193,46 @@ class AuthController extends Controller
             </body>
             </html>
         ", 404);
+        }
+    }
+
+
+    public function changePassword(ChangePasswordRequest $request): Application|Response|JsonResponse|\Illuminate\Contracts\Foundation\Application|ResponseFactory
+    {
+        DB::beginTransaction();
+        $user = Auth::User();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'User not found',
+            ], 400);
+        }
+
+        try {
+            if (!Hash::check($request['current_password'], $user->password)) {
+                return response()->json([
+                    'message' => 'Current Password is incorrect'
+                ], 400);
+            }
+
+            if (Hash::check($request['password'], $user->password)) {
+                return response()->json([
+                    'message' => 'New Password is the same as current'
+                ], 400);
+            }
+
+            $user->update([
+                'password' => Hash::make($request->password),
+                'password_changed' => true,
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'data' => new AuthResponseResource($user)
+            ]);
+        } catch (Exception $exception) {
+            DB::rollBack();
+            return response('Something went wrong!', 400);
         }
     }
 }

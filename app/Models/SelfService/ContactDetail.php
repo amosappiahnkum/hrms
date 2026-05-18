@@ -83,7 +83,6 @@ class ContactDetail extends ApplicationModel
 
     public function afterApproval(array $changes): void
     {
-        Log::info('changes', $changes);
         if (array_key_exists('telephone', $changes)) {
 //            $phone = app(YourService::class)->cleanPhoneNumber($changes['telephone']);
 //            Helper::updateSRMS($this->employee->staff_id, $phone);

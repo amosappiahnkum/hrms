@@ -54,6 +54,8 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'support_mail' => env('APP_SUPPORT_MAIL', 'amos.nkum@gmail.com'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

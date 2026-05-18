@@ -78,7 +78,8 @@ class SettingSeeder extends Seeder
 
         // === SOCIAL AUTH ===
         $service->set('features.social_auth.google', false, 'social_auth', isPublic: true);
-        $service->set('features.auth.password', false, 'auth', isPublic: true);
+        $service->set('features.auth.password', true, 'auth', isPublic: true);
+        $service->set('features.auth.password_change', true, 'auth');
 
         // === QUESTION BANK ===
         $service->set('features.question_bank.enabled', true, 'question_bank');
@@ -97,5 +98,13 @@ class SettingSeeder extends Seeder
 
         // === NOTIFICATIONS ===
         $service->set('notifications.channels', ['email'], 'notifications');
+
+        // === FORMS ===
+        $service->set('forms.employeeForm', [
+            'rank' => [
+                'required' => true,
+                'visible'  => true,
+            ],
+        ], 'forms', 'Employee form field configuration');
     }
 }

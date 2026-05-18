@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('feature:employees.enabled')->group(function () {
     Route::apiResource('/employees', EmployeeController::class);
     Route::get('/my-colleagues', [EmployeeController::class, 'getMyTeam']);
+    Route::get('/org-colleagues', [EmployeeController::class, 'getEmployeeDirectory']);
 
     Route::prefix('employees')->group(function () {
         Route::get('/search', [EmployeeController::class, 'searchEmployees']);

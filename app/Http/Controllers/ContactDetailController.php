@@ -28,7 +28,6 @@ class ContactDetailController extends Controller
      */
     public function show(Employee $employee): JsonResponse
     {
-        Log::info('here');
         return ApiResponse::success(ContactDetailResource::make($employee->contactDetail));
     }
 

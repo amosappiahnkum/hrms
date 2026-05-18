@@ -31,7 +31,8 @@ class User extends Authenticatable
         'phone_number',
         'provider',
         'provider_id',
-        'employee_id'
+        'employee_id',
+        'password_changed',
     ];
 
     /**

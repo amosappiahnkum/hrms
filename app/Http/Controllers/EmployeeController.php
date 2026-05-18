@@ -17,6 +17,7 @@ use App\Models\Config\Department;
 use App\Models\SelfService\ContactDetail;
 use App\Models\SelfService\Employee;
 use App\Models\TerminationReason;
+use App\Models\User;
 use App\Notifications\EmailLinkedNotification;
 use App\Services\MinioUploadService;
 use App\Services\UpdateApprovalService;
@@ -29,8 +30,10 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Throwable;
@@ -109,7 +112,7 @@ class EmployeeController extends Controller
         }
 
 
-        return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->per_page ?? 10));
+        return \App\Http\Resources\StaffDirectory\EmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
     }
 
     public function getMyTeam(Request $request): AnonymousResourceCollection
@@ -121,7 +124,7 @@ class EmployeeController extends Controller
         $employeesQuery->where('department_id', $employee->department_id);
 
 
-        return EmployeeDirectoryResource::collection($employeesQuery->paginate($request->per_page ?? 10));
+        return \App\Http\Resources\StaffDirectory\EmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
     }
 
     /**
@@ -134,11 +137,10 @@ class EmployeeController extends Controller
      */
     public function store(StoreEmployeeRequest $request)
     {
-
         DB::beginTransaction();
+
         try {
-            $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
-            $employee = Employee::create($request->all());
+            $employee = Employee::create($request->validated());
             $employee->contactDetail()->create();
             $employee->jobDetail()->create();
             DB::commit();
@@ -232,11 +234,27 @@ class EmployeeController extends Controller
     {
         $contact = ContactDetail::find($request->id);
 
-        $employeeName = $contact->employee->first_name;
+        $email = $request->work_email;
+
+        $employee = $contact->employee;
 
         $contact->update($request->only(['work_email']));
 
-        Notification::route('mail', $request->work_email)->notify(new EmailLinkedNotification($employeeName));
+        $user = User::updateOrCreate([
+            'email' => $email
+        ], [
+            'name' => $employee->name,
+            'username' => $email,
+            'email' => $email,
+            'password' => Hash::make(Str::random()),
+            'provider' => null,
+            'provider_id' => null,
+            'employee_id' => $employee->id
+        ]);
+
+        $user->assignRole('staff');
+
+        Notification::route('mail', $email)->notify(new EmailLinkedNotification($employee->first_name));
 
         return response()->json(["message" => "Email updated successfully"]);
     }

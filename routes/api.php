@@ -3,19 +3,19 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\CommonController;
 use App\Http\Controllers\CommunityServiceController;
+use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DirectReportController;
+use App\Http\Controllers\EmployeeAnalyticsController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InformationUpdateController;
+use App\Http\Controllers\LeaveAnalyticsController;
 use App\Http\Controllers\LeaveManagementController;
 use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\PositionController;
 use App\Http\Controllers\QuickEmailController;
-use App\Http\Controllers\RankController;
-use App\Http\Controllers\TerminationReasonController;
 use App\Http\Controllers\SelfService\DependantController;
 use App\Http\Controllers\SelfService\EmergencyContactController;
 use App\Http\Controllers\SelfService\ExperienceController;
@@ -37,9 +37,10 @@ Route::prefix('v1')->group(function () {
     }
 });
 
+
 Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::prefix('v1')->group(function () {
-
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         // Loaded sub-route files (employees, question-bank, dynamic-forms)
         foreach (glob(__DIR__ . '/v1/*.php') as $file) {
             require $file;
@@ -63,6 +64,9 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::get('settings/app', [SettingController::class, 'indexApp']);
         Route::patch('settings/app', [SettingController::class, 'updateApp']);
 
+        // Company overview
+        Route::get('company/overview', [CompanyController::class, 'overview']);
+
         // Commons & shared lookups (always available)
         Route::get('commons', [HomeController::class, 'getCommonData']);
         Route::get('educational-levels', [CommonController::class, 'getEducationalLevels']);
@@ -81,6 +85,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
 
         // Employees
         Route::middleware('feature:employees.enabled')->group(function () {
+            Route::get('employee-analytics', [EmployeeAnalyticsController::class, 'index']);
             Route::get('employees/{employee}/stats', [EmployeeController::class, 'employeeStats']);
             Route::get('/stats/employee-management', [CommonController::class, 'getEmployeeManagementStats']);
             Route::get('/people', [EmployeeController::class, 'getPeople']);
@@ -132,6 +137,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
                 Route::get('/filter-params', [LeaveManagementController::class, 'getFilterParams']);
                 Route::get('/leave-requests', [LeaveManagementController::class, 'getLeaveRequests']);
                 Route::post('/leave-requests/status/hr/change', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
+                Route::get('/analytics', [LeaveAnalyticsController::class, 'index']);
             });
         });
 
