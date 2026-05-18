@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\ApiResponse;
+use App\Helpers\Helper;
 use App\Http\Requests\UpdateContactDetailRequest;
 use App\Http\Resources\ContactDetailResource;
 use App\Models\SelfService\Employee;
@@ -64,7 +65,7 @@ class ContactDetailController extends Controller
             } else {
                 app(UpdateApprovalService::class)->update($contact, $changes, Auth::id());
             }
-
+            Helper::updateSRMS($request->staff_id, $contact?->phone);
             DB::commit();
             return ApiResponse::success([]);
         } catch (Exception $exception) {
