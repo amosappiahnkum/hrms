@@ -20,6 +20,8 @@ return new class extends Migration {
             'personal_access_tokens',
             'photos',
             'jobs',
+            'cache',
+            'cache_locks',
         ];
 
         // Get all table names

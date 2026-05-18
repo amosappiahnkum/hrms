@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\SelfService\Employee;
+use App\Models\SelfService\GrantAndFund;
 use App\Traits\HasActivityLogs;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -29,7 +31,8 @@ class User extends Authenticatable
         'phone_number',
         'provider',
         'provider_id',
-        'employee_id'
+        'employee_id',
+        'password_changed',
     ];
 
     /**

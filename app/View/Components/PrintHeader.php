@@ -3,7 +3,7 @@
 namespace App\View\Components;
 
 use App\Http\Resources\EmployeeResource;
-use App\Models\Employee;
+use App\Models\SelfService\Employee;
 use Closure;
 use Illuminate\Contracts\View\View;
 use Illuminate\View\Component;

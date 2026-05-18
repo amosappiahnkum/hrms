@@ -2,12 +2,11 @@
 
 namespace App\Providers;
 
-use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
-use Illuminate\Support\Facades\Gate;
-use App\Models\Publication;
-use App\Policies\PublicationPolicy;
-use App\Models\GrantAndFund;
+use App\Models\SelfService\GrantAndFund;
+use App\Models\SelfService\Publication;
 use App\Policies\GrantAndFundPolicy;
+use App\Policies\PublicationPolicy;
+use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
 {

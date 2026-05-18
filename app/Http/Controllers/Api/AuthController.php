@@ -4,55 +4,63 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\LoginRequest;
+use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Resources\AuthResponseResource;
-use App\Http\Resources\DepartmentResource;
-use App\Models\Employee;
+use App\Models\SelfService\Employee;
 use App\Models\User;
+use Exception;
+use Illuminate\Contracts\Routing\ResponseFactory;
+use Illuminate\Foundation\Application;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Pipeline\Pipeline;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
+use Laravel\Fortify\Actions\AttemptToAuthenticate;
+use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
+use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
+use Throwable;
+use function response;
 
 class AuthController extends Controller
 {
     public function login(LoginRequest $request): JsonResponse
     {
-        $credentials = $request->only('email', 'password');
+        return app(Pipeline::class)
+            ->send($request)
+            ->through([
+                EnsureLoginIsNotThrottled::class,
+                AttemptToAuthenticate::class,
+                PrepareAuthenticatedSession::class,
+            ])
+            ->then(fn () => response()->json([
+                'message' => 'Logged in successfully',
+                'user'    => new AuthResponseResource(Auth::user()),
+            ]));
+    }
 
-        if (!Auth::attempt($credentials)) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
-        }
-
-        $request->session()->regenerate();
-
+    public function me(): JsonResponse
+    {
         return response()->json([
-            'message' => 'Logged in successfully',
             'user' => new AuthResponseResource(Auth::user()),
         ]);
     }
 
-    public function setCookie(User $user, string $device_name): string
+    public function validateAuth(): JsonResponse
     {
-        $token = $user->createToken($device_name)->plainTextToken;
-        Cookie::queue(
-            Cookie::make(
-                'auth_token',
-                $token,
-                60 * 24, // 1 day
-                null,
-                null,
-                true, // Secure
-                true, // HttpOnly
-                false,
-                'Strict'
-            )
-        );
-
-        return '';
+        try {
+            return response()->json([
+                'message' => 'Logged in successfully',
+                'user'    => new AuthResponseResource(Auth::user()),
+            ]);
+        } catch (Exception $exception) {
+            Log::error($exception->getMessage());
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
     }
 
     public function logout(Request $request): JsonResponse
@@ -64,56 +72,24 @@ class AuthController extends Controller
 
         Cookie::queue(Cookie::forget('auth_token'));
         Cookie::queue(Cookie::forget('XSRF-TOKEN'));
-        return response()->json([
-            'message' => 'Token revoked successfully'
-        ]);
+
+        return response()->json(['message' => 'Logged out successfully']);
     }
 
-    public function me(): JsonResponse
+    public function setCookie(User $user, string $device_name): string
     {
-        try {
-            $user = Auth::user();
+        $token = $user->createToken($device_name)->plainTextToken;
+        Cookie::queue(
+            Cookie::make('auth_token', $token, 60 * 24, null, null, true, true, false, 'Strict')
+        );
 
-            return response()->json([
-                "id" => $user->id,
-                "uuid" => $user->uuid,
-                "name" => $user->name,
-                "username" => $user->username,
-                "email" => $user->email,
-                "phone_number" => $user->phone_number,
-                "password_changed" => $user->password_changed,
-                "employee_id" => $user?->employee?->uuid ?? null,
-                "department_id" => $user?->employee?->department_id ?? null,
-                "department" => new DepartmentResource($user?->employee?->department)
-            ]);
-        } catch (\Exception $exception) {
-            Log::error($exception->getMessage());
-
-            return response()->json([
-                'message' => "Something went wrong"
-            ]);
-        }
-    }
-
-    public function validateAuth(): JsonResponse
-    {
-        try {
-            return response()->json([
-                'message' => 'Logged in successfully',
-                'user' => new AuthResponseResource(Auth::user()),
-            ]);
-        } catch (\Exception $exception) {
-            Log::error($exception->getMessage());
-            return response()->json([
-                'message' => "Unauthorized",
-            ], 400);
-        }
+        return '';
     }
 
     public function tokens(): JsonResponse
     {
         return response()->json([
-            'tokens' => auth()->user()->tokens
+            'tokens' => auth()->user()->tokens,
         ]);
     }
 
@@ -121,18 +97,14 @@ class AuthController extends Controller
     {
         auth()->user()->tokens()->where('id', $tokenId)->delete();
 
-        return response()->json([
-            'message' => 'Token revoked successfully'
-        ]);
+        return response()->json(['message' => 'Token revoked successfully']);
     }
 
     public function revokeAllTokens(): JsonResponse
     {
         auth()->user()->tokens()->delete();
 
-        return response()->json([
-            'message' => 'All tokens revoked successfully'
-        ]);
+        return response()->json(['message' => 'All tokens revoked successfully']);
     }
 
     public function qrCodeScan($token)
@@ -180,7 +152,7 @@ class AuthController extends Controller
             </html>
         ", 200);
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
 
             return response()->make("
             <!DOCTYPE html>
@@ -221,6 +193,46 @@ class AuthController extends Controller
             </body>
             </html>
         ", 404);
+        }
+    }
+
+
+    public function changePassword(ChangePasswordRequest $request): Application|Response|JsonResponse|\Illuminate\Contracts\Foundation\Application|ResponseFactory
+    {
+        DB::beginTransaction();
+        $user = Auth::User();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'User not found',
+            ], 400);
+        }
+
+        try {
+            if (!Hash::check($request['current_password'], $user->password)) {
+                return response()->json([
+                    'message' => 'Current Password is incorrect'
+                ], 400);
+            }
+
+            if (Hash::check($request['password'], $user->password)) {
+                return response()->json([
+                    'message' => 'New Password is the same as current'
+                ], 400);
+            }
+
+            $user->update([
+                'password' => Hash::make($request->password),
+                'password_changed' => true,
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'data' => new AuthResponseResource($user)
+            ]);
+        } catch (Exception $exception) {
+            DB::rollBack();
+            return response('Something went wrong!', 400);
         }
     }
 }

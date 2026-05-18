@@ -2,8 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Employee;
-use Carbon\Carbon;
+use App\Models\SelfService\Employee;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 

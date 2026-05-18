@@ -25,7 +25,6 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['question_id', 'usable_type', 'usable_id'], 'question_usage_unique');
-//            $table->index(['usable_type', 'usable_id']);
         });
     }
 

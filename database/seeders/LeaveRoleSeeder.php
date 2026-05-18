@@ -15,7 +15,15 @@ class LeaveRoleSeeder extends Seeder
      */
     public function run(): void
     {
-        $superAdminRole = Role::firstOrCreate(['uuid' => Str::uuid(), 'name' => 'hod']);
-        $superAdminRole->givePermissionTo(Permission::query()->where('group', 'Leave Request')->get());
+        $role = Role::firstOrCreate(
+            [
+                'name' => 'hod',
+                'guard_name' => 'web',
+            ],
+            [
+                'uuid' => Str::uuid(),
+            ]
+        );
+        $role->givePermissionTo(Permission::query()->where('group', 'Leave Request')->get());
     }
 }

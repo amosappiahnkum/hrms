@@ -1,10 +1,14 @@
 <?php
-use App\Http\Controllers\QuestionCategoryController;
-use App\Http\Controllers\QuestionController;
+
+use App\Http\Controllers\QuestionBank\QuestionCategoryController;
+use App\Http\Controllers\QuestionBank\QuestionController;
+use App\Http\Controllers\QuestionBank\QuestionOptionController;
 use Illuminate\Support\Facades\Route;
 
-Route::apiResource('categories', QuestionCategoryController::class);
-
-Route::apiResource('questions', QuestionController::class);
-Route::post('questions/reorder', [QuestionController::class, 'reorder']);
-Route::post('questions/{question}/toggle-active', [QuestionController::class, 'toggleActive']);
+Route::middleware('feature:question_bank.enabled')->group(function () {
+    Route::apiResource('question-categories', QuestionCategoryController::class);
+    Route::apiResource('questions', QuestionController::class);
+    Route::apiResource('question-options', QuestionOptionController::class);
+    Route::post('questions/reorder', [QuestionController::class, 'reorder']);
+    Route::post('questions/{question}/toggle-active', [QuestionController::class, 'toggleActive']);
+});

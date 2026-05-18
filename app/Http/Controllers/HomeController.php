@@ -4,17 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\LeaveRequestResource;
 use App\Http\Resources\MyTeamResource;
-use App\Models\Employee;
 use App\Models\EmployeeSupervisor;
 use App\Models\LeaveRequest;
+use App\Models\SelfService\Employee;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class HomeController extends Controller
 {

@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Helpers\ApiResponse;
 use App\Http\Resources\CelebrationResource;
-use App\Models\Department;
-use App\Models\EducationLevel;
-use App\Models\Employee;
+use App\Models\Config\Department;
+use App\Models\Config\EducationLevel;
 use App\Models\JobCategory;
 use App\Models\Position;
-use App\Models\Rank;
+use App\Models\SelfService\Employee;
+use App\Models\SelfService\Rank;
 use App\Models\SubUnit;
 use App\Models\TerminationReason;
 use Carbon\Carbon;

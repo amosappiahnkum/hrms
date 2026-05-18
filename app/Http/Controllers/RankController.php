@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreRankRequest;
 use App\Http\Requests\UpdateRankRequest;
-use App\Models\Rank;
+use App\Models\SelfService\Rank;
 
 class RankController extends Controller
 {
@@ -42,7 +42,7 @@ class RankController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param  \App\Models\Rank  $rank
+     * @param  \App\Models\SelfService\Rank  $rank
      * @return \Illuminate\Http\Response
      */
     public function show(Rank $rank)
@@ -53,7 +53,7 @@ class RankController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  \App\Models\Rank  $rank
+     * @param  \App\Models\SelfService\Rank  $rank
      * @return \Illuminate\Http\Response
      */
     public function edit(Rank $rank)
@@ -65,7 +65,7 @@ class RankController extends Controller
      * Update the specified resource in storage.
      *
      * @param  \App\Http\Requests\UpdateRankRequest  $request
-     * @param  \App\Models\Rank  $rank
+     * @param  \App\Models\SelfService\Rank  $rank
      * @return \Illuminate\Http\Response
      */
     public function update(UpdateRankRequest $request, Rank $rank)
@@ -76,7 +76,7 @@ class RankController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @param  \App\Models\Rank  $rank
+     * @param  \App\Models\SelfService\Rank  $rank
      * @return \Illuminate\Http\Response
      */
     public function destroy(Rank $rank)

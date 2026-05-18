@@ -2,14 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ContactDetail;
+use App\Models\SelfService\ContactDetail;
 use App\Models\User;
 use Exception;
-use Illuminate\Foundation\Application;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;

@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Department;
-use App\Models\Employee;
+use App\Models\Config\Department;
 use App\Models\Position;
+use App\Models\SelfService\Employee;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 

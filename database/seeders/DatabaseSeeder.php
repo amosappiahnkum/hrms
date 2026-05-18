@@ -24,8 +24,9 @@ class DatabaseSeeder extends Seeder
 //            PositionSeeder::class,
 //            LeaveTypeLevelConfigSeeder::class,
 //            LeaveRoleSeeder::class,
-
-            FacultySeeder::class,
+//            FacultySeeder::class,
+            SettingSeeder::class,
+            OrganizationSeeder::class,
         ]);
     }
 }

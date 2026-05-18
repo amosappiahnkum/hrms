@@ -2,18 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\EmployeeExport;
 use App\Exports\LeaveRequestExport;
 use App\Helpers\LeaveHelper;
 use App\Http\Requests\HrChangeLeaveStatusRequest;
 use App\Http\Requests\StoreLeaveRequestRequest;
-use App\Http\Resources\EmployeeResource;
 use App\Http\Resources\LeaveRequestResource;
 use App\Http\Resources\UpcomingLeaveResource;
 use App\Models\ActivityLog;
+use App\Models\Config\LeaveType;
+use App\Models\Config\LeaveTypeLevelConfig;
 use App\Models\LeaveRequest;
-use App\Models\LeaveType;
-use App\Models\LeaveTypeLevelConfig;
+use App\Models\User;
 use App\Notifications\LeaveRequestNotification;
 use App\Notifications\LeaveStatusNotification;
 use App\Notifications\NotifyHodNotification;
@@ -189,6 +188,7 @@ class LeaveRequestController extends Controller
      * @param Request $request
      *
      * @return JsonResponse
+     * @throws Throwable
      */
     public function changeLeaveStatus(Request $request): JsonResponse
     {
@@ -356,6 +356,8 @@ class LeaveRequestController extends Controller
                     "If you have any questions or would like to discuss the decision further, please feel free to reach out."
                 ];
             }
+
+            $mailData['cc'] = User::role('hr')->get()->pluck('email');
 
             $employeeUserAccount->notify(new LeaveStatusNotification($mailData));
 

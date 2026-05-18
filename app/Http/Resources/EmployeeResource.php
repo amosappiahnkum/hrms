@@ -42,7 +42,7 @@ class EmployeeResource extends JsonResource
             'rank' => $this->rank->name,
             'department_uuid' => $this->department->uuid,
             'department' => $this->department->name,
-            'photo' => Helper::getPhotoURL($this->photo),
+            'photo' => Helper::getTempPhoto($this->photo),
             'job' => [
                 'hire_date' => $this->jobDetail->joined_date ? Carbon::parse($this->jobDetail->joined_date)->format('Y-m-d') : 'Not Updated',
                 'location' => $this->jobDetail->location ?? 'Not Updated',

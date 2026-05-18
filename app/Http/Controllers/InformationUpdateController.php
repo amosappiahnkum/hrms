@@ -29,9 +29,7 @@ class InformationUpdateController extends Controller
      */
     public function index(Request $request): JsonResponse|AnonymousResourceCollection
     {
-        $query = InformationUpdate::query()
-            ->with(['information']) // load target model if exists
-            ->latest();
+        $query = InformationUpdate::query()->latest();
 
         // 🔎 Filters
         if ($request->filled('status') && $request->status !== 'all') {
@@ -40,27 +38,6 @@ class InformationUpdateController extends Controller
 
         if ($request->filled('type') && $request->type !== 'all') {
             $query->where('type', $request->type);
-        }
-
-        if ($request->filled('model')) {
-            $query->where('information_type', $request->model);
-        }
-
-        if ($request->filled('requested_by')) {
-            $query->where('requested_by', $request->requested_by);
-        }
-
-        if ($request->filled('employee_id')) {
-            // since you're storing employee_id inside JSON
-            $query->where(function ($q) use ($request) {
-                $q->where('new_info->employee_id', $request->employee_id)
-                    ->orWhere('old_info->employee_id', $request->employee_id);
-            });
-        }
-
-        // 📅 date range
-        if ($request->filled('from') && $request->filled('to')) {
-            $query->whereBetween('created_at', [$request->from, $request->to]);
         }
 
         $updates = $query->paginate($request->per_page ?? 10);

@@ -6,7 +6,7 @@ use App\Helpers\Helper;
 use App\Http\Requests\StoreCommunityServiceRequest;
 use App\Http\Requests\UpdateCommunityServiceRequest;
 use App\Http\Resources\CommunityServiceResource;
-use App\Models\CommunityService;
+use App\Models\SelfService\CommunityService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;

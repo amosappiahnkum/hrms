@@ -2,11 +2,10 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Department;
-use App\Models\Rank;
+use App\Models\Config\Department;
+use App\Models\SelfService\Rank;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class UpdateEmployeeRequest extends FormRequest
@@ -34,6 +33,7 @@ class UpdateEmployeeRequest extends FormRequest
             'department_uuid' => 'required|uuid|exists:departments,uuid',
             'department_id' => 'sometimes|exists:departments,id',
             'dob' => 'required|date',
+            'title' => 'nullable|string',
             'first_name' => 'required|string',
             'gender' => 'required|in:Male,Female',
             'job_type' => 'required|in:full_time,part_time',
@@ -43,7 +43,7 @@ class UpdateEmployeeRequest extends FormRequest
             'qualification' => 'required|string',
             'ssnit_number' => ['nullable','string', Rule::unique('employees')->ignore($employee)],
             'staff_id' => ['nullable','string', Rule::unique('employees')->ignore($employee)],
-            'rank_uuid' => 'required|uuid|exists:ranks,uuid',
+            'rank_uuid' => 'nullable|uuid|exists:ranks,uuid',
             'rank_id' => 'sometimes|exists:ranks,id',
         ];
     }

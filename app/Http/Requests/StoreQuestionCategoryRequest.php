@@ -29,7 +29,6 @@ class StoreQuestionCategoryRequest extends FormRequest
             'parent_id' => [
                 'nullable',
                 'exists:categories,id',
-                // Prevent self-referencing
                 function ($attribute, $value, $fail) use ($categoryId) {
                     if ($categoryId && $value == $categoryId) {
                         $fail('A category cannot be its own parent.');

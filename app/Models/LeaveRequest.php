@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\Statuses;
+use App\Models\Config\LeaveType;
+use App\Models\SelfService\Employee;
 use App\Traits\HasUserId;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;

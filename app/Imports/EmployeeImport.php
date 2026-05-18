@@ -2,14 +2,12 @@
 
 namespace App\Imports;
 
-use App\Models\Department;
-use App\Models\Employee;
+use App\Models\Config\Department;
 use App\Models\Position;
-use App\Models\Rank;
+use App\Models\SelfService\Employee;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Concerns\Importable;
 use Maatwebsite\Excel\Concerns\ToModel;

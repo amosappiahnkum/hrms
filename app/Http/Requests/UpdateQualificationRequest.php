@@ -2,12 +2,10 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Education;
-use App\Models\EducationLevel;
-use App\Models\Employee;
+use App\Models\Config\EducationLevel;
+use App\Models\SelfService\Employee;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class UpdateQualificationRequest extends FormRequest

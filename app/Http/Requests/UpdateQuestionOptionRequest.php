@@ -11,7 +11,7 @@ class UpdateQuestionOptionRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -22,7 +22,24 @@ class UpdateQuestionOptionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+
+            'option_text' => [
+                'sometimes',
+                'string',
+                'max:255'
+            ],
+
+            'option_value' => [
+                'nullable',
+                'string',
+                'max:255'
+            ],
+
+            'order' => [
+                'nullable',
+                'integer',
+                'min:0'
+            ],
         ];
     }
 }

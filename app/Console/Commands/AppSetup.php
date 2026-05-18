@@ -2,9 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Symfony\Component\Console\Command\Command as CommandAlias;
 
 class AppSetup extends Command
@@ -36,6 +39,14 @@ class AppSetup extends Command
             $this->output->title('Applying migrations');
             Artisan::call('migrate:fresh');
 
+            $user = new User();
+
+            $user->uuid = Str::uuid()->toString();
+            $user->name = 'System User';
+            $user->username = 'system.user';
+            $user->password = Hash::make(Str::random());
+            $user->email = 'system.user@gmail.com';
+            $user->save();
             $this->output->title('Seeding data');
             Artisan::call('db:seed');
 

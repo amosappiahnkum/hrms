@@ -2,20 +2,30 @@
 
 namespace App\Providers;
 
-use App\Models\ContactDetail;
-use App\Models\Dependant;
-use App\Models\Education;
-use App\Models\EmergencyContact;
-use App\Models\Employee;
-use App\Models\Experience;
 use App\Models\JobDetail;
-use App\Models\NextOfKin;
+use App\Models\LeaveRequest;
+use App\Models\PerformanceAppraisal\Appraisal;
 use App\Models\Photo;
+use App\Models\SelfService\Achievement;
+use App\Models\SelfService\Affiliation;
+use App\Models\SelfService\Award;
+use App\Models\SelfService\CommunityService;
+use App\Models\SelfService\ContactDetail;
+use App\Models\SelfService\Dependant;
+use App\Models\SelfService\Education;
+use App\Models\SelfService\EmergencyContact;
+use App\Models\SelfService\Employee;
+use App\Models\SelfService\Experience;
+use App\Models\SelfService\GrantAndFund;
+use App\Models\SelfService\NextOfKin;
+use App\Models\SelfService\Project;
+use App\Models\SelfService\Publication;
+use App\Models\Training\PreviousPosition;
+use App\Models\Training\PreviousRank;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -37,9 +47,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (env('APP_ENV') != 'local') {
-            URL::forceScheme('https');
-        }
+//        if (env('APP_ENV') != 'local') {
+//            URL::forceScheme('https');
+//        }
 
         JsonResource::withoutWrapping();
         RateLimiter::for("login", static function () {
@@ -47,8 +57,8 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Relation::morphMap([
-            'Experience' => Experience::class,
             'Employee' => Employee::class,
+            'Experience' => Experience::class,
             'ContactDetail' => ContactDetail::class,
             'NextOfKin' => NextOfKin::class,
             'EmergencyContact' => EmergencyContact::class,
@@ -56,6 +66,17 @@ class AppServiceProvider extends ServiceProvider
             'Education' => Education::class,
             'Photo' => Photo::class,
             'JobDetail' => JobDetail::class,
+            'Award' => Award::class,
+            'Achievement' => Achievement::class,
+            'Affiliation' => Affiliation::class,
+            'Publication' => Publication::class,
+            'Project' => Project::class,
+            'GrantAndFund' => GrantAndFund::class,
+            'CommunityService' => CommunityService::class,
+            'PreviousRank' => PreviousRank::class,
+            'PreviousPosition' => PreviousPosition::class,
+            'LeaveRequest' => LeaveRequest::class,
+            'Appraisal' => Appraisal::class,
         ]);
     }
 }

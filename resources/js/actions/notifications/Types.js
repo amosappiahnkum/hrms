@@ -1,3 +1,0 @@
-export const Types = {
-  GET_NOTIFICATION_NAVS: 'GET_NOTIFICATION_NAVS'
-}

@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\LeaveRequestResource;
-use App\Models\Employee;
 use App\Models\LeaveRequest;
+use App\Models\SelfService\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;

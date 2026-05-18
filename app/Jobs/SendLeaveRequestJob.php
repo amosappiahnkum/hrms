@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\ContactDetail;
+use App\Models\SelfService\ContactDetail;
 use App\Notifications\LeaveRequestNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;

@@ -2,15 +2,15 @@
 
 namespace App\Models\QuestionBank;
 
+use App\Models\AppModel;
 use App\Traits\HasUserId;
 use App\Traits\HasUuid;
 use Database\Factories\QuestionBank\QuestionCategoryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class QuestionCategory extends Model
+class QuestionCategory extends AppModel
 {
     /** @use HasFactory<QuestionCategoryFactory> */
     use HasFactory, HasUuid, HasUserId;

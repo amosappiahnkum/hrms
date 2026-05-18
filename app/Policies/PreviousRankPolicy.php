@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\PreviousRank;
+use App\Models\Training\PreviousRank;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
@@ -25,7 +25,7 @@ class PreviousRankPolicy
      * Determine whether the user can view the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\PreviousRank  $previousRank
+     * @param  \App\Models\Training\PreviousRank  $previousRank
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, PreviousRank $previousRank)
@@ -48,7 +48,7 @@ class PreviousRankPolicy
      * Determine whether the user can update the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\PreviousRank  $previousRank
+     * @param  \App\Models\Training\PreviousRank  $previousRank
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, PreviousRank $previousRank)
@@ -60,7 +60,7 @@ class PreviousRankPolicy
      * Determine whether the user can delete the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\PreviousRank  $previousRank
+     * @param  \App\Models\Training\PreviousRank  $previousRank
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, PreviousRank $previousRank)
@@ -72,7 +72,7 @@ class PreviousRankPolicy
      * Determine whether the user can restore the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\PreviousRank  $previousRank
+     * @param  \App\Models\Training\PreviousRank  $previousRank
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function restore(User $user, PreviousRank $previousRank)
@@ -84,7 +84,7 @@ class PreviousRankPolicy
      * Determine whether the user can permanently delete the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\PreviousRank  $previousRank
+     * @param  \App\Models\Training\PreviousRank  $previousRank
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function forceDelete(User $user, PreviousRank $previousRank)

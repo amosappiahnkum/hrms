@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Models\Publication;
+use App\Models\SelfService\Publication;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
@@ -25,7 +25,7 @@ class PublicationPolicy
      * Determine whether the user can view the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\Publication  $publication
+     * @param  \App\Models\SelfService\Publication  $publication
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function view(User $user, Publication $publication)
@@ -48,7 +48,7 @@ class PublicationPolicy
      * Determine whether the user can update the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\Publication  $publication
+     * @param  \App\Models\SelfService\Publication  $publication
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function update(User $user, Publication $publication)
@@ -60,7 +60,7 @@ class PublicationPolicy
      * Determine whether the user can delete the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\Publication  $publication
+     * @param  \App\Models\SelfService\Publication  $publication
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function delete(User $user, Publication $publication)
@@ -72,7 +72,7 @@ class PublicationPolicy
      * Determine whether the user can restore the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\Publication  $publication
+     * @param  \App\Models\SelfService\Publication  $publication
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function restore(User $user, Publication $publication)
@@ -84,7 +84,7 @@ class PublicationPolicy
      * Determine whether the user can permanently delete the model.
      *
      * @param  \App\Models\User  $user
-     * @param  \App\Models\Publication  $publication
+     * @param  \App\Models\SelfService\Publication  $publication
      * @return \Illuminate\Auth\Access\Response|bool
      */
     public function forceDelete(User $user, Publication $publication)
