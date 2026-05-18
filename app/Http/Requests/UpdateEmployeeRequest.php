@@ -40,7 +40,7 @@ class UpdateEmployeeRequest extends FormRequest
             'last_name' => 'required|string',
             'marital_status' => 'required|in:Single,Married,Divorced,Widow,Separated',
             'middle_name' => 'nullable|string',
-            'qualification' => 'required|string',
+            'qualification' => 'required|nullable',
             'ssnit_number' => ['nullable','string', Rule::unique('employees')->ignore($employee)],
             'staff_id' => ['nullable','string', Rule::unique('employees')->ignore($employee)],
             'rank_uuid' => 'nullable|uuid|exists:ranks,uuid',
