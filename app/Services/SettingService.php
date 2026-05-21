@@ -43,9 +43,7 @@ class SettingService
     {
 
         $setting = Setting::updateOrCreate(
-
             ['key' => $key],
-
             [
 
                 'value' => $value,
@@ -79,7 +77,7 @@ class SettingService
 
     public function feature(string $feature, bool $default = false): bool
     {
-        return (bool) $this->get("features.$feature", $default);
+        return (bool)$this->get("features.$feature", $default);
     }
 
     public function features(): array
@@ -102,10 +100,10 @@ class SettingService
     }
 
 
-    public function module(string $module): array {
+    public function module(string $module): array
+    {
 
         return $this->settings
-
             ->filter(function ($setting, $key) use ($module) {
 
                 return str_starts_with(
@@ -113,7 +111,6 @@ class SettingService
                     "{$module}."
                 );
             })
-
             ->mapWithKeys(function ($setting, $key) use ($module) {
 
                 return [
@@ -125,7 +122,6 @@ class SettingService
                     ) => $setting->value
                 ];
             })
-
             ->toArray();
     }
 }

@@ -19,8 +19,8 @@ return [
 
     'allowed_methods' => ['*'],
 
-//    'allowed_origins' => ['https://directory.ttu.edu.gh', 'https://hrms.ttuportal.com'],
-    'allowed_origins' => ['*'],
+    'allowed_origins' => ['https://directory.ttu.edu.gh', 'https://hrms.ttuportal.com', 'http://localhost:5173'],
+//    'allowed_origins' => ['*'],
 
     'allowed_origins_patterns' => [],
 

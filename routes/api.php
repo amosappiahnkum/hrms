@@ -16,6 +16,8 @@ use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\QuickEmailController;
+use App\Http\Controllers\Recruitment\CandidatePortalController;
+use App\Http\Controllers\Recruitment\PublicJobController;
 use App\Http\Controllers\SelfService\DependantController;
 use App\Http\Controllers\SelfService\EmergencyContactController;
 use App\Http\Controllers\SelfService\ExperienceController;
@@ -35,7 +37,22 @@ Route::prefix('v1')->group(function () {
     foreach (glob(__DIR__ . '/staff-directory/*.php') as $file) {
         require $file;
     }
+
+    // Public recruitment routes (no auth required)
+    Route::prefix('public')->group(function () {
+        Route::get('jobs', [PublicJobController::class, 'index']);
+        Route::get('jobs/{jobOpening}', [PublicJobController::class, 'show']);
+        Route::post('candidate/register', [CandidatePortalController::class, 'register']);
+        Route::post('candidate/login', [CandidatePortalController::class, 'login']);
+    });
 });
+
+// Candidate portal — separate session guard, never touches the users table
+Route::prefix('v1')
+    ->middleware(['auth:candidate', 'feature:recruitment.enabled'])
+    ->group(function () {
+        require __DIR__ . '/v1/recruitment-portal.php';
+    });
 
 
 Route::group(['middleware' => ['auth:sanctum']], static function () {
@@ -43,6 +60,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         // Loaded sub-route files (employees, question-bank, dynamic-forms)
         foreach (glob(__DIR__ . '/v1/*.php') as $file) {
+            if (basename($file) === 'recruitment-portal.php') continue;
             require $file;
         }
 

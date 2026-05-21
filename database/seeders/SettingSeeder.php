@@ -49,6 +49,7 @@ class SettingSeeder extends Seeder
 
         // === ANNOUNCEMENTS ===
         $service->set('features.announcements.enabled', true, 'announcements');
+        $service->set('features.recruitment.enabled', true, 'recruitment');
 
         // === SELF-SERVICE ===
         $service->set('features.self_service.enabled', true, 'self_service');
@@ -77,9 +78,9 @@ class SettingSeeder extends Seeder
         $service->set('features.staff_directory.projects', true, 'staff_directory');
 
         // === SOCIAL AUTH ===
-        $service->set('features.social_auth.google', false, 'social_auth', isPublic: true);
+        $service->set('features.social_auth.google', true, 'social_auth', isPublic: true);
         $service->set('features.auth.password', true, 'auth', isPublic: true);
-        $service->set('features.auth.password_change', true, 'auth');
+        $service->set('features.auth.password_change', false, 'auth');
 
         // === QUESTION BANK ===
         $service->set('features.question_bank.enabled', true, 'question_bank');

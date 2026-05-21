@@ -83,5 +83,29 @@
             "view-pending-request",
             "view-approved-request"
         ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Recruitment",
+        "permissions": [
+            "view-job-opening",
+            "add-job-opening",
+            "edit-job-opening",
+            "delete-job-opening",
+            "manage-candidates",
+            "manage-applications",
+            "schedule-interview",
+            "make-offer",
+            "hire-candidate"
+        ]
+    },
+    {
+        "roles": [
+            "candidate"
+        ],
+        "group": "Recruitment",
+        "permissions": []
     }
 ]

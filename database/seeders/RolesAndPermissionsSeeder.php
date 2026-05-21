@@ -28,9 +28,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
         foreach ($permissions as $permission) {
             foreach ($permission->roles as $roleItem) {
-                Log::info('role', ['name' => $roleItem]);
-
-
                 $role = Role::firstOrCreate(
                     [
                         'name' => $roleItem,

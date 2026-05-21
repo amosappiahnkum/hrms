@@ -13,8 +13,10 @@ class ApplicationModel extends Model
 
     protected static function booted()
     {
-        static::creating(static function ($product) {
-            $product->user_id = Auth::id();
+        static::creating(static function ($model) {
+            if (empty($model->user_id)) {
+                $model->user_id = Auth::id();
+            }
         });
     }
 
