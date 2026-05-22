@@ -195,6 +195,7 @@ class EmployeeController extends Controller
     public function searchEmployees(Request $request): AnonymousResourceCollection
     {
         $query = $request->query('query');
+        Log::info('here', $request->all());
         $employees = Employee::query()
             ->where('last_name', 'like', '%' . $query . '%')
             ->orWhere('middle_name', 'like', '%' . $query . '%')

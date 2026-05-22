@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\Route;
 
 // Core employee resource
 Route::middleware('feature:employees.enabled')->group(function () {
-    Route::apiResource('/employees', EmployeeController::class);
     Route::get('/my-colleagues', [EmployeeController::class, 'getMyTeam']);
     Route::get('/org-colleagues', [EmployeeController::class, 'getEmployeeDirectory']);
 
@@ -55,6 +54,7 @@ Route::middleware('feature:employees.enabled')->group(function () {
             });
         });
     });
+    Route::apiResource('/employees', EmployeeController::class);
 });
 
 // Self-service resource collections (gated by module + sub-feature)
