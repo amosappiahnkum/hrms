@@ -29,7 +29,7 @@ class MinioUploadService
 
             return [
                 'path' => $path,
-                'url' => Helper::getPhotoURL($name),
+                'url' => Helper::getTempPhoto($name),
 //                'url' => Storage::disk($this->disk)->url($path),
                 'filename' => $name,
             ];
