@@ -31,6 +31,13 @@ class CandidateResource extends JsonResource
             'linkedin_url'       => $this->linkedin_url,
             'portfolio_url'      => $this->portfolio_url,
 
+            // Counts (present when loaded via loadCount)
+            'experiences_count'    => $this->whenCounted('experiences'),
+            'qualifications_count' => $this->whenCounted('qualifications'),
+            'skills_count'         => $this->whenCounted('skills'),
+            'documents_count'      => $this->whenCounted('documents'),
+            'applications_count'   => $this->whenCounted('applications'),
+
             // Sub-relations (loaded on demand)
             'experiences'     => $this->whenLoaded('experiences', fn() =>
                 $this->experiences->map(fn($e) => [

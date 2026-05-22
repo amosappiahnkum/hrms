@@ -92,12 +92,9 @@ class CandidatePortalController extends Controller
         return response()->json(['message' => 'Logged out successfully']);
     }
 
-    public function me(Request $request): JsonResponse
+    public function me(): JsonResponse
     {
-        $candidate = $this->candidateFromAuth();
-        $candidate->load(['experiences', 'qualifications', 'skills', 'languages', 'documents']);
-
-        return ApiResponse::success(new CandidateProfileResource($candidate));
+        return ApiResponse::success(new CandidateProfileResource($this->candidateFromAuth()));
     }
 
     public function updateProfile(UpdateCandidateProfileRequest $request): JsonResponse
@@ -106,9 +103,7 @@ class CandidatePortalController extends Controller
 
         try {
             $candidate->update($request->validated());
-            $candidate->load(['experiences', 'qualifications', 'skills', 'languages', 'documents']);
-
-            return ApiResponse::success(new CandidateProfileResource($candidate), 'Profile updated');
+            return ApiResponse::success(new CandidateProfileResource($candidate->refresh()), 'Profile updated');
         } catch (Exception $e) {
             return ApiResponse::error($e->getMessage(), null, 400);
         }

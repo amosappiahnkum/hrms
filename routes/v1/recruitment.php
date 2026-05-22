@@ -16,6 +16,12 @@ Route::middleware('feature:recruitment.enabled')->prefix('recruitment')->group(f
 
     // Candidates
     Route::apiResource('candidates', CandidateController::class);
+    Route::get('candidates/{candidate}/experiences', [CandidateController::class, 'experiences']);
+    Route::get('candidates/{candidate}/qualifications', [CandidateController::class, 'qualifications']);
+    Route::get('candidates/{candidate}/skills', [CandidateController::class, 'skills']);
+    Route::get('candidates/{candidate}/languages', [CandidateController::class, 'languages']);
+    Route::get('candidates/{candidate}/documents', [CandidateController::class, 'documents']);
+    Route::get('candidates/{candidate}/applications', [CandidateController::class, 'applications']);
 
     // Applications
     Route::apiResource('applications', ApplicationController::class);

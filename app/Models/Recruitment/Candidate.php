@@ -96,13 +96,10 @@ class Candidate extends Authenticatable
     }
 
     /**
-     * Compute profile completion state.
-     * Relations must already be loaded (or will be lazy-loaded once).
+     * Compute profile completion using EXISTS queries — no collection loading required.
      */
     public function profileCompletion(): array
     {
-        $this->loadMissing(['experiences', 'qualifications', 'skills', 'documents']);
-
         $sections = [
             [
                 'key'      => 'basic_info',
@@ -117,7 +114,7 @@ class Candidate extends Authenticatable
                 'key'      => 'experience',
                 'label'    => 'Work Experience',
                 'hint'     => 'Add at least one work experience.',
-                'complete' => $this->experiences->isNotEmpty(),
+                'complete' => $this->experiences()->exists(),
                 'weight'   => 25,
                 'required' => true,
             ],
@@ -125,7 +122,7 @@ class Candidate extends Authenticatable
                 'key'      => 'education',
                 'label'    => 'Education',
                 'hint'     => 'Add at least one qualification.',
-                'complete' => $this->qualifications->isNotEmpty(),
+                'complete' => $this->qualifications()->exists(),
                 'weight'   => 20,
                 'required' => true,
             ],
@@ -133,7 +130,7 @@ class Candidate extends Authenticatable
                 'key'      => 'skills',
                 'label'    => 'Skills',
                 'hint'     => 'Add at least one skill.',
-                'complete' => $this->skills->isNotEmpty(),
+                'complete' => $this->skills()->exists(),
                 'weight'   => 20,
                 'required' => true,
             ],
@@ -141,7 +138,7 @@ class Candidate extends Authenticatable
                 'key'      => 'documents',
                 'label'    => 'Documents / CV',
                 'hint'     => 'Upload your CV or other supporting documents.',
-                'complete' => $this->documents->isNotEmpty(),
+                'complete' => $this->documents()->exists(),
                 'weight'   => 10,
                 'required' => false,
             ],

@@ -33,7 +33,7 @@ class UpdateJobDetailRequest extends FormRequest
             'job_category_id' => 'sometimes|exists:job_categories,id',
             'joined_date' => 'nullable|date',
             'room' => 'nullable|string',
-            'location' => 'string|in:Main Campus,Business Campus',
+            'location' => 'string',
         ];
     }
 

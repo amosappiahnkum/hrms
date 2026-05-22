@@ -14,7 +14,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            TtuJobOpeningsSeeder::class,
+//            TtuJobOpeningsSeeder::class,
 //            UserSeeder::class,
 //            JobCategorySeeder::class,
 //            SubUnitSeeder::class,
@@ -26,7 +26,7 @@ class DatabaseSeeder extends Seeder
 //            LeaveTypeLevelConfigSeeder::class,
 //            LeaveRoleSeeder::class,
 //            FacultySeeder::class,
-//            SettingSeeder::class,
+            SettingSeeder::class,
 //            OrganizationSeeder::class,
         ]);
     }
