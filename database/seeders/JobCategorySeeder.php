@@ -40,15 +40,15 @@ class JobCategorySeeder extends Seeder
 
         $categories = [
             [
-                'name' => 'Level 1',
+                'name' => 'Senior Management',
                 'leave_entitlement' => 0
             ],
             [
-                'name' => 'Level 2',
+                'name' => 'Officers',
                 'leave_entitlement' => 0
             ],
             [
-                'name' => 'Level 3',
+                'name' => 'Junior Officers',
                 'leave_entitlement' => 0
             ],
         ];

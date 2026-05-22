@@ -37,7 +37,7 @@ class OrganizationSeeder extends Seeder
             'company.contact' => [
                 'address' => 'P.O Box MC 788 Takoradi',
                 'phone' => '0501-294-480',
-                'email' => 'info@ttu.edu.gh',
+                'email' => 'info@cashpoint.com.gh',
                 'website' => 'www.cashpoint.com.gh',
             ],
         ];

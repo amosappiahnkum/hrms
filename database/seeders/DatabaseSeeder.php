@@ -16,18 +16,18 @@ class DatabaseSeeder extends Seeder
         $this->call([
 //            TtuJobOpeningsSeeder::class,
 //            UserSeeder::class,
-//            JobCategorySeeder::class,
+            JobCategorySeeder::class,
 //            SubUnitSeeder::class,
-//            RolesAndPermissionsSeeder::class,
-//            TerminationReasonSeeder::class,
-//            EducationLevelSeeder::class,
-//            LeaveTypeSeeder::class,
+            RolesAndPermissionsSeeder::class,
+            TerminationReasonSeeder::class,
+            EducationLevelSeeder::class,
+            LeaveTypeSeeder::class,
 //            PositionSeeder::class,
-//            LeaveTypeLevelConfigSeeder::class,
-//            LeaveRoleSeeder::class,
+            LeaveTypeLevelConfigSeeder::class,
+            LeaveRoleSeeder::class,
 //            FacultySeeder::class,
             SettingSeeder::class,
-//            OrganizationSeeder::class,
+            OrganizationSeeder::class,
         ]);
     }
 }
