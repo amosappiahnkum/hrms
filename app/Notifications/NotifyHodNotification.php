@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Models\UserNotificationPreference;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -32,7 +33,7 @@ class NotifyHodNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable): array
     {
-        return ['mail'];
+        return UserNotificationPreference::channelsFor($notifiable, 'leave_hr_action_required', ['mail']);
     }
 
     /**

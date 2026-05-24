@@ -14,7 +14,7 @@ class OrganizationSeeder extends Seeder
             'company.abbreviation' => 'Cashpoint',
             'company.tagline' => 'Serving your interest……!!!!!',
             'company.founded' => '2013',
-            'company.logo_url' => null,
+            'company.logo_url' => 'cashpoint.png',
             'company.about' => 'Cashpoint Microfinance Limited is a private Limited Liability Company incorporated under the Companies Act, 1963 (Act 179) in February 2011.
              The Company received a license from the Bank of Ghana to operate as a Tier II microfinance institution on 30th October, 2013. As a member of the Ghana Association of Microfinance Companies (GAMC),
               the Company operates in the Western Region.
@@ -27,7 +27,6 @@ class OrganizationSeeder extends Seeder
                 ['title' => 'Committed', 'description' => 'We serve with passion and dedication, striving to deliver first-class microfinance solutions that empower individuals and micro and small-scale businesses.', 'icon' => 'innovation'],
                 ['title' => 'Accountable', 'description' => 'We take full responsibility for our actions and decisions, operating with transparency, integrity, and compliance in all that we do.', 'icon' => 'teamwork'],
                 ['title' => 'Innovative', 'description' => 'We embrace practical innovation and digital solutions to enhance efficiency, improve the customer experience, and adapt to the evolving financial needs of our market.', 'icon' => 'respect'],
-//                ['title' => 'Accountability', 'description' => 'We take responsibility for our actions and are transparent in our operations.', 'icon' => 'accountability'],
             ],
             'company.stats' => [
                 ['label' => 'Total Staff', 'value' => '40+'],

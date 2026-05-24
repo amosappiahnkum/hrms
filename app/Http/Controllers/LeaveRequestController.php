@@ -11,7 +11,9 @@ use App\Http\Resources\UpcomingLeaveResource;
 use App\Models\ActivityLog;
 use App\Models\Config\LeaveType;
 use App\Models\Config\LeaveTypeLevelConfig;
+use App\Models\LeaveBalanceAdjustment;
 use App\Models\LeaveRequest;
+use App\Models\SelfService\Employee;
 use App\Models\User;
 use App\Notifications\LeaveRequestNotification;
 use App\Notifications\LeaveStatusNotification;
@@ -100,9 +102,22 @@ class LeaveRequestController extends Controller
             $leaveType = LeaveType::where('uuid', $request->leave_type_id)->first();
             $this->leaveHelper->validateLeaveDays($startDate, $daysRequested, $leaveType->request_type);
 
+            $balance = $this->calculateBalance($employee, $leaveType->id);
+            if ($balance['available'] < $daysRequested) {
+                return response()->json([
+                    'message' => "Insufficient leave balance. You have {$balance['available']} {$leaveType->request_type}(s) available for {$leaveType->name}.",
+                ], 422);
+            }
+
+            $relieverId = null;
+            if ($request->filled('reliever_id')) {
+                $reliever = \App\Models\SelfService\Employee::where('uuid', $request->reliever_id)->first();
+                $relieverId = $reliever?->id;
+            }
 
             $leaveRequest = LeaveRequest::create([
                 'employee_id' => $employee->id,
+                'reliever_id' => $relieverId,
                 'supervisor_id' => $hod->id,
                 'department_id' => $employee->department->id,
                 'leave_type_id' => $leaveType->id,
@@ -432,25 +447,50 @@ class LeaveRequestController extends Controller
     {
         $employee = Auth::user()->employee;
 
-        $balances = LeaveTypeLevelConfig::with('leaveType') // eager load related leave type
-        ->where('job_category_id', $employee->jobDetail->job_category_id)
+        $balances = LeaveTypeLevelConfig::with('leaveType')
+            ->where('job_category_id', $employee->jobDetail->job_category_id)
             ->get()
             ->map(function ($config) use ($employee) {
-                $usedDays = LeaveRequest::where('employee_id', $employee->id)
-                    ->where('leave_type_id', $config->leave_type_id)
-                    ->whereIn('status', ['hr_approved'])
-                    ->sum('days_requested');
-
-                return [
-                    'leave_type_id' => $config->leave_type_id,
-                    'type' => $config->leaveType->name,
-                    'total' => $config->number_of_days,
-                    'used' => $usedDays,
-                    'remaining' => $config->number_of_days - $usedDays,
-                ];
+                return $this->calculateBalance($employee, $config->leave_type_id, $config);
             });
 
         return response()->json($balances);
+    }
+
+    private function calculateBalance(Employee $employee, int $leaveTypeId, ?LeaveTypeLevelConfig $config = null): array
+    {
+        if (!$config) {
+            $config = LeaveTypeLevelConfig::with('leaveType')
+                ->where('job_category_id', $employee->jobDetail->job_category_id)
+                ->where('leave_type_id', $leaveTypeId)
+                ->first();
+        }
+
+        $adjustment = LeaveBalanceAdjustment::where('employee_id', $employee->id)
+            ->where('leave_type_id', $leaveTypeId)
+            ->sum('days');
+
+        $total = $config->number_of_days + $adjustment;
+
+        $used = LeaveRequest::where('employee_id', $employee->id)
+            ->where('leave_type_id', $leaveTypeId)
+            ->where('status', 'hr_approved')
+            ->sum('days_approved');
+
+        $pending = LeaveRequest::where('employee_id', $employee->id)
+            ->where('leave_type_id', $leaveTypeId)
+            ->whereIn('status', ['pending', 'hod_approved'])
+            ->sum('days_requested');
+
+        return [
+            'leave_type_id' => $leaveTypeId,
+            'type' => $config->leaveType->name,
+            'total' => $total,
+            'used' => $used,
+            'pending' => $pending,
+            'remaining' => max(0, $total - $used),
+            'available' => max(0, $total - $used - $pending),
+        ];
     }
 
     public function getUpcomingLeave(): AnonymousResourceCollection

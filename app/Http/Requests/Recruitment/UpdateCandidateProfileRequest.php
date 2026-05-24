@@ -15,6 +15,7 @@ class UpdateCandidateProfileRequest extends FormRequest
     {
         return [
             'first_name'         => ['sometimes', 'string', 'max:255'],
+            'middle_name'        => ['sometimes', 'nullable', 'string', 'max:255'],
             'last_name'          => ['sometimes', 'string', 'max:255'],
             'phone'              => ['sometimes', 'nullable', 'string', 'max:50'],
             'source'             => ['sometimes', 'nullable', 'string', 'max:255'],

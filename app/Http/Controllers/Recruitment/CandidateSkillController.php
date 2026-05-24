@@ -26,9 +26,9 @@ class CandidateSkillController extends Controller
         $skills = $candidate->skills()->latest()->get();
 
         return ApiResponse::success($skills->map(fn($s) => [
-            'uuid'       => $s->uuid,
-            'name'       => $s->name,
-            'level'      => $s->level,
+            'uuid' => $s->uuid,
+            'name' => $s->name,
+            'level' => $s->level,
             'created_at' => $s->created_at,
         ]));
     }
@@ -41,9 +41,9 @@ class CandidateSkillController extends Controller
             $skill = $candidate->skills()->create($request->validated());
 
             return ApiResponse::success([
-                'uuid'       => $skill->uuid,
-                'name'       => $skill->name,
-                'level'      => $skill->level,
+                'uuid' => $skill->uuid,
+                'name' => $skill->name,
+                'level' => $skill->level,
                 'created_at' => $skill->created_at,
             ], 'Skill added', 201);
         } catch (Exception $e) {
@@ -60,9 +60,9 @@ class CandidateSkillController extends Controller
         }
 
         return ApiResponse::success([
-            'uuid'       => $skill->uuid,
-            'name'       => $skill->name,
-            'level'      => $skill->level,
+            'uuid' => $skill->uuid,
+            'name' => $skill->name,
+            'level' => $skill->level,
             'created_at' => $skill->created_at,
         ]);
     }
@@ -80,9 +80,9 @@ class CandidateSkillController extends Controller
             $skill->refresh();
 
             return ApiResponse::success([
-                'uuid'       => $skill->uuid,
-                'name'       => $skill->name,
-                'level'      => $skill->level,
+                'uuid' => $skill->uuid,
+                'name' => $skill->name,
+                'level' => $skill->level,
                 'created_at' => $skill->created_at,
             ], 'Skill updated');
         } catch (Exception $e) {

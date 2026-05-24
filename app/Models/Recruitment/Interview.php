@@ -9,6 +9,7 @@ use App\Models\SelfService\Employee;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Interview extends ApplicationModel
@@ -46,5 +47,10 @@ class Interview extends ApplicationModel
     public function interviewer(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'interviewer_id');
+    }
+
+    public function interviewers(): BelongsToMany
+    {
+        return $this->belongsToMany(Employee::class, 'interview_interviewers');
     }
 }

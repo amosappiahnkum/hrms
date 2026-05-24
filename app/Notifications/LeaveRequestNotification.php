@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Models\UserNotificationPreference;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -30,9 +31,9 @@ class LeaveRequestNotification extends Notification implements ShouldQueue
      *
      * @return array
      */
-    public function via($notifiable)
+    public function via($notifiable): array
     {
-        return ['mail'];
+        return UserNotificationPreference::channelsFor($notifiable, 'leave_request_submitted', ['mail']);
     }
 
     /**

@@ -6,23 +6,63 @@ use App\Models\Config\Setting;
 use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class SettingController extends Controller
 {
     public function __construct(private readonly SettingService $settings) {}
 
-    // Public — no auth required (branding, app name, etc.)
     public function public(): JsonResponse
     {
         $settings = Setting::query()
-            ->where('is_public', true)
-            ->get()
-            ->groupBy('group')
-            ->map(fn($group) => $group->mapWithKeys(fn($s) => [
-                last(explode('.', $s->key)) => $s->value,
-            ]));
+            ->where(function ($query) {
+                $query->where('is_public', true)
+                    ->orWhereIn('key', [
+                        'company.name',
+                        'company.abbreviation',
+                        'company.logo_url',
+                        'company.tagline',
+                    ]);
+            })
+            ->get();
 
-        return response()->json(['data' => $settings]);
+        $grouped = $settings
+            ->where('is_public', true)
+            ->groupBy('group')
+            ->map(function ($group) {
+                return $group->mapWithKeys(function ($setting) {
+                    return [
+                        Str::afterLast($setting->key, '.') => $setting->value,
+                    ];
+                });
+            });
+
+        $company = $settings
+            ->whereIn('key', [
+                'company.name',
+                'company.abbreviation',
+                'company.logo_url',
+                'company.tagline',
+            ])
+            ->mapWithKeys(function ($setting) {
+
+                $key = Str::afterLast($setting->key, '.');
+
+                $value = $setting->value;
+
+                if ($key === 'logo_url' && $value) {
+                    $value = rtrim(config('app.url'), '/') . '/assets/' . ltrim($value, '/');
+                }
+
+                return [$key => $value];
+            });
+
+        return response()->json([
+            'data' => [
+                ...$grouped->toArray(),
+                'company' => $company->toArray(),
+            ],
+        ]);
     }
 
     // App config CRUD — super-admin only

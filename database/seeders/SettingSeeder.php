@@ -12,13 +12,14 @@ class SettingSeeder extends Seeder
         $service = app(SettingService::class);
 
         // === APP CONFIGURATION (public — available before auth) ===
-        $service->set('app.name', 'HRMS', 'app', 'Application name', true);
+        $service->set('app.name', 'Kazi360', 'app', 'Application name', true);
         $service->set('app.logo', null, 'app', 'Logo URL', true);
-        $service->set('app.website', null, 'app', 'Company website', true);
-        $service->set('app.address', null, 'app', 'Company address', true);
-        $service->set('app.phone', null, 'app', 'Company phone number', true);
-        $service->set('app.email', null, 'app', 'Company contact email', true);
-        $service->set('app.support_mail', 'itsupport@ttu.edu.gh', 'app', 'Support email', true);
+        $service->set('app.website', null, 'app', 'Developer website', true);
+        $service->set('app.address', 'Takoradi', 'app', 'Developer address', true);
+        $service->set('app.phone', '+233544513074', 'app', 'Developer phone number', true);
+        $service->set('app.email', 'amos.nkum@gmail.com', 'app', 'Developer contact email', true);
+        $service->set('app.theme', 'midnight-navy', 'app', 'App Theme', true);
+        $service->set('app.support_mail', 'amos.nkum@gmail.com', 'app', 'Support email', true);
         $service->set('app.timezone', 'Africa/Accra', 'app', 'Default timezone', true);
         $service->set('app.date_format', 'DD/MM/YYYY', 'app', 'Date display format', true);
 

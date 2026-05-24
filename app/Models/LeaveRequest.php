@@ -19,6 +19,7 @@ class LeaveRequest extends Model
 
     protected $fillable = [
         'employee_id',
+        'reliever_id',
         'department_id',
         'supervisor_id',
         'leave_type_id',
@@ -82,6 +83,11 @@ class LeaveRequest extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function reliever(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'reliever_id');
     }
 
     public function approvals(): HasMany
