@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\CommonController;
+use App\Http\Controllers\UserSettingsController;
 use App\Http\Controllers\CommunityServiceController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\DepartmentController;
@@ -58,6 +59,12 @@ Route::prefix('v1')
 Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::prefix('v1')->group(function () {
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
+
+        // User settings (all authenticated users)
+        Route::prefix('user/settings')->group(function () {
+            Route::get('notifications', [UserSettingsController::class, 'getNotificationPreferences']);
+            Route::patch('notifications', [UserSettingsController::class, 'updateNotificationPreferences']);
+        });
         // Loaded sub-route files (employees, question-bank, dynamic-forms)
         foreach (glob(__DIR__ . '/v1/*.php') as $file) {
             if (basename($file) === 'recruitment-portal.php') continue;
@@ -68,11 +75,6 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
         Route::get('/me', [AuthController::class, 'me'])->name('api.me');
         Route::post('/validate-auth', [AuthController::class, 'validateAuth'])->name('api.validate-auth');
-
-        // Token management
-        Route::get('/tokens', [AuthController::class, 'tokens']);
-        Route::delete('/tokens/{tokenId}', [AuthController::class, 'revokeToken']);
-        Route::delete('/tokens', [AuthController::class, 'revokeAllTokens']);
 
         // Features management
         Route::get('features', [SettingController::class, 'indexFeatures']);
@@ -156,6 +158,8 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
                 Route::get('/leave-requests', [LeaveManagementController::class, 'getLeaveRequests']);
                 Route::post('/leave-requests/status/hr/change', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
                 Route::get('/analytics', [LeaveAnalyticsController::class, 'index']);
+                Route::get('/employee-balances', [LeaveManagementController::class, 'getEmployeeLeaveBalances']);
+                Route::post('/employee-balances/adjust', [LeaveManagementController::class, 'adjustEmployeeBalance']);
             });
         });
 

@@ -17,6 +17,7 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use App\Notifications\Recruitment\RecruitmentNotification;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -53,6 +54,7 @@ class CandidatePortalController extends Controller
         }
 
         Auth::guard($this->guard)->login($candidate);
+        $request->session()->regenerate();
 
         return response()->json([
             'message' => 'Registration successful',
@@ -73,6 +75,8 @@ class CandidatePortalController extends Controller
         if (!Auth::guard($this->guard)->attempt($credentials, $request->boolean('remember'))) {
             return response()->json(['message' => 'Invalid email or password.'], 401);
         }
+
+        $request->session()->regenerate();
 
         return response()->json([
             'message' => 'Logged in successfully',
@@ -157,6 +161,18 @@ class CandidatePortalController extends Controller
             ]);
 
             $application->load(['candidate', 'jobOpening']);
+
+            $candidate->notify(new RecruitmentNotification([
+                'subject'  => "Application Received — {$jobOpening->title}",
+                'greeting' => "Dear {$candidate->first_name},",
+                'lines'    => [
+                    "Thank you for applying for the {$jobOpening->title} position.",
+                    "We have received your application and will review it shortly.",
+                    "We will be in touch with an update on your application status.",
+                ],
+                'action_url'  => env('FRONTEND_URL') . '/candidate/my-applications',
+                'action_text' => 'View My Applications',
+            ]));
 
             return ApiResponse::success(new ApplicationResource($application), 'Application submitted', 201);
         } catch (Exception $e) {

@@ -31,8 +31,14 @@ class UpcomingLeaveResource extends JsonResource
                 "uuid" => $this->employee->uuid,
                 "name" => $this->employee->name,
                 "department" => $this->employee->department->name,
-                'photo' => Helper::getPhotoURL($this->employee->photo),
+                'photo' => Helper::getTempPhoto($this->employee->photo),
             ],
+            "reliever" => $this->reliever ? [
+                "uuid" => $this->reliever->uuid,
+                "name" => $this->reliever->name,
+                "department" => $this->reliever->department->name,
+                'photo' => Helper::getTempPhoto($this->reliever->photo),
+            ] : null,
         ];
     }
 }

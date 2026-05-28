@@ -12,11 +12,13 @@ use App\Http\Resources\EmployeeResource;
 use App\Http\Resources\Recruitment\ApplicationResource;
 use App\Models\Recruitment\Application;
 use App\Models\SelfService\Employee;
+use App\Notifications\Recruitment\RecruitmentNotification;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 class ApplicationController extends Controller
 {
@@ -71,13 +73,45 @@ class ApplicationController extends Controller
 
     public function shortlist(Application $application): JsonResponse
     {
+        $application->load(['candidate', 'jobOpening']);
         $application->update(['status' => ApplicationStatus::SHORTLISTED]);
+
+        $candidate  = $application->candidate;
+        $jobTitle   = $application->jobOpening?->title ?? 'the position';
+
+        $candidate->notify(new RecruitmentNotification([
+            'subject'  => "Application Shortlisted — {$jobTitle}",
+            'greeting' => "Dear {$candidate->first_name},",
+            'lines'    => [
+                "We are pleased to inform you that your application for the {$jobTitle} position has been shortlisted.",
+                "Our team will be in touch shortly with further details about the next steps in our recruitment process.",
+                "Thank you for your interest in joining our organisation.",
+            ],
+            'action_url'  => env('FRONTEND_URL') . '/candidate/my-applications',
+            'action_text' => 'View My Applications',
+        ]));
+
         return ApiResponse::success(new ApplicationResource($application), 'Application shortlisted');
     }
 
     public function reject(Application $application): JsonResponse
     {
+        $application->load(['candidate', 'jobOpening']);
         $application->update(['status' => ApplicationStatus::REJECTED]);
+
+        $candidate = $application->candidate;
+        $jobTitle  = $application->jobOpening?->title ?? 'the position';
+
+        $candidate->notify(new RecruitmentNotification([
+            'subject'  => "Application Update — {$jobTitle}",
+            'greeting' => "Dear {$candidate->first_name},",
+            'lines'    => [
+                "Thank you for your interest in the {$jobTitle} position and for the time you invested in your application.",
+                "After careful consideration, we regret to inform you that your application has not progressed to the next stage of our recruitment process.",
+                "We appreciate your interest in our organisation and encourage you to apply for other suitable openings in the future.",
+            ],
+        ]));
+
         return ApiResponse::success(new ApplicationResource($application), 'Application rejected');
     }
 
@@ -91,6 +125,7 @@ class ApplicationController extends Controller
         try {
             $candidate   = $application->candidate;
             $jobOpening  = $application->jobOpening;
+            $jobTitle    = $jobOpening?->title ?? 'the position';
 
             $employee = Employee::create([
                 'first_name'    => $candidate->first_name,
@@ -114,6 +149,24 @@ class ApplicationController extends Controller
                 'status'      => ApplicationStatus::HIRED,
                 'employee_id' => $employee->id,
             ]);
+
+            // Close all other open applications for this candidate
+            Application::where('candidate_id', $candidate->id)
+                ->where('id', '!=', $application->id)
+                ->whereNotIn('status', [ApplicationStatus::HIRED, ApplicationStatus::REJECTED, ApplicationStatus::WITHDRAWN])
+                ->update(['status' => ApplicationStatus::WITHDRAWN]);
+
+            $candidate->notify(new RecruitmentNotification([
+                'subject'  => "Congratulations — Offer for {$jobTitle}",
+                'greeting' => "Dear {$candidate->first_name},",
+                'lines'    => [
+                    "We are delighted to inform you that your application for the {$jobTitle} position has been successful.",
+                    "Our HR team will be in contact shortly with your offer letter and onboarding details.",
+                    "We look forward to welcoming you to our team!",
+                ],
+                'action_url'  => env('FRONTEND_URL') . '/candidate/my-applications',
+                'action_text' => 'View My Applications',
+            ]));
 
             DB::commit();
             return ApiResponse::success(new EmployeeResource($employee), 'Candidate hired successfully');

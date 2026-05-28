@@ -30,6 +30,7 @@ Route::middleware('feature:recruitment.enabled')->prefix('recruitment')->group(f
     Route::post('applications/{application}/hire', [ApplicationController::class, 'hire']);
 
     // Interviews (nested under application for create/list, standalone for detail)
+    Route::get('interviews', [InterviewController::class, 'all']);
     Route::get('applications/{application}/interviews', [InterviewController::class, 'index']);
     Route::post('applications/{application}/interviews', [InterviewController::class, 'store']);
     Route::get('interviews/{interview}', [InterviewController::class, 'show']);

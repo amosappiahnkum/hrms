@@ -19,7 +19,7 @@ class JobOpeningController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = JobOpening::query()
-            ->with(['position', 'department'])
+            ->with(['position', 'department', 'applications'])
             ->when($request->status, fn($q) => $q->where('status', $request->status))
             ->when($request->department_uuid, function ($q) use ($request) {
                 $q->whereHas('department', fn($d) => $d->where('uuid', $request->department_uuid));
