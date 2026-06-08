@@ -131,6 +131,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
                 Route::prefix('leave-requests')->group(function () {
                     Route::get('types', [LeaveRequestController::class, 'getLeaveTypes']);
                     Route::post('status/change', [LeaveRequestController::class, 'changeLeaveStatus']);
+                    Route::post('{uuid}/cancel', [LeaveRequestController::class, 'cancelLeave']);
                 });
                 Route::apiResource('/leave-requests', LeaveRequestController::class);
                 Route::get('my-leave-requests', [LeaveRequestController::class, 'getMyLeaveRequest']);

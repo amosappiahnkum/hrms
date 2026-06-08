@@ -46,8 +46,8 @@ class UserNotificationPreference extends Model
         if (!$pref) {
             $defaults = static::defaultsForType($type);
             $channels = [];
-            if ($defaults['email']) $channels[] = 'mail';
-            if ($defaults['in_app']) $channels[] = 'database';
+            if ($defaults['default_email'] ?? true) $channels[] = 'mail';
+            if ($defaults['default_in_app'] ?? false) $channels[] = 'database';
             return $channels ?: $fallback;
         }
 

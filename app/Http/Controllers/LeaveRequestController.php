@@ -63,7 +63,9 @@ class LeaveRequestController extends Controller
         $leaveRequestQuery = LeaveRequest::query()->forDepartment($request->department)
             ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
             ->when($request->filled('leaveType'), fn($q) => $q->where('leave_type_id', $request->leaveType))
-            ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search));
+            ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search))
+            ->orderByRaw("CASE WHEN status = 'pending' THEN 0 WHEN status = 'hod_approved' THEN 1 ELSE 2 END")
+            ->latest();
 
         if ($request->boolean('export')) {
             $employees = $leaveRequestQuery->get();
@@ -388,6 +390,43 @@ class LeaveRequestController extends Controller
     }
 
     /**
+     * Cancel a leave request. Employees may cancel pending/hod_approved;
+     * HODs may cancel pending/hod_approved in their department;
+     * HR may cancel any leave regardless of status.
+     */
+    public function cancelLeave(string $uuid): JsonResponse
+    {
+        $user = Auth::user();
+        $employee = $user->employee;
+
+        $leaveRequest = LeaveRequest::where('uuid', $uuid)->firstOrFail();
+
+        if ($leaveRequest->status->value === 'canceled') {
+            return response()->json(['message' => 'This leave request is already cancelled.'], 422);
+        }
+
+        $cancellableStatuses = ['pending', 'hod_approved'];
+
+        if ($this->isHrAdmin()) {
+            // HR can cancel any status
+        } elseif ($this->isSupervisor() && $leaveRequest->department_id === $employee->department_id) {
+            if (!in_array($leaveRequest->status->value, $cancellableStatuses)) {
+                return response()->json(['message' => 'Only pending or HOD-approved leaves can be cancelled.'], 422);
+            }
+        } elseif ($leaveRequest->employee_id === $employee->id) {
+            if (!in_array($leaveRequest->status->value, $cancellableStatuses)) {
+                return response()->json(['message' => 'Only pending or HOD-approved leaves can be cancelled.'], 422);
+            }
+        } else {
+            return response()->json(['message' => 'You do not have permission to cancel this leave request.'], 403);
+        }
+
+        $leaveRequest->update(['status' => 'canceled']);
+
+        return response()->json(new LeaveRequestResource($leaveRequest));
+    }
+
+    /**
      * Remove the specified resource from storage.
      *
      * @param LeaveRequest $leaveRequest
@@ -418,9 +457,10 @@ class LeaveRequestController extends Controller
     {
         $auth = Auth::user();
 
-        $leaveRequest = LeaveRequest::query();
-
-        $leaveRequest->where('employee_id', $auth->employee->id);
+        $leaveRequest = LeaveRequest::query()
+            ->where('employee_id', $auth->employee->id)
+            ->orderByRaw("CASE WHEN status = 'pending' THEN 0 WHEN status = 'hod_approved' THEN 1 ELSE 2 END")
+            ->latest();
 
         return LeaveRequestResource::collection($leaveRequest->paginate($request->per_page ?? 10));
     }
@@ -529,6 +569,8 @@ class LeaveRequestController extends Controller
         ])->forDepartment($departmentId)
             ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
             ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search))
+            ->orderByRaw("CASE WHEN status = 'pending' THEN 0 WHEN status = 'hod_approved' THEN 1 ELSE 2 END")
+            ->latest()
             ->paginate(10);
 
         return LeaveRequestResource::collection($upcomingLeaves);
