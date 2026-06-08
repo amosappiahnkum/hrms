@@ -23,6 +23,7 @@ return [
         'https://careers.ttu.edu.gh',
         'https://directory.ttu.edu.gh',
         'https://hrms.ttuportal.com',
+        'http://localhost:5173',
     ],
 //    'allowed_origins' => ['*'],
 

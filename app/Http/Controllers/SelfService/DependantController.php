@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDependantRequest;
 use App\Http\Requests\UpdateDependantRequest;
 use App\Http\Resources\DependantResource;
+use App\Models\InformationUpdate as InformationUpdateModel;
 use App\Models\SelfService\Dependant;
+use App\Models\SelfService\Employee;
 use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use Exception;
@@ -43,7 +45,23 @@ class DependantController extends Controller
             });
         });
 
-        return DependantResource::collection($dependants->paginate($request->per_page ?? 10));
+        $collection = DependantResource::collection($dependants->paginate($request->per_page ?? 10));
+
+        $pending = [];
+        if ($request->employee_uuid) {
+            $employee = Employee::where('uuid', $request->employee_uuid)->first();
+            if ($employee) {
+                $pending = InformationUpdateModel::where('information_type', 'Dependant')
+                    ->where('type', 'create')
+                    ->where('status', 'pending')
+                    ->where('new_info->employee_id', $employee->id)
+                    ->get()
+                    ->map(fn($update) => array_merge($update->new_info, ['uuid' => $update->uuid, 'pending' => true]))
+                    ->values();
+            }
+        }
+
+        return $collection->additional(['pending' => $pending]);
     }
 
     /**

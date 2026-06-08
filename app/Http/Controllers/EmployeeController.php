@@ -11,7 +11,6 @@ use App\Http\Requests\UpdateEmployeeJobTypeRequest;
 use App\Http\Requests\UpdateEmployeeLevelRequest;
 use App\Http\Requests\UpdateEmployeeRequest;
 use App\Http\Resources\ArchivedEmployeeResource;
-use App\Http\Resources\EmployeeDirectoryResource;
 use App\Http\Resources\EmployeeResource;
 use App\Http\Resources\MiniEmployeeResource;
 use App\Models\Config\Department;
@@ -287,7 +286,7 @@ class EmployeeController extends Controller
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
             Log::error('Update Dependant Error', ['error' => $exception]);
-            return response()->json(['message' => 'Something went wrong'], 400);
+            return response()->json(['message' => $exception->getMessage()], 400);
         }
     }
 

@@ -7,14 +7,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreGrantAndFundRequest;
 use App\Http\Requests\UpdateGrantAndFundRequest;
 use App\Http\Resources\GrantAndFundResource;
+use App\Models\InformationUpdate;
+use App\Models\SelfService\Employee;
 use App\Models\SelfService\GrantAndFund;
+use App\Services\UpdateApprovalService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class GrantAndFundController extends Controller
 {
@@ -36,47 +41,60 @@ class GrantAndFundController extends Controller
         })->orderByDesc('start');
 
 
-        return GrantAndFundResource::collection($grantAndFunds->paginate($request->per_page ?? 10));
+        $collection = GrantAndFundResource::collection($grantAndFunds->paginate($request->per_page ?? 10));
+
+        $pending = [];
+        if ($request->employee_uuid) {
+            $employee = Employee::where('uuid', $request->employee_uuid)->first();
+            if ($employee) {
+                $pending = InformationUpdate::where('information_type', 'GrantAndFund')
+                    ->where('type', 'create')
+                    ->where('status', 'pending')
+                    ->where('new_info->employee_id', $employee->id)
+                    ->get()
+                    ->map(fn($u) => array_merge($u->new_info, ['uuid' => $u->uuid, 'pending' => true]))
+                    ->values();
+            }
+        }
+
+        return $collection->additional(['pending' => $pending]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param StoreGrantAndFundRequest $request
-     * @return GrantAndFundResource|JsonResponse
-     * @throws \Throwable
-     */
-    public function store(StoreGrantAndFundRequest $request): GrantAndFundResource|JsonResponse
+    public function store(StoreGrantAndFundRequest $request): JsonResponse
     {
         try {
-            $grant = GrantAndFund::create($request->validated());
+            $validated = $request->validated();
 
-            return ApiResponse::success(GrantAndFundResource::make($grant->load('dynamicValues.field')));
-        }catch (Exception $exception){
+            if ($this->isHrAdmin()) {
+                GrantAndFund::create($validated);
+            } else {
+                app(UpdateApprovalService::class)->create(new GrantAndFund(), $validated, Auth::id());
+            }
 
-            Log::error($exception->getMessage());
+            return ApiResponse::success(null, 'Grant creation request submitted for approval');
+        } catch (Throwable $e) {
+            Log::error('Add GrantAndFund Error', ['error' => $e]);
             return ApiResponse::error('Something went wrong');
         }
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param UpdateGrantAndFundRequest $request
-     * @param GrantAndFund $grant
-     * @return GrantAndFundResource|JsonResponse
-     * @throws \Throwable
-     */
     public function update(UpdateGrantAndFundRequest $request, GrantAndFund $grant): JsonResponse|GrantAndFundResource
     {
+        DB::beginTransaction();
         try {
-            $grant->update($request->validated());
+            $changes = $request->validated();
 
-            return ApiResponse::success(GrantAndFundResource::make($grant->load('dynamicValues.field')));
-        }catch (Exception $exception){
-            Log::error($exception->getMessage());
+            if ($this->isHrAdmin()) {
+                $grant->update($changes);
+            } else {
+                app(UpdateApprovalService::class)->update($grant, $changes, Auth::id());
+            }
 
-            return ApiResponse::error('Something went wrong');
+            DB::commit();
+            return new GrantAndFundResource($grant->load('dynamicValues.field'));
+        } catch (Exception $exception) {
+            Log::error('Update GrantAndFund Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
@@ -85,23 +103,20 @@ class GrantAndFundController extends Controller
         return ApiResponse::success(GrantAndFundResource::make($grant->load('dynamicValues.field')));
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param GrantAndFund $grant
-     * @return JsonResponse|null
-     * @throws \Throwable
-     */
     public function destroy(GrantAndFund $grant): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $grant->delete();
-            DB::commit();
-            return ApiResponse::success(null, 'GrantAndFund deleted.', ResponseAlias::HTTP_OK);
-        }catch (Exception $exception){
+            if ($this->isHrAdmin()) {
+                $grant->delete();
+            } else {
+                app(UpdateApprovalService::class)->delete($grant, Auth::id());
+            }
 
-            Log::error($exception->getMessage());
+            DB::commit();
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
+        } catch (Exception $exception) {
+            Log::error('Delete GrantAndFund Error: ', [$exception]);
             return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
         }
     }

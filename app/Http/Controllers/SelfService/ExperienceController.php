@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreExperienceRequest;
 use App\Http\Requests\UpdateExperienceRequest;
 use App\Http\Resources\ExperienceResource;
+use App\Models\InformationUpdate;
+use App\Models\SelfService\Employee;
 use App\Models\SelfService\Experience;
 use App\Services\UpdateApprovalService;
 use App\Traits\UsePrint;
@@ -40,7 +42,23 @@ class ExperienceController extends Controller
             });
         })->orderByDesc('from');
 
-        return ExperienceResource::collection($experiences->paginate($request->per_page ?? 10));
+        $collection = ExperienceResource::collection($experiences->paginate($request->per_page ?? 10));
+
+        $pending = [];
+        if ($request->employee_uuid) {
+            $employee = Employee::where('uuid', $request->employee_uuid)->first();
+            if ($employee) {
+                $pending = InformationUpdate::where('information_type', 'Experience')
+                    ->where('type', 'create')
+                    ->where('status', 'pending')
+                    ->where('new_info->employee_id', $employee->id)
+                    ->get()
+                    ->map(fn($update) => array_merge($update->new_info, ['uuid' => $update->uuid, 'pending' => true]))
+                    ->values();
+            }
+        }
+
+        return $collection->additional(['pending' => $pending]);
     }
 
     /**

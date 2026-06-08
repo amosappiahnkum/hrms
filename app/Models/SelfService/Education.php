@@ -40,16 +40,16 @@ class Education extends AppModel
     public function approvableFields(): array
     {
         return [
-            'employee_id' => ['show_in_diff' => true],
+            'employee_id' => ['show_in_diff' => false],
             'education_level_id' => ['show_in_diff' => false],
-            'institution' => ['show_in_diff' => false],
-            'qualification' => ['show_in_diff' => false],
-            'date' => ['show_in_diff' => false],
-            'type' => ['show_in_diff' => false],
-            'cert_number' => ['show_in_diff' => false],
-            'field' => ['show_in_diff' => false],
-            'country' => ['show_in_diff' => false],
-            'user_id' => ['show_in_diff' => true],
+            'institution' => ['show_in_diff' => true],
+            'qualification' => ['show_in_diff' => true],
+            'date' => ['show_in_diff' => true],
+            'type' => ['show_in_diff' => true],
+            'cert_number' => ['show_in_diff' => true],
+            'field' => ['show_in_diff' => true],
+            'country' => ['show_in_diff' => true],
+            'user_id' => ['show_in_diff' => false],
         ];
     }
 

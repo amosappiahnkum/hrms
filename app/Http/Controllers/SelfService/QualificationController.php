@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQualificationRequest;
 use App\Http\Requests\UpdateQualificationRequest;
 use App\Http\Resources\QualificationResource;
+use App\Models\InformationUpdate;
 use App\Models\SelfService\Education;
+use App\Models\SelfService\Employee;
 use App\Services\UpdateApprovalService;
 use App\Traits\UsePrint;
 use Exception;
@@ -45,7 +47,23 @@ class QualificationController extends Controller
             });
         })->orderByDesc('date');
 
-        return QualificationResource::collection($educations->paginate($request->per_page ?? 10));
+        $collection = QualificationResource::collection($educations->paginate($request->per_page ?? 10));
+
+        $pending = [];
+        if ($request->employee_uuid) {
+            $employee = Employee::where('uuid', $request->employee_uuid)->first();
+            if ($employee) {
+                $pending = InformationUpdate::where('information_type', 'Education')
+                    ->where('type', 'create')
+                    ->where('status', 'pending')
+                    ->where('new_info->employee_id', $employee->id)
+                    ->get()
+                    ->map(fn($update) => array_merge($update->new_info, ['uuid' => $update->uuid, 'pending' => true]))
+                    ->values();
+            }
+        }
+
+        return $collection->additional(['pending' => $pending]);
     }
 
     /**

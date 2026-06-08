@@ -7,14 +7,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAwardRequest;
 use App\Http\Requests\UpdateAwardRequest;
 use App\Http\Resources\AwardResource;
+use App\Models\InformationUpdate;
 use App\Models\SelfService\Award;
+use App\Models\SelfService\Employee;
+use App\Services\UpdateApprovalService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class AwardController extends Controller
 {
@@ -35,47 +40,60 @@ class AwardController extends Controller
             });
         })->orderByDesc('year');
 
-        return AwardResource::collection($awards->paginate($request->per_page ?? 10));
+        $collection = AwardResource::collection($awards->paginate($request->per_page ?? 10));
+
+        $pending = [];
+        if ($request->employee_uuid) {
+            $employee = Employee::where('uuid', $request->employee_uuid)->first();
+            if ($employee) {
+                $pending = InformationUpdate::where('information_type', 'Award')
+                    ->where('type', 'create')
+                    ->where('status', 'pending')
+                    ->where('new_info->employee_id', $employee->id)
+                    ->get()
+                    ->map(fn($u) => array_merge($u->new_info, ['uuid' => $u->uuid, 'pending' => true]))
+                    ->values();
+            }
+        }
+
+        return $collection->additional(['pending' => $pending]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param StoreAwardRequest $request
-     * @return AwardResource|JsonResponse
-     * @throws \Throwable
-     */
-    public function store(StoreAwardRequest $request): AwardResource|JsonResponse
+    public function store(StoreAwardRequest $request): JsonResponse
     {
         try {
-            $award = Award::create($request->validated());
+            $validated = $request->validated();
 
-            return ApiResponse::success(AwardResource::make($award));
-        }catch (Exception $exception){
+            if ($this->isHrAdmin()) {
+                Award::create($validated);
+            } else {
+                app(UpdateApprovalService::class)->create(new Award(), $validated, Auth::id());
+            }
 
-            Log::error($exception->getMessage());
+            return ApiResponse::success(null, 'Award creation request submitted for approval');
+        } catch (Throwable $e) {
+            Log::error('Add Award Error', ['error' => $e]);
             return ApiResponse::error('Something went wrong');
         }
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param UpdateAwardRequest $request
-     * @param Award $award
-     * @return AwardResource|JsonResponse
-     * @throws \Throwable
-     */
     public function update(UpdateAwardRequest $request, Award $award): JsonResponse|AwardResource
     {
+        DB::beginTransaction();
         try {
-            $award->update($request->validated());
+            $changes = $request->validated();
 
-            return ApiResponse::success(AwardResource::make($award));
-        }catch (Exception $exception){
-            Log::error($exception->getMessage());
+            if ($this->isHrAdmin()) {
+                $award->update($changes);
+            } else {
+                app(UpdateApprovalService::class)->update($award, $changes, Auth::id());
+            }
 
-            return ApiResponse::error('Something went wrong');
+            DB::commit();
+            return new AwardResource($award);
+        } catch (Exception $exception) {
+            Log::error('Update Award Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
@@ -84,23 +102,20 @@ class AwardController extends Controller
         return ApiResponse::success(AwardResource::make($award));
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param Award $award
-     * @return JsonResponse|null
-     * @throws \Throwable
-     */
     public function destroy(Award $award): ?JsonResponse
     {
         DB::beginTransaction();
         try {
-            $award->delete();
-            DB::commit();
-            return ApiResponse::success(null, 'Award deleted.', ResponseAlias::HTTP_OK);
-        }catch (Exception $exception){
+            if ($this->isHrAdmin()) {
+                $award->delete();
+            } else {
+                app(UpdateApprovalService::class)->delete($award, Auth::id());
+            }
 
-            Log::error($exception->getMessage());
+            DB::commit();
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
+        } catch (Exception $exception) {
+            Log::error('Delete Award Error: ', [$exception]);
             return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
         }
     }

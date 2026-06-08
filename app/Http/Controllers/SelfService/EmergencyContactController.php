@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreEmergencyContactRequest;
 use App\Http\Requests\UpdateEmergencyContactRequest;
 use App\Http\Resources\EmergencyContactResource;
+use App\Models\InformationUpdate;
 use App\Models\SelfService\EmergencyContact;
+use App\Models\SelfService\Employee;
 use App\Services\UpdateApprovalService;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -41,7 +43,23 @@ class EmergencyContactController extends Controller
             });
         });
 
-        return EmergencyContactResource::collection($emergencyContacts->paginate($request->per_page ?? 10));
+        $collection = EmergencyContactResource::collection($emergencyContacts->paginate($request->per_page ?? 10));
+
+        $pending = [];
+        if ($request->employee_uuid) {
+            $employee = Employee::where('uuid', $request->employee_uuid)->first();
+            if ($employee) {
+                $pending = InformationUpdate::where('information_type', 'EmergencyContact')
+                    ->where('type', 'create')
+                    ->where('status', 'pending')
+                    ->where('new_info->employee_id', $employee->id)
+                    ->get()
+                    ->map(fn($update) => array_merge($update->new_info, ['uuid' => $update->uuid, 'pending' => true]))
+                    ->values();
+            }
+        }
+
+        return $collection->additional(['pending' => $pending]);
     }
 
     /**

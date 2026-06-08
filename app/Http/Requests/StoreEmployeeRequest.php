@@ -22,9 +22,9 @@ class StoreEmployeeRequest extends FormRequest
         $rankRequired = (bool)($employeeForm['rank']['required'] ?? false);
 
         return [
-            'first_name' => ['required'],
-            'last_name' => ['required'],
-            'middle_name' => ['required'],
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'middle_name' => ['nullable', 'string', 'max:255'],
             'gender' => ['required'],
             'title' => ['required', 'string'],
             'job_type' => ['required', 'string'],

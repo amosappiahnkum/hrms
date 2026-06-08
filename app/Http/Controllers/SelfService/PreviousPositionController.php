@@ -7,14 +7,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreviousPositionRequest;
 use App\Http\Requests\UpdatePreviousPositionRequest;
 use App\Http\Resources\PreviousPositionResource;
+use App\Models\InformationUpdate;
+use App\Models\SelfService\Employee;
 use App\Models\Training\PreviousPosition;
+use App\Services\UpdateApprovalService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
+use Throwable;
 
 class PreviousPositionController extends Controller
 {
@@ -35,7 +40,23 @@ class PreviousPositionController extends Controller
             });
         })->orderByDesc('start');
 
-        return PreviousPositionResource::collection($previousPositions->paginate($request->per_page ?? 10));
+        $collection = PreviousPositionResource::collection($previousPositions->paginate($request->per_page ?? 10));
+
+        $pending = [];
+        if ($request->employee_uuid) {
+            $employee = Employee::where('uuid', $request->employee_uuid)->first();
+            if ($employee) {
+                $pending = InformationUpdate::where('information_type', 'PreviousPosition')
+                    ->where('type', 'create')
+                    ->where('status', 'pending')
+                    ->where('new_info->employee_id', $employee->id)
+                    ->get()
+                    ->map(fn($update) => array_merge($update->new_info, ['uuid' => $update->uuid, 'pending' => true]))
+                    ->values();
+            }
+        }
+
+        return $collection->additional(['pending' => $pending]);
     }
 
     /**
@@ -45,15 +66,20 @@ class PreviousPositionController extends Controller
      * @return PreviousPositionResource|JsonResponse
      * @throws \Throwable
      */
-    public function store(StorePreviousPositionRequest $request): PreviousPositionResource|JsonResponse
+    public function store(StorePreviousPositionRequest $request): JsonResponse
     {
         try {
-            $previousPosition = PreviousPosition::create($request->validated());
+            $validated = $request->validated();
 
-            return ApiResponse::success(PreviousPositionResource::make($previousPosition));
-        }catch (Exception $exception){
+            if ($this->isHrAdmin()) {
+                PreviousPosition::create($validated);
+            } else {
+                app(UpdateApprovalService::class)->create(new PreviousPosition(), $validated, Auth::id());
+            }
 
-            Log::error($exception->getMessage());
+            return ApiResponse::success(null, 'Position creation request submitted for approval');
+        } catch (Throwable $e) {
+            Log::error('Add PreviousPosition Error', ['error' => $e]);
             return ApiResponse::error('Something went wrong');
         }
     }
@@ -68,14 +94,21 @@ class PreviousPositionController extends Controller
      */
     public function update(UpdatePreviousPositionRequest $request, PreviousPosition $previousPosition): JsonResponse|PreviousPositionResource
     {
+        DB::beginTransaction();
         try {
-            $previousPosition->update($request->validated());
+            $changes = $request->validated();
 
-            return ApiResponse::success(PreviousPositionResource::make($previousPosition));
-        }catch (Exception $exception){
-            Log::error($exception->getMessage());
+            if ($this->isHrAdmin()) {
+                $previousPosition->update($changes);
+            } else {
+                app(UpdateApprovalService::class)->update($previousPosition, $changes, Auth::id());
+            }
 
-            return ApiResponse::error('Something went wrong');
+            DB::commit();
+            return new PreviousPositionResource($previousPosition);
+        } catch (Exception $exception) {
+            Log::error('Update PreviousPosition Error', ['error' => $exception]);
+            return response()->json(['message' => 'Something went wrong'], 400);
         }
     }
 
@@ -95,12 +128,16 @@ class PreviousPositionController extends Controller
     {
         DB::beginTransaction();
         try {
-            $previousPosition->delete();
-            DB::commit();
-            return ApiResponse::success(null, 'Qualification deleted.', ResponseAlias::HTTP_OK);
-        }catch (Exception $exception){
+            if ($this->isHrAdmin()) {
+                $previousPosition->delete();
+            } else {
+                app(UpdateApprovalService::class)->delete($previousPosition, Auth::id());
+            }
 
-            Log::error($exception->getMessage());
+            DB::commit();
+            return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
+        } catch (Exception $exception) {
+            Log::error('Delete PreviousPosition Error: ', [$exception]);
             return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
         }
     }

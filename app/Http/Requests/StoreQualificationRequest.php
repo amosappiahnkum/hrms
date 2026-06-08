@@ -34,7 +34,7 @@ class StoreQualificationRequest extends FormRequest
             'field' => 'required',
             'country' => 'required',
             'date' => 'required|date',
-            'cert_number' => 'required|string|unique:education,cert_number',
+            'cert_number' => 'required_if:type,academic|nullable|string|unique:education,cert_number',
             'employee_uuid' => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
             'education_level_id' => 'sometimes|exists:education_levels,id',
@@ -59,10 +59,8 @@ class StoreQualificationRequest extends FormRequest
                 ->where('uuid', $this->education_level_uuid)
                 ->firstOrFail();
 
-            $type = $e->name == 'Professional' ? 'professional' : 'academic';
             $this->merge([
                 'education_level_id' => $e->id,
-                'type' => $type,
             ]);
         }
 
