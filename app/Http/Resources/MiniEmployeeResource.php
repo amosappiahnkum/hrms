@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Helpers\Helper;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class MiniEmployeeResource extends JsonResource
@@ -19,6 +20,7 @@ class MiniEmployeeResource extends JsonResource
             'name' => $this->name,
             'department' => $this->department?->name,
             'staff_id' => $this->staff_id,
+            'display_picture' => Helper::getTempPhoto($this?->photo),
             'rank' => $this->rank->name,
         ];
     }
