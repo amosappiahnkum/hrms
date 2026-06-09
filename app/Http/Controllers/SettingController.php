@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\Helper;
 use App\Models\Config\Setting;
 use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
@@ -50,9 +51,9 @@ class SettingController extends Controller
 
                 $value = $setting->value;
 
-//                if ($key === 'logo_url' && $value) {
-//                    $value = rtrim(config('app.url'), '/') . '/assets/' . ltrim($value, '/');
-//                }
+                if ($key === 'logo_url' && $value) {
+                    $value = Helper::getTempPhoto($value, 'common');
+                }
 
                 return [$key => $value];
             });
