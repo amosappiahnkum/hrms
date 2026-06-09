@@ -50,9 +50,9 @@ class SettingController extends Controller
 
                 $value = $setting->value;
 
-                if ($key === 'logo_url' && $value) {
-                    $value = rtrim(config('app.url'), '/') . '/assets/' . ltrim($value, '/');
-                }
+//                if ($key === 'logo_url' && $value) {
+//                    $value = rtrim(config('app.url'), '/') . '/assets/' . ltrim($value, '/');
+//                }
 
                 return [$key => $value];
             });
