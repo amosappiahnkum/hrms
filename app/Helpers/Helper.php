@@ -66,12 +66,12 @@ class Helper
         return env("PHOTO_URL") . "/{$fileName}";
     }
 
-    public static function getTempPhoto(?string $fileName, ?string $path = 'photos'): ?string
+    public static function getTempPhoto(?string $fileName, ?string $path = 'photos', string $disk = 's3'): ?string
     {
         if (!$fileName) return null;
 
         $key = $path ? "$path/$fileName" : $fileName;
 
-        return Storage::disk('s3')->temporaryUrl($key, now()->addMinutes(5));
+        return Storage::disk($disk)->temporaryUrl($key, now()->addMinutes(5));
     }
 }

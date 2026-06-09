@@ -52,7 +52,7 @@ class SettingController extends Controller
                 $value = $setting->value;
 
                 if ($key === 'logo_url' && $value) {
-                    $value = Helper::getTempPhoto($value, 'common');
+                    $value = Helper::getTempPhoto($value, null, 'common');
                 }
 
                 return [$key => $value];
