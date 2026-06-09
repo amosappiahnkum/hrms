@@ -11,7 +11,9 @@ use Illuminate\Support\Str;
 
 class SettingController extends Controller
 {
-    public function __construct(private readonly SettingService $settings) {}
+    public function __construct(private readonly SettingService $settings)
+    {
+    }
 
     public function public(): JsonResponse
     {
@@ -52,7 +54,7 @@ class SettingController extends Controller
                 $value = $setting->value;
 
                 if ($key === 'logo_url' && $value) {
-                    $value = Helper::getTempPhoto($value, null, 'common');
+                    $value = Helper::getTempUrl($value, 'common');
                 }
 
                 return [$key => $value];
@@ -76,12 +78,12 @@ class SettingController extends Controller
 
     public function updateApp(Request $request): JsonResponse
     {
-        if (! $this->hasRole('super-admin')) {
+        if (!$this->hasRole('super-admin')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $validated = $request->validate([
-            'settings'       => ['required', 'array'],
+            'settings' => ['required', 'array'],
             'settings.*.key' => ['required', 'string'],
             'settings.*.value' => ['required'],
         ]);
@@ -105,7 +107,7 @@ class SettingController extends Controller
 
     public function updateFeature(Request $request, string $key): JsonResponse
     {
-        if (! $this->hasRole('super-admin')) {
+        if (!$this->hasRole('super-admin')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -117,7 +119,7 @@ class SettingController extends Controller
 
         return response()->json([
             'data' => [
-                'key'     => $key,
+                'key' => $key,
                 'enabled' => $validated['enabled'],
             ],
         ]);
