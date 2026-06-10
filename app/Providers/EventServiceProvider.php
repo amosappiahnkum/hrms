@@ -8,6 +8,10 @@ use App\Events\ApprovalRequested;
 use App\Listeners\SendApprovalApprovedNotification;
 use App\Listeners\SendApprovalRejectedNotification;
 use App\Listeners\SendApprovalRequestNotification;
+use App\Listeners\TrackFailedLogin;
+use App\Listeners\TrackSuccessfulLogin;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -34,6 +38,14 @@ class EventServiceProvider extends ServiceProvider
 
         ApprovalRejected::class => [
             SendApprovalRejectedNotification::class,
+        ],
+
+        Login::class => [
+            TrackSuccessfulLogin::class,
+        ],
+
+        Failed::class => [
+            TrackFailedLogin::class,
         ],
     ];
 
