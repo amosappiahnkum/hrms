@@ -28,8 +28,15 @@ class UpdateDepartmentRequest extends FormRequest
         $department = Department::where('uuid', $this->route('department'))->first();
 
         return [
-            'name' => ['nullable','string', Rule::unique('departments')->ignore($department)],
-            'hod' => 'nullable|string|exists:employees,uuid',
+            'name' => ['nullable', 'string', Rule::unique('departments')->ignore($department)],
+            'hod' => ['nullable', 'string', 'exists:employees,uuid'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->hod === '') {
+            $this->merge(['hod' => null]);
+        }
     }
 }
