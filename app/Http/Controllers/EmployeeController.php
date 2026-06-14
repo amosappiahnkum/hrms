@@ -285,7 +285,7 @@ class EmployeeController extends Controller
             Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->phone);
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
-            Log::error('Update Dependant Error', ['error' => $exception]);
+            Log::error('Update Employee Error', ['error' => $exception]);
             return response()->json(['message' => $exception->getMessage()], 400);
         }
     }
