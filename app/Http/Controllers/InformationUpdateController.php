@@ -39,6 +39,17 @@ class InformationUpdateController extends Controller
         if ($request->filled('type') && $request->type !== 'all') {
             $query->where('type', $request->type);
         }
+        if ($search = $request->search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('information_type', 'like', "%{$search}%")
+                    ->orWhereHas('requestedBy.employee', function ($q) use ($search) {
+                        $q->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('staff_id', 'like', "%{$search}%")
+                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) like ?", ["%{$search}%"]);
+                    });
+            });
+        }
 
         $updates = $query->paginate($request->per_page ?? 10);
 

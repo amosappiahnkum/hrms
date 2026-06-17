@@ -146,21 +146,51 @@ class CommonController extends Controller
 
     public function getEmployeeManagementStats(): JsonResponse
     {
-        $employees = Employee::query()->count();
+        $today = now()->toDateString();
 
-        $males = Employee::query()->where("gender", "Male")->count();
-        $females = Employee::query()->where("gender", "Female")->count();
-        $employeeByDepartments = Department::query()->withCount('employees')->get()->pluck('employees_count',
-            'name')->toArray();
+        $employees  = Employee::query()->count();
+        $males      = Employee::query()->where('gender', 'Male')->count();
+        $females    = Employee::query()->where('gender', 'Female')->count();
         $departments = Department::query()->count();
-        $positions = Position::query()->count();
+        $positions  = Position::query()->count();
+
+        $onLeave = LeaveRequest::query()
+            ->where('status', 'approved')
+            ->whereDate('start_date', '<=', $today)
+            ->whereDate('end_date', '>=', $today)
+            ->count();
+
+        $pendingApprovals = InformationUpdate::query()
+            ->where('status', 'Pending')
+            ->count();
+
+        $newThisMonth = Employee::query()
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->count();
+
+        $allByDept = Department::query()
+            ->withCount('employees')
+            ->orderByDesc('employees_count')
+            ->get();
+
+        $top = $allByDept->take(10);
+        $othersCount = $allByDept->slice(10)->sum('employees_count');
+
+        $employeeByDepartments = $top->pluck('employees_count', 'name')->toArray();
+        if ($othersCount > 0) {
+            $employeeByDepartments['Others'] = $othersCount;
+        }
 
         return response()->json([
-            'employees' => $employees,
-            'males' => $males,
-            'females' => $females,
-            'departments' => $departments,
-            'positions' => $positions,
+            'employees'           => $employees,
+            'males'               => $males,
+            'females'             => $females,
+            'departments'         => $departments,
+            'positions'           => $positions,
+            'on_leave'            => $onLeave,
+            'pending_approvals'   => $pendingApprovals,
+            'new_this_month'      => $newThisMonth,
             'employeeByDepartments' => $employeeByDepartments,
         ]);
     }

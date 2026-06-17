@@ -28,6 +28,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Notification;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -99,9 +100,41 @@ class LeaveRequestController extends Controller
 
 
             $startDate = Carbon::parse($request->start_date)->format('Y-m-d');
-            $daysRequested = $request->number_of_days;
+            $daysRequested = (int) $request->number_of_days;
 
             $leaveType = LeaveType::where('uuid', $request->leave_type_id)->first();
+
+            $activeRequest = LeaveRequest::where('employee_id', $employee->id)
+                ->where('leave_type_id', $leaveType->id)
+                ->whereIn('status', ['pending', 'hod_approved'])
+                ->first();
+
+            if ($activeRequest) {
+                $statusLabel = match($activeRequest->status->value) {
+                    'pending'      => 'awaiting HOD approval',
+                    'hod_approved' => 'awaiting HR approval',
+                    'hr_approved'  => 'already approved',
+                    default        => $activeRequest->status->value,
+                };
+                return response()->json([
+                    'message' => "You already have a {$leaveType->name} request that is {$statusLabel}. Please wait for it to be resolved before submitting a new one.",
+                ], 422);
+            }
+
+            $uploadedFiles = $request->file('documents') ?? [];
+
+            if ($leaveType->requires_document && empty($uploadedFiles)) {
+                return response()->json([
+                    'message' => "A supporting document is required for {$leaveType->name}.",
+                ], 422);
+            }
+
+            if (!empty($uploadedFiles) && count($uploadedFiles) > $leaveType->max_documents) {
+                return response()->json([
+                    'message' => "You can upload a maximum of {$leaveType->max_documents} document(s) for {$leaveType->name}.",
+                ], 422);
+            }
+
             $this->leaveHelper->validateLeaveDays($startDate, $daysRequested, $leaveType->request_type);
 
             $balance = $this->calculateBalance($employee, $leaveType->id);
@@ -113,7 +146,7 @@ class LeaveRequestController extends Controller
 
             $relieverId = null;
             if ($request->filled('reliever_id')) {
-                $reliever = \App\Models\SelfService\Employee::where('uuid', $request->reliever_id)->first();
+                $reliever = Employee::where('uuid', $request->reliever_id)->first();
                 $relieverId = $reliever?->id;
             }
 
@@ -129,6 +162,15 @@ class LeaveRequestController extends Controller
                 'end_date' => $this->leaveHelper->lastDate,
             ]);
 
+            foreach ($uploadedFiles as $file) {
+                $path = $file->store("leave-documents/{$leaveRequest->uuid}", 's3');
+                $leaveRequest->documents()->create([
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_path' => $path,
+                    'mime_type' => $file->getMimeType(),
+                ]);
+            }
+
             $startDate = Carbon::parse($startDate)->format('l, M d Y');
             $endDate = Carbon::parse($this->leaveHelper->lastDate)->format('l, M d Y');
 
@@ -139,7 +181,7 @@ class LeaveRequestController extends Controller
 
             if ($hod->id == $employee->id) { // hod is making request
                 $leaveRequest->approvals()->create([
-                    'approved_by' => $hod->id,
+                    'approved_by' => $hod->userAccount->id,
                     'role' => 'hod',
                     'decision' => 'approved',
                     'comment' => "Automatically approved leave request.",
@@ -213,6 +255,13 @@ class LeaveRequestController extends Controller
         try {
             $leaveRequest = LeaveRequest::where('uuid', $request->id)->first();
 
+            $hodDepartmentId = Auth::user()->employee->department_id;
+            if ($leaveRequest->department_id !== $hodDepartmentId) {
+                return response()->json([
+                    'message' => 'You can only approve leave requests for employees in your department.',
+                ], 403);
+            }
+
             $requestType = $leaveRequest->leaveType->request_type;
             $date = Carbon::now()->format('Y-m-d');
             $daysApproved =
@@ -221,6 +270,10 @@ class LeaveRequestController extends Controller
                     : $request->days_requested;
 
             $decision = $request->decision;
+
+            if ($decision === 'approved' && $leaveRequest->leaveType->requires_document && $leaveRequest->documents->isEmpty()) {
+                return response()->json(['message' => 'Supporting documents are required before this leave can be approved.'], 422);
+            }
 
             $daysApproved = $decision == 'approved' ? $daysApproved : 0;
             $leaveRequest->update([
@@ -320,6 +373,10 @@ class LeaveRequestController extends Controller
             $daysApproved = $this->leaveHelper->validateLeaveDays($request->start_date, $request->days_requested, $leaveRequest->leaveType->request_type);
 
             $decision = $request->decision;
+
+            if ($decision === 'approved' && $leaveRequest->leaveType->requires_document && $leaveRequest->documents->isEmpty()) {
+                return response()->json(['message' => 'Supporting documents are required before this leave can be approved.'], 422);
+            }
 
             $daysApproved = $decision == 'approved' ? $daysApproved : 0;
 
@@ -424,6 +481,53 @@ class LeaveRequestController extends Controller
         $leaveRequest->update(['status' => 'canceled']);
 
         return response()->json(new LeaveRequestResource($leaveRequest));
+    }
+
+    public function addDocuments(Request $request, string $uuid): JsonResponse
+    {
+        $request->validate([
+            'documents'   => 'required|array',
+            'documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+
+        $leaveRequest = LeaveRequest::where('uuid', $uuid)->firstOrFail();
+        $employee = Auth::user()->employee;
+
+        if ($employee->id !== $leaveRequest->employee_id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $currentCount = $leaveRequest->documents->count();
+        $maxDocuments = $leaveRequest->leaveType->max_documents;
+        $newFiles = $request->file('documents');
+
+        if ($currentCount + count($newFiles) > $maxDocuments) {
+            return response()->json([
+                'message' => "You can upload a maximum of {$maxDocuments} document(s). You already have {$currentCount}.",
+            ], 422);
+        }
+
+        foreach ($newFiles as $file) {
+            $path = $file->store("leave-documents/{$leaveRequest->uuid}", 's3');
+            $leaveRequest->documents()->create([
+                'file_name' => $file->getClientOriginalName(),
+                'file_path' => $path,
+                'mime_type' => $file->getMimeType(),
+            ]);
+        }
+
+        return response()->json(new LeaveRequestResource($leaveRequest->fresh()));
+    }
+
+    public function removeDocument(string $uuid, int $documentId): JsonResponse
+    {
+        $leaveRequest = LeaveRequest::where('uuid', $uuid)->firstOrFail();
+        $document = $leaveRequest->documents()->findOrFail($documentId);
+
+        Storage::disk('s3')->delete($document->file_path);
+        $document->delete();
+
+        return response()->json(new LeaveRequestResource($leaveRequest->fresh()));
     }
 
     /**
@@ -543,6 +647,7 @@ class LeaveRequestController extends Controller
             'hr_approved'
         ])
             ->whereDate('start_date', '>=', Carbon::today())
+            ->whereDate('end_date', '<=', Carbon::today())
             ->whereHas('employee', function ($query) use ($departmentId) {
                 $query->where('department_id', $departmentId);
             })
@@ -566,8 +671,10 @@ class LeaveRequestController extends Controller
         $upcomingLeaves = LeaveRequest::query()->with([
             'employee:id,uuid,first_name,middle_name,last_name,department_id,title,staff_id',
             'leaveType:id,name',
+            'resumption',
         ])->forDepartment($departmentId)
             ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
+            ->when($request->filled('resumption_status'), fn($q) => $q->whereHas('resumption', fn($r) => $r->where('status', $request->resumption_status)))
             ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search))
             ->orderByRaw("CASE WHEN status = 'pending' THEN 0 WHEN status = 'hod_approved' THEN 1 ELSE 2 END")
             ->latest()

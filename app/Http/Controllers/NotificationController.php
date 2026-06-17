@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class NotificationController extends Controller
@@ -46,14 +47,32 @@ class NotificationController extends Controller
      */
     public function getApprovals(Request $request): AnonymousResourceCollection
     {
-        $query = InformationUpdate::query();
+        $query = InformationUpdate::query()->orderByDesc('created_at');
 
-        $query->where('status', "Pending");
+        $status = $request->status ?? 'pending';
+        if ($status && $status !== 'all') {
+            $query->where('status', ucfirst($status));
+        }
 
-        $query->orderByDesc('created_at');
+        if ($type = $request->type) {
+            if ($type !== 'all') {
+                $query->where('type', $type);
+            }
+        }
+
+        if ($search = $request->search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('information_type', 'like', "%{$search}%")
+                    ->orWhereHas('requestedBy.employee', function ($q) use ($search) {
+                        $q->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('staff_id', 'like', "%{$search}%")
+                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) like ?", ["%{$search}%"]);
+                    });
+            });
+        }
 
         return InfoUpdateResource::collection($query->paginate($request->per_page ?? 10));
-
     }
 
 

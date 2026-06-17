@@ -48,10 +48,9 @@ class Helper
 
     public static function updateSRMS($staffId, $phone): void
     {
-        Log::info('osikani', [$staffId, $phone]);
         try {
-            Http::withHeader('token', env('TTU_API_TOKEN'))
-                ->post(env('TTU_API_URL') . '/staff/bio-data', [
+            Http::withHeader('token', config('ttu.token'))
+                ->post(config('ttu.url') . '/staff/bio-data', [
                     'staff_id' => $staffId,
                     'phone' => $phone,
                 ]);

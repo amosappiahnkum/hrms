@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Helpers\Helper;
+use App\Models\LeaveRequestDocument;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -39,6 +40,20 @@ class UpcomingLeaveResource extends JsonResource
                 "department" => $this->reliever->department->name,
                 'photo' => Helper::getTempPhoto($this->reliever->photo),
             ] : null,
+            "resumption" => $this->resumption ? [
+                'uuid'                  => $this->resumption->uuid,
+                'status'                => $this->resumption->status,
+                'employee_confirmed_at' => $this->resumption->employee_confirmed_at,
+                'hod_acknowledged_at'   => $this->resumption->hod_acknowledged_at,
+            ] : null,
+            "requires_document" => (bool) $this->leaveType->requires_document,
+            "max_documents" => (int) $this->leaveType->max_documents,
+            "documents" => $this->documents->map(fn(LeaveRequestDocument $doc) => [
+                'id'        => $doc->id,
+                'file_name' => $doc->file_name,
+                'mime_type' => $doc->mime_type,
+                'url'       => Helper::getTempUrl($doc->file_path),
+            ]),
         ];
     }
 }

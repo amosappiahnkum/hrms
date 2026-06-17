@@ -15,6 +15,8 @@ class LeaveType extends Model
         'name',
         'description',
         'request_type',
+        'requires_document',
+        'max_documents',
     ];
 
     /**

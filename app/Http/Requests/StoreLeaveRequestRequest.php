@@ -21,10 +21,16 @@ class StoreLeaveRequestRequest extends FormRequest
      *
      * @return array<string, mixed>
      */
-    public function rules()
+    public function rules(): array
     {
         return [
-            //
+            'leave_type_id'   => 'required|string',
+            'number_of_days'  => 'required|integer|min:1',
+            'start_date'      => 'required|date',
+            'reason'          => 'required|string',
+            'reliever_id'     => 'nullable|string',
+            'documents'       => 'nullable|array',
+            'documents.*'     => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
         ];
     }
 }

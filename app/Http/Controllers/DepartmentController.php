@@ -107,6 +107,18 @@ class DepartmentController extends Controller
                     ], 400);
                 }
 
+                // Strip hod role from previous HOD if they changed and they don't head another department
+                $previousHod = $department->headOfDepartment;
+                if ($previousHod && $previousHod->id !== $head->id) {
+                    $isHodElsewhere = Department::where('hod', $previousHod->id)
+                        ->where('id', '!=', $department->id)
+                        ->exists();
+
+                    if (!$isHodElsewhere && $previousHod->userAccount?->hasRole('hod')) {
+                        $previousHod->userAccount->removeRole('hod');
+                    }
+                }
+
                 // Update department HOD
                 $data['hod'] = $head->id;
 

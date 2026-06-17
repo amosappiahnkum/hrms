@@ -10,12 +10,13 @@ use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\LeaveRequestDocument;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class LeaveRequest extends Model
+class LeaveRequest extends AppModel
 {
-    use HasFactory, SoftDeletes, HasUuid, HasUserId;
+    use HasFactory, SoftDeletes, HasUserId;
 
     protected $fillable = [
         'employee_id',
@@ -93,6 +94,16 @@ class LeaveRequest extends Model
     public function approvals(): HasMany
     {
         return $this->hasMany(LeaveApproval::class);
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(LeaveRequestDocument::class);
+    }
+
+    public function resumption(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(LeaveResumption::class);
     }
 
     public function scopeForDepartment($query, ?int $departmentId)

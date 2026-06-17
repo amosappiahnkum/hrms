@@ -14,6 +14,7 @@ use App\Http\Controllers\InformationUpdateController;
 use App\Http\Controllers\LeaveAnalyticsController;
 use App\Http\Controllers\LeaveManagementController;
 use App\Http\Controllers\LeaveRequestController;
+use App\Http\Controllers\LeaveResumptionController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\QuickEmailController;
@@ -137,7 +138,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::middleware('feature:leave.enabled')->group(function () {
             Route::get('holidays', [LeaveRequestController::class, 'getHolidays']);
             Route::get('/who-is-out', [HomeController::class, 'getWhoIsOut']);
-            Route::post('/approvals', [NotificationController::class, 'getApprovals']);
+            Route::get('/approvals', [NotificationController::class, 'getApprovals']);
             Route::get('/supervisor/{employee}/pending-actions', [HomeController::class, 'getPendingApprovals']);
             Route::get('/my-team', [HomeController::class, 'getMyTeam']);
 
@@ -146,6 +147,14 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
                     Route::get('types', [LeaveRequestController::class, 'getLeaveTypes']);
                     Route::post('status/change', [LeaveRequestController::class, 'changeLeaveStatus']);
                     Route::post('{uuid}/cancel', [LeaveRequestController::class, 'cancelLeave']);
+                    Route::post('{uuid}/documents', [LeaveRequestController::class, 'addDocuments']);
+                    Route::delete('{uuid}/documents/{documentId}', [LeaveRequestController::class, 'removeDocument']);
+                    Route::post('{uuid}/resume', [LeaveResumptionController::class, 'confirm']);
+                });
+                Route::prefix('leave-resumptions')->group(function () {
+                    Route::get('pending', [LeaveResumptionController::class, 'checkPending']);
+                    Route::get('/', [LeaveResumptionController::class, 'pendingAcknowledgements']);
+                    Route::post('{uuid}/acknowledge', [LeaveResumptionController::class, 'acknowledge']);
                 });
                 Route::apiResource('/leave-requests', LeaveRequestController::class);
                 Route::get('my-leave-requests', [LeaveRequestController::class, 'getMyLeaveRequest']);

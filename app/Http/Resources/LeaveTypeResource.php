@@ -23,6 +23,8 @@ class LeaveTypeResource extends JsonResource
             'name' => $this->name,
             'type' => $this->request_type,
             'description' => $this->description,
+            'requires_document' => (bool) $this->requires_document,
+            'max_documents' => (int) $this->max_documents,
             'configs' => LeaveTypeLevelConfigResource::collection($this->leaveTypeLevelConfigs)
         ];
     }
