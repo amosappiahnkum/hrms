@@ -29,11 +29,15 @@ class ImportExcel extends Command
     {
         $this->output->title('Starting import');
 
-        $files = File::allFiles(public_path('data'));
+        $org  = config('kazi360.organization');
+        $file = database_path("seeders/organizations/{$org}_data.xlsx");
 
-        foreach ($files as $file) {
-            (new EmployeeImport)->withOutput($this->output)->import($file->getRealPath());
+        if (!file_exists($file)) {
+            $this->output->warning("Employee file not found: {$file}");
+            return;
         }
+
+        (new EmployeeImport)->withOutput($this->output)->import($file);
 
         $this->output->success('Import successful');
     }

@@ -125,6 +125,15 @@ class Controller extends BaseController
         return $this->hasRole('hod') || $this->can('approve-leave-request') || $this->can('decline-leave-request');
     }
 
+    /**
+     * All department IDs the authenticated employee has supervisory authority over —
+     * either as a direct department HOD or as the HOD of a section within a department.
+     */
+    protected function getManagedDepartmentIds(): \Illuminate\Support\Collection
+    {
+        return Department::where('hod', Auth::user()->employee->id)->pluck('id');
+    }
+
     public function isHrAdmin(): bool
     {
         return $this->hasRole('super-admin') || $this->hasRole('hr');

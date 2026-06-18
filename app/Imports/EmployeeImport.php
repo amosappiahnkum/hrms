@@ -61,6 +61,7 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
             'work_telephone' => $row['other_phone_number'] ?: '',
             'work_email' => $email ?: '',
             'other_email' => $row['personal_email'] ?: '',
+            'ghana_card_number' => $row['ghana_card_number'] ?: '',
             'user_id' => 1,
         ]);
 
@@ -76,11 +77,11 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
                 ->trim()
                 ->replace(' ', '')
                 ->lower();
-            $username = Str::before($cleanEmail, '@');
+//            $username = Str::before($cleanEmail, '@');
 
-            $user = User::updateOrcreate(['username' => $username], [
+            $user = User::updateOrcreate(['username' => $cleanEmail], [
                 'name' => $employee->name,
-                'username' => $username,
+                'username' => $cleanEmail,
                 'email' => $cleanEmail,
                 'password' => Hash::make('password'),
                 'phone_number' => $row['phone_number'] ?: '',

@@ -29,8 +29,10 @@ class ContactDetailResource extends JsonResource
             'work_telephone' => $this->work_telephone,
             'work_email' => $this->work_email,
             'other_email' => $this->other_email,
-            'nationality' => $this->nationality,
-            'info_update' => $this->informationUpdate,
+            'nationality'       => $this->nationality,
+            'digital_address'   => $this->digital_address,
+            'ghana_card_number' => $this->ghana_card_number,
+            'info_update'       => $this->informationUpdate,
         ];
     }
 }

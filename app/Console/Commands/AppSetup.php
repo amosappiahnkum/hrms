@@ -34,6 +34,7 @@ class AppSetup extends Command
     public function handle(): int
     {
         try {
+            $email  = config('kazi360.system_user');
             $this->output->title('Application Setup Started');
 
             $this->output->title('Applying migrations');
@@ -43,10 +44,11 @@ class AppSetup extends Command
 
             $user->uuid = Str::uuid()->toString();
             $user->name = 'System User';
-            $user->username = 'system.user';
+            $user->username = $email;
             $user->password = Hash::make(Str::random());
-            $user->email = 'system.user@gmail.com';
+            $user->email = $email;
             $user->save();
+
             $this->output->title('Seeding data');
             Artisan::call('db:seed');
 

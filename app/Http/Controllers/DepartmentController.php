@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class DepartmentController extends Controller
 {
@@ -23,15 +24,32 @@ class DepartmentController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $departments = Department::query();
+        $departments = Department::withCount('children');
 
         if ($request->filled('search')) {
-            $search = $request->query('search');
-            $departments->where(function ($query) use ($search) {
-                $query->where('name', 'LIKE', "%{$search}%");
-            });
+            $departments->where('name', 'LIKE', "%{$request->query('search')}%");
         }
+
+        if ($request->filled('parent_id')) {
+            if ($request->parent_id === 'root') {
+                $departments->whereNull('parent_department_id');
+            } else {
+                $departments->whereHas('parent', fn($q) => $q->where('uuid', $request->parent_id));
+            }
+        }
+
         return DepartmentResource::collection($departments->paginate($request->per_page ?? 10));
+    }
+
+    public function searchDepartments(Request $request): AnonymousResourceCollection
+    {
+        $departments = Department::query();
+
+        if ($request->filled('query')) {
+            $departments->where('name', 'LIKE', "%{$request->query('query')}%");
+        }
+
+        return DepartmentResource::collection($departments->paginate(10));
     }
 
     /**
@@ -55,27 +73,6 @@ class DepartmentController extends Controller
         //
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param Department $department
-     * @return Response
-     */
-    public function show(Department $department)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param Department $department
-     * @return Response
-     */
-    public function edit(Department $department)
-    {
-        //
-    }
 
     /**
      * Update the specified resource in storage.
@@ -83,7 +80,7 @@ class DepartmentController extends Controller
      * @param UpdateDepartmentRequest $request
      * @param string $uuid
      * @return DepartmentResource|JsonResponse
-     * @throws \Throwable
+     * @throws Throwable
      */
     public function update(UpdateDepartmentRequest $request, string $uuid)
     {
@@ -92,6 +89,16 @@ class DepartmentController extends Controller
         try {
             $department = Department::where('uuid', $uuid)->firstOrFail();
             $data = $request->validated();
+
+            // Resolve parent department UUID → ID
+            if (!empty($data['parent_department_id'])) {
+                $parent = Department::where('uuid', $data['parent_department_id'])
+                    ->where('id', '!=', $department->id)
+                    ->firstOrFail();
+                $data['parent_department_id'] = $parent->id;
+            } else {
+                $data['parent_department_id'] = null;
+            }
 
             // Only process HOD if provided in request
             if (!empty($request->hod)) {
@@ -137,7 +144,7 @@ class DepartmentController extends Controller
 
             DB::commit();
 
-            return new DepartmentResource($department->fresh());
+            return new DepartmentResource($department->fresh()->loadCount('children'));
 
         } catch (\Exception $exception) {
             DB::rollBack();

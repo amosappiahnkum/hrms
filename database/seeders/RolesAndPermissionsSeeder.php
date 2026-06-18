@@ -23,6 +23,7 @@ class RolesAndPermissionsSeeder extends Seeder
     {
         // Reset cached roles and permissions
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
+        $email  = config('kazi360.system_user');
         $permissions = json_decode(file_get_contents(database_path('seed-data/roles-and-permissions.json')),
             false, 512, JSON_THROW_ON_ERROR);
 
@@ -65,7 +66,7 @@ class RolesAndPermissionsSeeder extends Seeder
         }
         $superAdminRole->givePermissionTo(Permission::all());
 
-        $user = User::query()->where('username', 'system.user')->first();
+        $user = User::query()->where('username', $email)->first();
         $user?->assignRole($superAdminRole);
     }
 }

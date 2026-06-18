@@ -27,6 +27,8 @@ class ContactDetail extends ApplicationModel
         'city',
         'region',
         'zip_code',
+        'digital_address',
+        'ghana_card_number',
         'country',
         'telephone',
         'work_telephone',
@@ -48,7 +50,9 @@ class ContactDetail extends ApplicationModel
             'work_telephone' => ['show_in_diff' => true],
             'work_email' => ['show_in_diff' => true],
             'other_email' => ['show_in_diff' => true],
-            'nationality' => ['show_in_diff' => true]
+            'nationality'       => ['show_in_diff' => true],
+            'digital_address'   => ['show_in_diff' => true],
+            'ghana_card_number' => ['show_in_diff' => true]
         ];
     }
 

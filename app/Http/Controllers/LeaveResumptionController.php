@@ -105,8 +105,13 @@ class LeaveResumptionController extends Controller
             return response()->json([]);
         }
 
+        $departmentIds = $this->getManagedDepartmentIds();
+
         $resumptions = LeaveResumption::where('status', 'pending_hod')
-            ->whereHas('leaveRequest', fn($q) => $q->where('department_id', $hod->department_id))
+            ->whereHas('leaveRequest', fn($q) => $q
+                ->whereIn('department_id', $departmentIds)
+                ->whereDate('end_date', '<=', Carbon::today())
+            )
             ->with(['leaveRequest.employee', 'leaveRequest.leaveType'])
             ->get()
             ->map(fn($r) => [
@@ -136,8 +141,8 @@ class LeaveResumptionController extends Controller
 
         $leaveRequest = $resumption->leaveRequest;
 
-        if ($leaveRequest->department_id !== $hod->department_id) {
-            return response()->json(['message' => 'You can only acknowledge resumptions for your own department.'], 403);
+        if (!$this->getManagedDepartmentIds()->contains($leaveRequest->department_id)) {
+            return response()->json(['message' => 'You can only acknowledge resumptions for your managed departments.'], 403);
         }
 
         $resumption->update([

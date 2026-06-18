@@ -255,8 +255,7 @@ class LeaveRequestController extends Controller
         try {
             $leaveRequest = LeaveRequest::where('uuid', $request->id)->first();
 
-            $hodDepartmentId = Auth::user()->employee->department_id;
-            if ($leaveRequest->department_id !== $hodDepartmentId) {
+            if (!$this->getManagedDepartmentIds()->contains($leaveRequest->department_id)) {
                 return response()->json([
                     'message' => 'You can only approve leave requests for employees in your department.',
                 ], 403);
@@ -666,13 +665,13 @@ class LeaveRequestController extends Controller
             ], 403);
         }
 
-        $departmentId = auth()->user()->employee->department_id;
+        $departmentIds = $this->getManagedDepartmentIds();
 
         $upcomingLeaves = LeaveRequest::query()->with([
             'employee:id,uuid,first_name,middle_name,last_name,department_id,title,staff_id',
             'leaveType:id,name',
             'resumption',
-        ])->forDepartment($departmentId)
+        ])->whereIn('department_id', $departmentIds)
             ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
             ->when($request->filled('resumption_status'), fn($q) => $q->whereHas('resumption', fn($r) => $r->where('status', $request->resumption_status)))
             ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search))

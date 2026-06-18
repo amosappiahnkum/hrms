@@ -33,8 +33,10 @@ class UpdateContactDetailRequest extends FormRequest
             'region' => 'nullable|string',
             'telephone' => 'nullable|string',
             'work_email' => 'nullable|email',
-            'work_telephone' => 'nullable|string',
-            'employee_uuid' => 'required|string|exists:employees,uuid',
+            'work_telephone'    => 'nullable|string',
+            'digital_address'   => 'nullable|string|max:20',
+            'ghana_card_number' => 'nullable|string|max:20',
+            'employee_uuid'     => 'required|string|exists:employees,uuid',
             'employee_id' => 'sometimes|exists:employees,id',
         ];
     }

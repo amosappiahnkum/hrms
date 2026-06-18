@@ -116,6 +116,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
             Route::post('{uuid}/restore', [UserManagementController::class, 'restore']);
         });
 
+        Route::get('departments/search', [DepartmentController::class, 'searchDepartments']);
         Route::apiResource('departments', DepartmentController::class);
 
         // Employees

@@ -15,16 +15,26 @@ class Department extends ApplicationModel
     use HasFactory, SoftDeletes, HasUuid;
 
     protected $fillable = [
-      'name', 'user_id', 'hod'
+        'name', 'user_id', 'hod', 'parent_department_id',
     ];
 
     protected $casts = [
-      'id' => 'integer'
+        'id' => 'integer',
     ];
 
     public function headOfDepartment(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'hod');
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Department::class, 'parent_department_id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(Department::class, 'parent_department_id');
     }
 
     public function employees(): HasMany
