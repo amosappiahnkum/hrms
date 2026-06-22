@@ -21,6 +21,11 @@ class ApplicationModel extends Model
         });
     }
 
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

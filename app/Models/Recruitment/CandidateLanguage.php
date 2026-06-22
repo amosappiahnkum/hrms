@@ -17,11 +17,6 @@ class CandidateLanguage extends Model
         'proficiency',
     ];
 
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
     public function candidate(): BelongsTo
     {
         return $this->belongsTo(Candidate::class);

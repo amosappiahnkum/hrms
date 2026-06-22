@@ -30,11 +30,6 @@ class JobOffer extends ApplicationModel
         'salary'     => 'decimal:2',
     ];
 
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
     public function application(): BelongsTo
     {
         return $this->belongsTo(Application::class);

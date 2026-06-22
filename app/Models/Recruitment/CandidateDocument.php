@@ -2,12 +2,12 @@
 
 namespace App\Models\Recruitment;
 
+use App\Models\ApplicationModel;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class CandidateDocument extends Model
+class CandidateDocument extends ApplicationModel
 {
     use HasFactory, HasUuid;
 
@@ -19,11 +19,6 @@ class CandidateDocument extends Model
         'mime_type',
         'size',
     ];
-
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
 
     public function candidate(): BelongsTo
     {

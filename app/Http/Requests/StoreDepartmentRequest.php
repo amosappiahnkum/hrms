@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests;
 
+use Auth;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class StoreDepartmentRequest extends FormRequest
 {
@@ -11,9 +14,9 @@ class StoreDepartmentRequest extends FormRequest
      *
      * @return bool
      */
-    public function authorize()
+    public function authorize(): bool
     {
-        return false;
+        return Auth::user()->hasAnyRole(['admin', 'super-admin', 'hr']);
     }
 
     /**
@@ -21,10 +24,12 @@ class StoreDepartmentRequest extends FormRequest
      *
      * @return array<string, mixed>
      */
-    public function rules()
+    public function rules(): array
     {
         return [
-            //
+            'name' => ['nullable', 'string', Rule::unique('departments')],
+            'hod' => ['nullable', 'string', 'exists:employees,uuid'],
+            'parent_department_id' => ['nullable', 'string', 'exists:departments,uuid'],
         ];
     }
 }

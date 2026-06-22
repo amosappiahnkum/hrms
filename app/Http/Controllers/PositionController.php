@@ -37,6 +37,15 @@ class PositionController extends Controller
 
     public function destroy(Position $position): JsonResponse
     {
+        $totalEmployees = $position->jobDetails()->count();
+
+        if ($totalEmployees > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => "You can't delete this position because it has employees."
+            ], 400);
+        }
+
         $uuid = $position->uuid;
         $position->delete();
 

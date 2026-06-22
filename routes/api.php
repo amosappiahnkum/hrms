@@ -121,7 +121,6 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
             Route::post('{uuid}/suspend', [UserManagementController::class, 'suspend']);
             Route::post('{uuid}/restore', [UserManagementController::class, 'restore']);
         });
-
         Route::get('departments/search', [DepartmentController::class, 'searchDepartments']);
         Route::apiResource('departments', DepartmentController::class);
         Route::apiResource('positions', PositionController::class)->except(['create', 'edit', 'show']);

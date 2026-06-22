@@ -125,7 +125,7 @@ class Employee extends AppModel
      */
     public function rank(): BelongsTo
     {
-        return $this->belongsTo(Rank::class)->withDefault(['name' => '-']);
+        return $this->belongsTo(Rank::class);
     }
 
     /**

@@ -55,11 +55,6 @@ class Candidate extends Authenticatable
             ->dontSubmitEmptyLogs();
     }
 
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
     public function getNameAttribute(): string
     {
         return $this->first_name . ' ' . $this->last_name;

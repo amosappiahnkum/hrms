@@ -21,7 +21,7 @@ class MiniEmployeeResource extends JsonResource
             'department' => $this->department?->name,
             'staff_id' => $this->staff_id,
             'display_picture' => Helper::getTempPhoto($this?->photo),
-            'rank' => $this->rank->name,
+            'rank' => $this->rank?->name,
         ];
     }
 }

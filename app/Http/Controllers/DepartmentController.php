@@ -7,11 +7,13 @@ use App\Http\Requests\UpdateDepartmentRequest;
 use App\Http\Resources\DepartmentResource;
 use App\Models\Config\Department;
 use App\Models\SelfService\Employee;
+use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class DepartmentController extends Controller
@@ -53,24 +55,78 @@ class DepartmentController extends Controller
     }
 
     /**
-     * Show the form for creating a new resource.
-     *
-     * @return Response
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
      * Store a newly created resource in storage.
      *
      * @param StoreDepartmentRequest $request
-     * @return Response
+     * @return DepartmentResource|JsonResponse
+     * @throws Throwable
      */
     public function store(StoreDepartmentRequest $request)
     {
-        //
+        DB::beginTransaction();
+
+        try {
+
+            $data = $request->validated();
+
+            // Resolve parent department UUID → ID
+            if (!empty($data['parent_department_id'])) {
+                $parent = Department::where('uuid', $data['parent_department_id'])
+                    ->firstOrFail();
+
+                $data['parent_department_id'] = $parent->id;
+            } else {
+                $data['parent_department_id'] = null;
+            }
+
+            $head = null;
+
+            // Resolve HOD if provided
+            if (!empty($request->hod)) {
+
+                $head = Employee::where('uuid', $request->hod)->firstOrFail();
+
+                // Employee must have a user account
+                if (empty($head->userAccount)) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => "{$head->name} must login to complete their profile before being assigned as HOD."
+                    ], 400);
+                }
+
+                $data['hod'] = $head->id;
+            }
+
+            // Create department
+            $department = Department::create($data);
+
+            // Assign employee to department and HOD role
+            if ($head) {
+
+                $head->update([
+                    'department_id' => $department->id
+                ]);
+
+                if (!$head->userAccount->hasRole('hod')) {
+                    $head->userAccount->assignRole('hod');
+                }
+            }
+
+            DB::commit();
+
+            return new DepartmentResource($department->fresh()->loadCount('children'));
+
+        } catch (Exception $exception) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $exception->getMessage()
+            ], 400);
+        }
     }
 
 
@@ -87,7 +143,9 @@ class DepartmentController extends Controller
         DB::beginTransaction();
 
         try {
+
             $department = Department::where('uuid', $uuid)->firstOrFail();
+
             $data = $request->validated();
 
             // Resolve parent department UUID → ID
@@ -146,7 +204,7 @@ class DepartmentController extends Controller
 
             return new DepartmentResource($department->fresh()->loadCount('children'));
 
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             DB::rollBack();
 
             return response()->json([
@@ -160,10 +218,24 @@ class DepartmentController extends Controller
      * Remove the specified resource from storage.
      *
      * @param Department $department
-     * @return Response
+     * @return JsonResponse
      */
     public function destroy(Department $department)
     {
-        //
+        $totalEmployees = $department->employees()->count();
+
+        if ($totalEmployees > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => "You can't delete this department because it has employees."
+            ], 400);
+        }
+
+        $uuid = $department->uuid;
+
+
+        $department->delete();
+
+        return response()->json(['id' => $uuid]);
     }
 }

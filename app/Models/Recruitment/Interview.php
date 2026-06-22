@@ -34,11 +34,6 @@ class Interview extends ApplicationModel
         'scheduled_at' => 'datetime',
     ];
 
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
     public function application(): BelongsTo
     {
         return $this->belongsTo(Application::class);

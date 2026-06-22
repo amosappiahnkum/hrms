@@ -37,11 +37,6 @@ class JobOpening extends ApplicationModel
         'salary_max' => 'decimal:2',
     ];
 
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
     public function position(): BelongsTo
     {
         return $this->belongsTo(Position::class);

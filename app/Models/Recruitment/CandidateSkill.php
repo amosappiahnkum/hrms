@@ -17,11 +17,6 @@ class CandidateSkill extends Model
         'level',
     ];
 
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
     public function candidate(): BelongsTo
     {
         return $this->belongsTo(Candidate::class);
