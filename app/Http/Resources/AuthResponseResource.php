@@ -60,6 +60,7 @@ class AuthResponseResource extends JsonResource
             'password_changed' => $this->password_changed == 1,
             'roles' => $this->getRoleNames(),
             'permissions' => $this->getPermissionsViaRoles()->pluck('name')->merge($this->getDirectPermissions()->pluck('name')),
+            'user_type' => $this->hasRole('super-admin') ? 'super_admin' : 'employee',
             'settings' => self::loadSettings(),
         ];
     }

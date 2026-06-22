@@ -4,83 +4,42 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePositionRequest;
 use App\Http\Requests\UpdatePositionRequest;
+use App\Http\Resources\PositionResource;
 use App\Models\Position;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class PositionController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function index()
+    public function index(Request $request): AnonymousResourceCollection
     {
-        //
+        $positions = Position::withCount('jobDetails')
+            ->when($request->filled('search'), fn($q) => $q->where('name', 'LIKE', "%{$request->search}%"))
+            ->paginate($request->per_page ?? 10);
+
+        return PositionResource::collection($positions);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function create()
+    public function store(StorePositionRequest $request): PositionResource
     {
-        //
+        $position = Position::create($request->validated());
+
+        return new PositionResource($position->loadCount('jobDetails'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \App\Http\Requests\StorePositionRequest  $request
-     * @return \Illuminate\Http\Response
-     */
-    public function store(StorePositionRequest $request)
+    public function update(UpdatePositionRequest $request, Position $position): PositionResource
     {
-        //
+        $position->update($request->validated());
+
+        return new PositionResource($position->fresh()->loadCount('jobDetails'));
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param  \App\Models\Position  $position
-     * @return \Illuminate\Http\Response
-     */
-    public function show(Position $position)
+    public function destroy(Position $position): JsonResponse
     {
-        //
-    }
+        $uuid = $position->uuid;
+        $position->delete();
 
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  \App\Models\Position  $position
-     * @return \Illuminate\Http\Response
-     */
-    public function edit(Position $position)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param  \App\Http\Requests\UpdatePositionRequest  $request
-     * @param  \App\Models\Position  $position
-     * @return \Illuminate\Http\Response
-     */
-    public function update(UpdatePositionRequest $request, Position $position)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param  \App\Models\Position  $position
-     * @return \Illuminate\Http\Response
-     */
-    public function destroy(Position $position)
-    {
-        //
+        return response()->json(['id' => $uuid]);
     }
 }

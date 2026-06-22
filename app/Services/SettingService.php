@@ -61,6 +61,35 @@ class SettingService
         return $setting;
     }
 
+    /**
+     * Insert a setting only if the key does not already exist.
+     * Safe to call repeatedly — never overwrites a customised value.
+     */
+    public function setDefault(
+        string  $key,
+        mixed   $value,
+        ?string $group = null,
+        ?string $description = null,
+        bool    $isPublic = false
+    ): Setting
+    {
+        $setting = Setting::firstOrCreate(
+            ['key' => $key],
+            [
+                'value'       => $value,
+                'group'       => $group,
+                'description' => $description,
+                'is_public'   => $isPublic,
+            ]
+        );
+
+        if ($setting->wasRecentlyCreated) {
+            $this->refreshCache();
+        }
+
+        return $setting;
+    }
+
     public function group(
         string $group
     ): Collection

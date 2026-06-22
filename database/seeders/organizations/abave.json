@@ -1,0 +1,32 @@
+{
+    "company.name": "Abave Inspection Gh. Ltd",
+    "company.abbreviation": "Abave",
+    "company.tagline": "Innovative inspections with integrity",
+    "company.founded": "2009",
+    "company.logo_url": "logo.png",
+    "company.about": "AI is a wholly - owned Ghanaian company providing services in the upstream Oil and Gas industry as well as mining, construction, manufacturing and fabrication industries. Abave Inspections Gh Ltd, has been present in the country since 2009 with the general objective to broaden its implantation in Africa and to increase its presence within the petroleum sector. AI is a wholly - owned Ghanaian company providing services in the upstream Oil and Gas industry as well as mining, construction, manufacturing and fabrication industries. Our priority is to become the preferred Ghanaian third party inspections company with efficient solutions that meet specifications on budget and are in compliance with operating and environmental regulations. ",
+    "company.mission": "Acting as trusted partner to make the world safer, more sustainable and source of shared progress. We are committed to delivering exceptional QHSE solutions that protect people, assets, and the environment while driving operational excellence.",
+    "company.vision": "Be THE benchmark partner that helps you manage your risks on a daily basis and allows you to combine safety and performance at all stages of your projects. We aim to set the global standard for QHSE consulting through innovation, expertise, and measurable results.",
+    "company.core_values": [
+    ],
+    "company.stats": [
+        {
+            "label": "Total Staff",
+            "value": "190+"
+        },
+        {
+            "label": "Departments",
+            "value": "9"
+        },
+        {
+            "label": "Years of Excellence",
+            "value": "15+"
+        }
+    ],
+    "company.contact": {
+        "address": "Nikola Tesla Drive, Off-Takoradi Elubo Highway",
+        "phone": "+233 541 769 491",
+        "email": "admin@inspectionsgh.comh",
+        "website": "https://inspectionsgh.com"
+    }
+}

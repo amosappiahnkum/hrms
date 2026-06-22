@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ImpersonationController;
 use App\Http\Controllers\CommonController;
 use App\Http\Controllers\UserSettingsController;
 use App\Http\Controllers\CommunityServiceController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\PositionController;
 use App\Http\Controllers\DirectReportController;
 use App\Http\Controllers\EmployeeAnalyticsController;
 use App\Http\Controllers\EmployeeController;
@@ -78,6 +80,10 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
         Route::get('/me', [AuthController::class, 'me'])->name('api.me');
         Route::post('/validate-auth', [AuthController::class, 'validateAuth'])->name('api.validate-auth');
 
+        // Impersonation (super-admin only)
+        Route::post('/auth/impersonate', [ImpersonationController::class, 'impersonate']);
+        Route::post('/auth/stop-impersonating', [ImpersonationController::class, 'stopImpersonating']);
+
         // Features management
         Route::get('features', [SettingController::class, 'indexFeatures']);
         Route::patch('features/{key}', [SettingController::class, 'updateFeature'])->where('key', '.+');
@@ -118,6 +124,7 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
 
         Route::get('departments/search', [DepartmentController::class, 'searchDepartments']);
         Route::apiResource('departments', DepartmentController::class);
+        Route::apiResource('positions', PositionController::class)->except(['create', 'edit', 'show']);
 
         // Employees
         Route::middleware('feature:employees.enabled')->group(function () {
