@@ -282,7 +282,8 @@ class EmployeeController extends Controller
 
             DB::commit();
 
-            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->work_telephone);
+//            todo: make dynamic
+//            Helper::updateSRMS($request->staff_id, $employee?->contactDetail?->work_telephone);
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
             Log::error('Update Employee Error', ['error' => $exception]);
