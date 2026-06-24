@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ContactDetailController;
+use App\Http\Controllers\EmployeeAnalyticsController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\SelfService\AchievementController;
 use App\Http\Controllers\SelfService\AffiliationController;
@@ -14,6 +15,15 @@ use Illuminate\Support\Facades\Route;
 
 // Core employee resource
 Route::middleware('feature:employees.enabled')->group(function () {
+    Route::get('employee-analytics', [EmployeeAnalyticsController::class, 'index']);
+    Route::get('/people', [EmployeeController::class, 'getPeople']);
+    Route::get('search-staff-id', [EmployeeController::class, 'getStaff']);
+    Route::post('update-mail', [EmployeeController::class, 'updateStaffMail']);
+    Route::middleware('feature:employees.termination')
+        ->post('/terminate-employee', [EmployeeController::class, 'terminateEmployee']);
+    Route::middleware('feature:employees.photo_upload')
+        ->post('upload-photo', [EmployeeController::class, 'uploadPhoto']);
+
     Route::get('/my-colleagues', [EmployeeController::class, 'getMyTeam']);
     Route::get('/org-colleagues', [EmployeeController::class, 'getEmployeeDirectory']);
 
@@ -25,6 +35,8 @@ Route::middleware('feature:employees.enabled')->group(function () {
 
         Route::get('/{employee}/contact', [ContactDetailController::class, 'show']);
         Route::put('/{employee}/contact', [ContactDetailController::class, 'update']);
+
+        Route::get('/{employee}/stats', [EmployeeController::class, 'employeeStats']);
 
         Route::get('/{employee}/job-detail', [JobDetailController::class, 'show']);
         Route::put('/{employee}/job-detail', [JobDetailController::class, 'update']);

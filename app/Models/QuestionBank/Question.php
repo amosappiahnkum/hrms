@@ -3,21 +3,22 @@
 namespace App\Models\QuestionBank;
 
 use App\Enums\QuestionType;
-use App\Models\AppModel;
+use App\Models\ApplicationModel;
+use App\Traits\HasUserId;
+use App\Traits\HasUuid;
 use Database\Factories\QuestionBank\QuestionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
-class Question extends AppModel
+class Question extends ApplicationModel
 {
     /** @use HasFactory<QuestionFactory> */
-    use HasFactory;
+    use HasFactory, HasUuid, HasUserId;
 
     protected $fillable = [
-        'category_id',
+        'question_category_id',
+        'uuid',
         'type',
         'text',
         'description',
@@ -25,6 +26,9 @@ class Question extends AppModel
         'is_required',
         'is_active',
         'order',
+        'depends_on_question_id',
+        'show_when_value',
+        'user_id',
     ];
 
     protected $casts = [
@@ -37,12 +41,15 @@ class Question extends AppModel
 
     protected $with = ['options'];
 
-    /**
-     * Category relationship
-     */
-    public function category(): BelongsTo
+    public function questionCategory(): BelongsTo
     {
         return $this->belongsTo(QuestionCategory::class);
+    }
+
+    /** The question this one depends on (nullable). */
+    public function dependsOn(): BelongsTo
+    {
+        return $this->belongsTo(Question::class, 'depends_on_question_id');
     }
 
     /**
@@ -108,7 +115,7 @@ class Question extends AppModel
      */
     public function scopeInCategory($query, int $categoryId)
     {
-        return $query->where('category_id', $categoryId);
+        return $query->where('question_category_id', $categoryId);
     }
 
     /**

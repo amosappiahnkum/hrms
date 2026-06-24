@@ -38,7 +38,7 @@ class QuestionCategory extends AppModel
     /**
      * Child categories relationship
      */
-    public function children(): HasMany
+    public function subCategories(): HasMany
     {
         return $this->hasMany(QuestionCategory::class, 'parent_id');
     }

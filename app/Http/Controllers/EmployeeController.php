@@ -97,13 +97,7 @@ class EmployeeController extends Controller
         $employeesQuery = Employee::query();
 
         if ($request->filled('search')) {
-            $search = $request->query('search');
-            $employeesQuery->where(function ($query) use ($search) {
-                $query->where('first_name', 'LIKE', "%{$search}%")
-                    ->orWhere('last_name', 'LIKE', "%{$search}%")
-                    ->orWhere('middle_name', 'LIKE', "%{$search}%")
-                    ->orWhere('staff_id', 'LIKE', "%{$search}%");
-            });
+            $employeesQuery->search($request->search);
         }
 
         if ($request->filled('department') && $request->department !== 'all') {
@@ -193,11 +187,8 @@ class EmployeeController extends Controller
 
     public function searchEmployees(Request $request): AnonymousResourceCollection
     {
-        $query = $request->query('query');
         $employees = Employee::query()
-            ->where('last_name', 'like', '%' . $query . '%')
-            ->orWhere('middle_name', 'like', '%' . $query . '%')
-            ->orWhere('first_name', 'like', '%' . $query . '%');
+            ->search($request->query('query'));
 
         if ($request->filled('slim')) {
             return MiniEmployeeResource::collection($employees->paginate(10));
@@ -382,13 +373,6 @@ class EmployeeController extends Controller
             'success' => true,
             'data' => $result,
         ]);
-    }
-
-    public function getPhoto($fileName, MinioUploadService $minio)
-    {
-        $name = $minio->getFile($fileName);
-
-        return response($name, 200)->header('Content-Type', 'image/jpeg');
     }
 
     public function onboardEmployee(Request $request)

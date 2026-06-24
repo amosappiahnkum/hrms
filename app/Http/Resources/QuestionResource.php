@@ -32,12 +32,16 @@ class QuestionResource extends JsonResource
             'order' => $this->order,
 
             'category' => QuestionCategoryResource::make(
-                $this->whenLoaded('category')
+                $this->whenLoaded('questionCategory')
             ),
 
             'options' => QuestionOptionResource::collection(
                 $this->whenLoaded('options')
             ),
+
+            // Conditional display — null means always show
+            'depends_on_uuid'  => $this->dependsOn?->uuid,
+            'show_when_value'  => $this->show_when_value,
 
             'created_at' => $this->created_at,
         ];

@@ -90,5 +90,12 @@ services:
     env_file:
       - .env
 
+  hrms_gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    container_name: hrms_gotenberg
+    networks:
+      - hrms_app_network
+
 networks:
   hrms_app_network:

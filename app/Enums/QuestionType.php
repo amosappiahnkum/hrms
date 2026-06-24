@@ -31,11 +31,11 @@ enum QuestionType: string
     {
         return match($this) {
             self::RATING => [
-                ['option_text' => '1 - Poor', 'option_value' => '1', 'order' => 1],
-                ['option_text' => '2 - Fair', 'option_value' => '2', 'order' => 2],
-                ['option_text' => '3 - Good', 'option_value' => '3', 'order' => 3],
-                ['option_text' => '4 - Very Good', 'option_value' => '4', 'order' => 4],
-                ['option_text' => '5 - Excellent', 'option_value' => '5', 'order' => 5],
+                ['option_text' => 'Poor', 'option_value' => '1', 'order' => 1],
+                ['option_text' => 'Fair', 'option_value' => '2', 'order' => 2],
+                ['option_text' => 'Good', 'option_value' => '3', 'order' => 3],
+                ['option_text' => 'Very Good', 'option_value' => '4', 'order' => 4],
+                ['option_text' => 'Excellent', 'option_value' => '5', 'order' => 5],
             ],
             self::YES_NO => [
                 ['option_text' => 'Yes', 'option_value' => '1', 'order' => 1],

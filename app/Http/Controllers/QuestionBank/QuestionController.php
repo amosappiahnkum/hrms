@@ -16,11 +16,13 @@ class QuestionController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Question::with(['category', 'options']);
+        $query = Question::with(['questionCategory', 'options', 'dependsOn']);
 
-        // Filter by category
-        if ($request->has('category_id')) {
-            $query->where('category_id', $request->category_id);
+        // Filter by category — frontend sends UUID, resolve to PK
+        if ($request->filled('category_id')) {
+            $query->whereHas('questionCategory', fn ($q) =>
+                $q->where('uuid', $request->category_id)
+            );
         }
 
         // Filter by type
@@ -55,7 +57,7 @@ class QuestionController extends Controller
     public function store(StoreQuestionRequest $request): JsonResponse
     {
         $question = Question::create($request->only([
-            'category_id',
+            'question_category_id',
             'type',
             'text',
             'description',
@@ -63,6 +65,8 @@ class QuestionController extends Controller
             'is_required',
             'is_active',
             'order',
+            'depends_on_question_id',
+            'show_when_value',
         ]));
 
         // Create options if provided
@@ -72,7 +76,7 @@ class QuestionController extends Controller
             }
         }
 
-        $question->load(['category', 'options']);
+        $question->load(['questionCategory', 'options']);
         return ApiResponse::success(QuestionResource::make($question));
     }
 
@@ -81,7 +85,7 @@ class QuestionController extends Controller
      */
     public function show(Question $question): JsonResponse
     {
-        $question->load(['category', 'options']);
+        $question->load(['questionCategory', 'options']);
         return ApiResponse::success(QuestionResource::make($question));
     }
 
@@ -91,7 +95,7 @@ class QuestionController extends Controller
     public function update(UpdateQuestionRequest $request, Question $question): JsonResponse
     {
         $question->update($request->only([
-            'category_id',
+            'question_category_id',
             'type',
             'text',
             'description',
@@ -99,6 +103,8 @@ class QuestionController extends Controller
             'is_required',
             'is_active',
             'order',
+            'depends_on_question_id',
+            'show_when_value',
         ]));
 
         // Update options

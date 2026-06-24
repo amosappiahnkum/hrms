@@ -16,13 +16,9 @@ class QuestionOptionResource extends JsonResource
     {
         return [
             'uuid' => $this->uuid,
-
             'option_text' => $this->option_text,
-
             'option_value' => $this->option_value,
-
             'order' => $this->order,
-
             'created_at' => $this->created_at,
         ];
     }

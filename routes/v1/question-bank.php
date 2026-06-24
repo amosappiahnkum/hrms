@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('feature:question_bank.enabled')->group(function () {
     Route::apiResource('question-categories', QuestionCategoryController::class);
-    Route::apiResource('questions', QuestionController::class);
-    Route::apiResource('question-options', QuestionOptionController::class);
     Route::post('questions/reorder', [QuestionController::class, 'reorder']);
+    Route::apiResource('questions', QuestionController::class);
     Route::post('questions/{question}/toggle-active', [QuestionController::class, 'toggleActive']);
+    Route::apiResource('question-options', QuestionOptionController::class);
 });

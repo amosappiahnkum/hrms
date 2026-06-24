@@ -35,4 +35,12 @@ return [
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('APP_URL') . '/auth/google/callback',
     ],
+
+    'slack' => [
+        'support_webhook' => env('SLACK_SUPPORT_WEBHOOK_URL'),
+    ],
+
+    'gotenberg' => [
+        'url' => env('GOTENBERG_URL', 'http://hrms_gotenberg:3000'),
+    ],
 ];

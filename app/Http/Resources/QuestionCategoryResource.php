@@ -16,18 +16,11 @@ class QuestionCategoryResource extends JsonResource
     {
         return [
             'uuid' => $this->uuid,
-
             'name' => $this->name,
             'description' => $this->description,
-
             'is_active' => $this->is_active,
-
             'parent' => self::make($this->whenLoaded('parent')),
-
-            'children' => self::collection(
-                $this->whenLoaded('children')
-            ),
-
+            'subCategories' => self::collection($this->whenLoaded('subCategories')),
             'created_at' => $this->created_at,
         ];
     }

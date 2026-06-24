@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\QuestionType;
+use App\Models\QuestionBank\QuestionCategory;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
@@ -24,10 +25,9 @@ class StoreQuestionRequest extends FormRequest
      */
     public function rules(): array
     {
-        $questionId = $this->route('question')?->id;
-
         return [
-            'category_id' => ['nullable', 'exists:categories,id'],
+            'category_uuid' => ['nullable', 'exists:question_categories,uuid'],
+            'question_category_id' => 'sometimes|exists:question_categories,id',
             'type' => ['required', new Enum(QuestionType::class)],
             'text' => ['required', 'string', 'max:1000'],
             'description' => ['nullable', 'string', 'max:2000'],
@@ -35,6 +35,10 @@ class StoreQuestionRequest extends FormRequest
             'is_required' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
             'order' => ['nullable', 'integer', 'min:0'],
+
+            // Conditional display
+            'depends_on_uuid'  => ['nullable', 'exists:questions,uuid'],
+            'show_when_value'  => ['nullable', 'string', 'max:255', 'required_with:depends_on_uuid'],
 
             // Options validation
             'options' => [
@@ -74,6 +78,18 @@ class StoreQuestionRequest extends FormRequest
                 $this->merge([
                     'options' => $type->defaultOptions(),
                 ]);
+            }
+        }
+
+        if ($this->category_uuid) {
+            $category = QuestionCategory::query()->where('uuid', $this->category_uuid)->firstOrFail();
+            $this->merge(['question_category_id' => $category->id]);
+        }
+
+        if ($this->depends_on_uuid) {
+            $parent = \App\Models\QuestionBank\Question::where('uuid', $this->depends_on_uuid)->first();
+            if ($parent) {
+                $this->merge(['depends_on_question_id' => $parent->id]);
             }
         }
     }

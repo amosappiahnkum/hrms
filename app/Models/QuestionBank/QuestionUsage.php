@@ -2,24 +2,27 @@
 
 namespace App\Models\QuestionBank;
 
+use App\Models\ApplicationModel;
+use App\Traits\HasUuid;
 use Database\Factories\QuestionBank\QuestionUsageFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-class QuestionUsage extends Model
+class QuestionUsage extends ApplicationModel
 {
     /** @use HasFactory<QuestionUsageFactory> */
-    use HasFactory;
+    use HasFactory, HasUuid;
 
     protected $fillable = [
+        'uuid',
         'question_id',
         'usable_type',
         'usable_id',
         'order',
         'custom_weight',
         'is_required_override',
+        'user_id',
     ];
 
     protected $casts = [

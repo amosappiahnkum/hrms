@@ -18,7 +18,7 @@ class QuestionCategoryController extends Controller
     public function index(Request $request)
     {
         $categories = QuestionCategory::query()
-            ->with(['parent', 'children'])
+            ->with(['parent', 'subCategories'])
             ->latest()
             ->paginate();
 
@@ -45,7 +45,7 @@ class QuestionCategoryController extends Controller
      */
     public function show(QuestionCategory $questionCategory): JsonResponse
     {
-        $questionCategory->load(['parent', 'children']);
+        $questionCategory->load(['parent', 'subCategories']);
         return ApiResponse::success(
             QuestionCategoryResource::make($questionCategory),
             'Category'
@@ -75,7 +75,7 @@ class QuestionCategoryController extends Controller
         }
 
         // Check if category has children
-        if ($category->children()->count() > 0) {
+        if ($category->subCategories()->count() > 0) {
             return response()->json([
                 'message' => 'Cannot delete category with sub-categories.',
             ], 422);

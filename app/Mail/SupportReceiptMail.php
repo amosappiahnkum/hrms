@@ -1,0 +1,36 @@
+<?php
+
+namespace App\Mail;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Content;
+use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Queue\SerializesModels;
+
+class SupportReceiptMail extends Mailable implements ShouldQueue
+{
+    use Queueable, SerializesModels;
+
+    public function __construct(
+        public string $name,
+        public string $requestSubject,
+        public string $ticketNo,
+    ) {}
+
+    public function envelope(): Envelope
+    {
+        return new Envelope(subject: "[{$this->ticketNo}] Support Request Received — {$this->requestSubject}");
+    }
+
+    public function content(): Content
+    {
+        return new Content(markdown: 'emails.support.receipt');
+    }
+
+    public function attachments(): array
+    {
+        return [];
+    }
+}
