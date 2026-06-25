@@ -20,10 +20,9 @@ class AssessmentWindowResource extends JsonResource
                 'uuid'        => $this->assessment->uuid,
                 'name'        => $this->assessment->title,
                 'type'        => $this->assessment->type,
-                'job_category' => $this->assessment->assignable ? [
-                    'uuid' => $this->assessment->assignable->uuid,
-                    'name' => $this->assessment->assignable->name,
-                ] : null,
+                'job_categories' => $this->assessment->relationLoaded('jobCategories')
+                    ? $this->assessment->jobCategories->map(fn ($c) => ['uuid' => $c->uuid, 'name' => $c->name])->values()
+                    : [],
             ]),
             'attempts_count'   => $this->when(isset($this->attempts_count), $this->attempts_count),
             'submitted_count'  => $this->when(isset($this->submitted_count), $this->submitted_count),

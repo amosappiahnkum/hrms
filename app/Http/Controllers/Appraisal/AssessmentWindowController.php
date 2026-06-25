@@ -17,7 +17,7 @@ class AssessmentWindowController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $windows = AssessmentWindow::with(['assessment.assignable'])
+        $windows = AssessmentWindow::with(['assessment.jobCategories'])
             ->withCount(['attempts', 'attempts as submitted_count' => fn ($q) => $q->where('status', 'submitted')])
             ->when($request->assessment_uuid, fn ($q, $uuid) =>
                 $q->whereHas('assessment', fn ($a) => $a->where('uuid', $uuid))
@@ -50,14 +50,14 @@ class AssessmentWindowController extends Controller
             'status'        => 'draft',
         ]);
 
-        $window->load('assessment.assignable');
+        $window->load('assessment.jobCategories');
 
         return ApiResponse::success(AssessmentWindowResource::make($window), 'Window created.', 201);
     }
 
     public function show(AssessmentWindow $assessmentWindow): JsonResponse
     {
-        $assessmentWindow->load(['assessment.assignable', 'assessment.questionUsages']);
+        $assessmentWindow->load(['assessment.jobCategories', 'assessment.questionUsages']);
 
         return ApiResponse::success(AssessmentWindowResource::make($assessmentWindow));
     }

@@ -3,9 +3,11 @@
 namespace App\Models\Appraisal;
 
 use App\Models\ApplicationModel;
+use App\Models\JobCategory;
 use App\Models\QuestionBank\Question;
 use App\Models\QuestionBank\QuestionUsage;
 use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -32,6 +34,11 @@ class Assessment extends ApplicationModel
     public function assignable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    public function jobCategories(): BelongsToMany
+    {
+        return $this->belongsToMany(JobCategory::class, 'assessment_job_categories');
     }
 
     public function questionUsages(): HasMany

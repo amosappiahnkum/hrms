@@ -12,14 +12,40 @@ use Illuminate\Database\Seeder;
 
 class AppraisalSeeder extends Seeder
 {
+    // ── Organisation-specific template definitions ────────────────────────────
+    //
+    // Each entry maps a template name → the job category names it applies to.
+    // Add a new key here to support a new organisation (ORGANIZATION env value).
+    //
+    private array $orgTemplates = [
+        'abave' => [
+            [
+                'name' => 'Managerial Performance Appraisal',
+                'description' => 'Performance appraisal template for managerial staff.',
+                'questions_key' => 'managerial',
+                'job_categories' => ['Senior Management'],
+            ],
+            [
+                'name' => 'Non-Managerial Performance Appraisal',
+                'description' => 'Performance appraisal template for non-managerial staff.',
+                'questions_key' => 'non_managerial',
+                'job_categories' => ['Officers', 'Junior Officers'],
+            ],
+        ],
+    ];
+
     public function run(): void
     {
+        $org = strtolower(env('ORGANIZATION', 'ttu'));
+
+        if (!isset($this->orgTemplates[$org])) {
+            $this->command->warn("No appraisal template definitions found for organisation \"{$org}\". Skipping.");
+            return;
+        }
+
         $adminUser = User::first();
 
-        // Remove any usages left over from the old AppraisalTemplate model (pre-refactor)
-        QuestionUsage::where('usable_type', 'App\Models\Appraisal\AppraisalTemplate')->delete();
-
-        // ── Root question categories ──────────────────────────────────────────
+        // ── Question categories ───────────────────────────────────────────────
 
         $nonManagerialParent = QuestionCategory::updateOrCreate(
             ['name' => 'Non-Managerial Performance', 'parent_id' => null],
@@ -31,9 +57,114 @@ class AppraisalSeeder extends Seeder
             ['description' => 'Appraisal criteria for managerial staff', 'is_active' => true, 'user_id' => $adminUser->id]
         );
 
-        // ── Non-managerial questions ──────────────────────────────────────────
+        // ── Build question sets ───────────────────────────────────────────────
 
-        $nonManagerialSections = [
+        $questionSets = [
+            'non_managerial' => $this->createSectionsAndQuestions($this->nonManagerialSections(), $nonManagerialParent, $adminUser),
+            'managerial' => $this->createSectionsAndQuestions($this->managerialSections(), $managerialParent, $adminUser),
+        ];
+
+        // ── Seed templates for this organisation ──────────────────────────────
+
+        $templateCount = 0;
+
+        foreach ($this->orgTemplates[$org] as $def) {
+            $categoryIds = JobCategory::whereIn('name', $def['job_categories'])->pluck('id')->toArray();
+
+            $this->createTemplate(
+                $def['name'],
+                $def['description'],
+                $categoryIds,
+                $questionSets[$def['questions_key']],
+                $adminUser
+            );
+
+            $templateCount++;
+        }
+
+        $this->command->info("Appraisal seeder [{$org}]: {$templateCount} templates seeded.");
+    }
+
+    // ── Template creation ─────────────────────────────────────────────────────
+
+    private function createTemplate(string $name, string $description, array $jobCategoryIds, array $questions, User $user): void
+    {
+        $template = Assessment::updateOrCreate(
+            ['title' => $name, 'type' => 'appraisal'],
+            [
+                'description' => $description,
+                'is_active' => true,
+                'user_id' => $user->id,
+            ]
+        );
+
+        // Sync many-to-many job categories
+        $template->jobCategories()->sync($jobCategoryIds);
+
+        foreach ($questions as $item) {
+            QuestionUsage::updateOrCreate(
+                [
+                    'question_id' => $item['question']->id,
+                    'usable_type' => Assessment::class,
+                    'usable_id' => $template->id,
+                ],
+                [
+                    'order' => $item['order'],
+                    'user_id' => $user->id,
+                ]
+            );
+        }
+    }
+
+    // ── Question bank builders ────────────────────────────────────────────────
+
+    private function createSectionsAndQuestions(array $sections, QuestionCategory $parent, User $user): array
+    {
+        $allQuestions = [];
+
+        foreach ($sections as $sectionOrder => $section) {
+            $category = QuestionCategory::updateOrCreate(
+                ['name' => $section['name'], 'parent_id' => $parent->id],
+                ['is_active' => true, 'user_id' => $user->id]
+            );
+
+            foreach ($section['questions'] as $qOrder => $text) {
+                $question = Question::updateOrCreate(
+                    ['text' => $text, 'question_category_id' => $category->id],
+                    [
+                        'type' => 'rating',
+                        'weight' => 1,
+                        'is_active' => true,
+                        'is_required' => true,
+                        'order' => $qOrder,
+                        'user_id' => $user->id,
+                    ]
+                );
+
+                if ($question->options()->doesntExist()) {
+                    foreach ([
+                                 ['option_text' => 'Poor', 'option_value' => '1', 'order' => 1],
+                                 ['option_text' => 'Average', 'option_value' => '2', 'order' => 2],
+                                 ['option_text' => 'Good', 'option_value' => '3', 'order' => 3],
+                                 ['option_text' => 'Very Good', 'option_value' => '4', 'order' => 4],
+                                 ['option_text' => 'Excellent', 'option_value' => '5', 'order' => 5],
+                             ] as $opt) {
+                        $question->options()->create(array_merge($opt, ['user_id' => $user->id]));
+                    }
+                }
+
+                $allQuestions[] = ['question' => $question, 'order' => ($sectionOrder * 100) + $qOrder];
+            }
+        }
+
+        return $allQuestions;
+    }
+
+    // ── Question data ─────────────────────────────────────────────────────────
+
+    private function nonManagerialSections(): array
+    {
+        return [
             [
                 'name' => 'Job Knowledge & Quality of Work',
                 'questions' => [
@@ -81,12 +212,11 @@ class AppraisalSeeder extends Seeder
                 ],
             ],
         ];
+    }
 
-        $nonManagerialQuestions = $this->createSectionsAndQuestions($nonManagerialSections, $nonManagerialParent, $adminUser);
-
-        // ── Managerial questions ──────────────────────────────────────────────
-
-        $managerialSections = [
+    private function managerialSections(): array
+    {
+        return [
             [
                 'name' => 'Leadership & Problem Solving',
                 'questions' => [
@@ -133,109 +263,5 @@ class AppraisalSeeder extends Seeder
                 ],
             ],
         ];
-
-        $managerialQuestions = $this->createSectionsAndQuestions($managerialSections, $managerialParent, $adminUser);
-
-        // ── Appraisal templates ───────────────────────────────────────────────
-
-        $seniorManagement = JobCategory::where('name', 'Senior Management')->first();
-        $officers = JobCategory::where('name', 'Officers')->first();
-        $juniorOfficers = JobCategory::where('name', 'Junior Officers')->first();
-
-        $this->createTemplate(
-            'Managerial Performance Appraisal',
-            'Performance appraisal template for managerial staff (Senior Management).',
-            $seniorManagement?->id,
-            $managerialQuestions,
-            $adminUser
-        );
-
-        $this->createTemplate(
-            'Non-Managerial Performance Appraisal (Officers)',
-            'Performance appraisal template for officers.',
-            $officers?->id,
-            $nonManagerialQuestions,
-            $adminUser
-        );
-
-        $this->createTemplate(
-            'Non-Managerial Performance Appraisal (Junior Officers)',
-            'Performance appraisal template for junior officers.',
-            $juniorOfficers?->id,
-            $nonManagerialQuestions,
-            $adminUser
-        );
-
-        $this->command->info('Appraisal templates seeded: 3 templates, ' . count($managerialQuestions) . ' managerial + ' . count($nonManagerialQuestions) . ' non-managerial questions.');
-    }
-
-    private function createSectionsAndQuestions(array $sections, QuestionCategory $parent, User $user): array
-    {
-        $allQuestions = [];
-
-        foreach ($sections as $sectionOrder => $section) {
-            $category = QuestionCategory::updateOrCreate(
-                ['name' => $section['name'], 'parent_id' => $parent->id],
-                ['is_active' => true, 'user_id' => $user->id]
-            );
-
-            foreach ($section['questions'] as $qOrder => $text) {
-                $question = Question::updateOrCreate(
-                    ['text' => $text, 'question_category_id' => $category->id],
-                    [
-                        'type' => 'rating',
-                        'weight' => 1,
-                        'is_active' => true,
-                        'is_required' => true,
-                        'order' => $qOrder,
-                        'user_id' => $user->id,
-                    ]
-                );
-
-                if ($question->options()->doesntExist()) {
-                    foreach ([
-                                 ['option_text' => 'Poor', 'option_value' => '1', 'order' => 1],
-                                 ['option_text' => 'Average', 'option_value' => '2', 'order' => 2],
-                                 ['option_text' => 'Good', 'option_value' => '3', 'order' => 3],
-                                 ['option_text' => 'Very Good', 'option_value' => '4', 'order' => 4],
-                                 ['option_text' => 'Excellent', 'option_value' => '5', 'order' => 5],
-                             ] as $opt) {
-                        $question->options()->create(array_merge($opt, ['user_id' => $user->id]));
-                    }
-                }
-
-                $allQuestions[] = ['question' => $question, 'order' => ($sectionOrder * 100) + $qOrder];
-            }
-        }
-
-        return $allQuestions;
-    }
-
-    private function createTemplate(string $name, string $description, ?int $jobCategoryId, array $questions, User $user): void
-    {
-        $template = Assessment::updateOrCreate(
-            ['title' => $name, 'type' => 'appraisal'],
-            [
-                'description' => $description,
-                'assignable_type' => $jobCategoryId ? JobCategory::class : null,
-                'assignable_id' => $jobCategoryId,
-                'is_active' => true,
-                'user_id' => $user->id,
-            ]
-        );
-
-        foreach ($questions as $item) {
-            QuestionUsage::updateOrCreate(
-                [
-                    'question_id' => $item['question']->id,
-                    'usable_type' => Assessment::class,
-                    'usable_id' => $template->id,
-                ],
-                [
-                    'order' => $item['order'],
-                    'user_id' => $user->id,
-                ]
-            );
-        }
     }
 }

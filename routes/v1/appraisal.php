@@ -29,7 +29,7 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
     });
 
     // ── HR: finalise confirmed appraisals ─────────────────────────────────────
-    Route::prefix('appraisal/hr')->group(function () {
+    Route::prefix('appraisal/hr')->middleware('role:hr|super-admin')->group(function () {
         Route::get('/pending', [AssessmentAttemptController::class, 'hrPending']);
         Route::post('/attempts/{attempt}/complete', [AssessmentAttemptController::class, 'hrComplete']);
     });

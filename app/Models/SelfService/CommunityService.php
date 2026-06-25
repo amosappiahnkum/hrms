@@ -2,13 +2,13 @@
 
 namespace App\Models\SelfService;
 
+use App\Models\ApplicationModel;
 use App\Traits\HasApprovalUpdates;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class CommunityService extends Model
+class CommunityService extends ApplicationModel
 {
     use HasFactory, SoftDeletes, HasUuid, HasApprovalUpdates;
 

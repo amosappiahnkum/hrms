@@ -6,13 +6,11 @@ use App\Http\Controllers\LeaveManagementController;
 use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\LeaveResumptionController;
 use App\Http\Controllers\LeaveTypeController;
-use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('feature:leave.enabled')->group(function () {
     Route::get('holidays', [LeaveRequestController::class, 'getHolidays']);
     Route::get('/who-is-out', [HomeController::class, 'getWhoIsOut']);
-    Route::get('/approvals', [NotificationController::class, 'getApprovals']);
     Route::get('/supervisor/{employee}/pending-actions', [HomeController::class, 'getPendingApprovals']);
     Route::get('/my-team', [HomeController::class, 'getMyTeam']);
 

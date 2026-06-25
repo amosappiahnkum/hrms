@@ -16,7 +16,7 @@ class PolicyDocument extends ApplicationModel
     protected $fillable = [
         'title',
         'description',
-        'category',
+        'document_category_id',
         'file_path',
         'preview_path',
         'file_name',
@@ -38,6 +38,11 @@ class PolicyDocument extends ApplicationModel
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function documentCategory(): BelongsTo
+    {
+        return $this->belongsTo(DocumentCategory::class);
     }
 
     /** Generate a short-lived signed URL. Inline for view-only, attachment for download. */

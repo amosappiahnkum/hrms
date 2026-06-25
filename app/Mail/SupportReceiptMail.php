@@ -21,7 +21,7 @@ class SupportReceiptMail extends Mailable implements ShouldQueue
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: "[{$this->ticketNo}] Support Request Received — {$this->requestSubject}");
+        return new Envelope(subject: "{$this->requestSubject} - Support Request Received");
     }
 
     public function content(): Content

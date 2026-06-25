@@ -14,10 +14,9 @@ class AppraisalTemplateResource extends JsonResource
             'name'        => $this->title,
             'description' => $this->description,
             'is_active'   => $this->is_active,
-            'job_category' => $this->when($this->assignable_type && $this->assignable, fn () => [
-                'uuid' => $this->assignable->uuid,
-                'name' => $this->assignable->name,
-            ]),
+            'job_categories' => $this->whenLoaded('jobCategories', fn () =>
+                $this->jobCategories->map(fn ($c) => ['uuid' => $c->uuid, 'name' => $c->name])->values()
+            ),
             'questions_count' => $this->when(
                 isset($this->questions_count),
                 $this->questions_count

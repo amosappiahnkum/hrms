@@ -21,13 +21,12 @@ class ApprovalResource extends JsonResource
             'model' => class_basename($this->information_type),
             'status' => $this->status,
 
-            'reviewed_by' => $this->reviewed_by,
-
-            'reviewed_at' => $this->reviewed_at,
+            'reviewed_by'      => $this->reviewedBy?->employee?->name,
+            'reviewed_at'      => $this->reviewed_at,
+            'rejection_reason' => $this->rejection_reason,
 
             'requested_by' => $this->requestedBy?->employee?->name,
-            'date_requested' => Carbon::parse($this->created_at)->diffForHumans(),
-            'created_at' => Carbon::parse($this->created_at)->format('M d Y'),
+            'created_at'   => Carbon::parse($this->created_at)->format('M d Y'),
         ];
     }
 }

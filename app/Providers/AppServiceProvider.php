@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Appraisal\Assessment;
 use App\Models\JobDetail;
 use App\Models\LeaveRequest;
 use App\Models\PerformanceAppraisal\Appraisal;
@@ -77,6 +78,7 @@ class AppServiceProvider extends ServiceProvider
             'PreviousPosition' => PreviousPosition::class,
             'LeaveRequest' => LeaveRequest::class,
             'Appraisal' => Appraisal::class,
+            'Assessment' => Assessment::class,
         ]);
     }
 }

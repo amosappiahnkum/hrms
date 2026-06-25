@@ -8,7 +8,6 @@ use App\Http\Requests\StoreAppraisalTemplateRequest;
 use App\Http\Resources\AppraisalTemplateResource;
 use App\Models\Appraisal\Assessment;
 use App\Models\Appraisal\AssessmentWindow;
-use App\Models\JobCategory;
 use App\Models\QuestionBank\Question;
 use App\Models\QuestionBank\QuestionUsage;
 use Illuminate\Http\JsonResponse;
@@ -21,7 +20,7 @@ class AppraisalTemplateController extends Controller
     {
         $templates = Assessment::where('type', 'appraisal')
             ->withCount('questionUsages as questions_count')
-            ->with('assignable')
+            ->with('jobCategories')
             ->latest()
             ->paginate($request->input('per_page', 15));
 
@@ -30,46 +29,36 @@ class AppraisalTemplateController extends Controller
 
     public function store(StoreAppraisalTemplateRequest $request): JsonResponse
     {
-        $jobCategory = $request->job_category_id
-            ? JobCategory::findOrFail($request->job_category_id)
-            : null;
-
         $template = Assessment::create([
-            'title'           => $request->name,
-            'description'     => $request->description,
-            'type'            => 'appraisal',
-            'assignable_type' => $jobCategory ? JobCategory::class : null,
-            'assignable_id'   => $jobCategory?->id,
-            'is_active'       => $request->input('is_active', true),
+            'title'       => $request->name,
+            'description' => $request->description,
+            'type'        => 'appraisal',
+            'is_active'   => $request->input('is_active', true),
         ]);
 
-        $template->load('assignable');
+        $template->jobCategories()->sync($request->input('job_category_ids', []));
+        $template->load('jobCategories');
 
         return ApiResponse::success(AppraisalTemplateResource::make($template), 'Template created.', 201);
     }
 
     public function show(Assessment $assessment): JsonResponse
     {
-        $assessment->load(['assignable', 'questionUsages']);
+        $assessment->load(['jobCategories', 'questionUsages']);
 
         return ApiResponse::success(AppraisalTemplateResource::make($assessment));
     }
 
     public function update(StoreAppraisalTemplateRequest $request, Assessment $assessment): JsonResponse
     {
-        $jobCategory = $request->job_category_id
-            ? JobCategory::findOrFail($request->job_category_id)
-            : null;
-
         $assessment->update([
-            'title'           => $request->name,
-            'description'     => $request->description,
-            'assignable_type' => $jobCategory ? JobCategory::class : null,
-            'assignable_id'   => $jobCategory?->id,
-            'is_active'       => $request->input('is_active', $assessment->is_active),
+            'title'       => $request->name,
+            'description' => $request->description,
+            'is_active'   => $request->input('is_active', $assessment->is_active),
         ]);
 
-        $assessment->load('assignable');
+        $assessment->jobCategories()->sync($request->input('job_category_ids', []));
+        $assessment->load('jobCategories');
 
         return ApiResponse::success(AppraisalTemplateResource::make($assessment));
     }
@@ -155,7 +144,7 @@ class AppraisalTemplateController extends Controller
             ]);
         }
 
-        $assessment->load(['assignable', 'questionUsages']);
+        $assessment->load(['jobCategories', 'questionUsages']);
 
         return ApiResponse::success(AppraisalTemplateResource::make($assessment));
     }

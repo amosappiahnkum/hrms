@@ -47,6 +47,11 @@ class Candidate extends Authenticatable
         'salary_expectation' => 'decimal:2',
     ];
 
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()

@@ -12,6 +12,7 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Log;
 
 class CandidateController extends Controller
 {
@@ -40,6 +41,7 @@ class CandidateController extends Controller
 
     public function show(Candidate $candidate): JsonResponse
     {
+        Log::info('osia', [$candidate]);
         $candidate->loadCount(['experiences', 'qualifications', 'skills', 'documents', 'applications']);
         return ApiResponse::success(new CandidateResource($candidate));
     }

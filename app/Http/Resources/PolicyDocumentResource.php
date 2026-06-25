@@ -13,7 +13,10 @@ class PolicyDocumentResource extends JsonResource
             'uuid'            => $this->uuid,
             'title'           => $this->title,
             'description'     => $this->description,
-            'category'        => $this->category,
+            'category'        => $this->whenLoaded('documentCategory', fn () => [
+                'id'   => $this->documentCategory->id,
+                'name' => $this->documentCategory->name,
+            ]),
             'file_name'       => $this->file_name,
             'file_size'       => $this->file_size,
             'mime_type'       => $this->mime_type,

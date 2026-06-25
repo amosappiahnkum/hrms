@@ -34,14 +34,14 @@ class AssessmentAttemptController extends Controller
         $windows = AssessmentWindow::where('status', 'open')
             ->whereHas('assessment', function ($q) use ($jobCategoryId) {
                 $q->where(function ($inner) use ($jobCategoryId) {
-                    $inner->whereNull('assignable_type')
-                        ->orWhere(function ($cat) use ($jobCategoryId) {
-                            $cat->where('assignable_type', 'App\\Models\\JobCategory')
-                                ->where('assignable_id', $jobCategoryId);
+                    // "All employees" — no categories assigned
+                    $inner->whereDoesntHave('jobCategories')
+                        ->orWhereHas('jobCategories', function ($cat) use ($jobCategoryId) {
+                            $cat->where('job_categories.id', $jobCategoryId);
                         });
                 });
             })
-            ->with(['assessment.assignable', 'myAttempt'])
+            ->with(['assessment.jobCategories', 'myAttempt'])
             ->paginate(15);
 
         return AssessmentWindowResource::collection($windows);
@@ -69,7 +69,7 @@ class AssessmentAttemptController extends Controller
         }
 
         // Load questions from the window snapshot (not the template — they may have diverged)
-        $assessmentWindow->load(['assessment', 'questionUsages.question.options', 'questionUsages.question.dependsOn']);
+        $assessmentWindow->load(['assessment.jobCategories', 'questionUsages.question.options', 'questionUsages.question.dependsOn']);
 
         $attempt->load(['responses.question']);
 
@@ -354,6 +354,10 @@ class AssessmentAttemptController extends Controller
      */
     public function hrComplete(AssessmentAttempt $attempt): JsonResponse
     {
+        if ($attempt->user_id === auth()->id()) {
+            return response()->json(['message' => 'You cannot finalise your own appraisal.'], 403);
+        }
+
         if ($attempt->status !== AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED) {
             return response()->json(['message' => 'This appraisal has not been confirmed by a supervisor yet.'], 422);
         }

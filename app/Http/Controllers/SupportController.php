@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Mail\SupportReceiptMail;
 use App\Mail\SupportResolutionMail;
+use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -12,27 +13,30 @@ use Illuminate\Support\Str;
 
 class SupportController extends Controller
 {
+    public function __construct(private readonly SettingService $settings) {}
+
     public function submit(Request $request): JsonResponse
     {
         $request->validate([
-            'subject'     => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:5000'],
         ]);
 
         $user     = auth()->user();
         $ticketNo = 'K360-' . strtoupper(Str::random(12));
 
+        $company = $this->settings->module('company');
+
         $this->postToSlack(
             name:        $user->name,
             email:       $user->email,
-            subject:     $request->subject,
+            subject:     $ticketNo,
             description: $request->description,
             ticketNo:    $ticketNo,
         );
 
         Mail::to($user->email)->queue(new SupportReceiptMail(
             name:           $user->name,
-            requestSubject: $request->subject,
+            requestSubject: ($company['name'] ?? 'Kazi360'),
             ticketNo:       $ticketNo,
         ));
 

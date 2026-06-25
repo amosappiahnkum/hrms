@@ -51,8 +51,14 @@ class InformationUpdateController extends Controller
             });
         }
 
-        $updates = $query->paginate($request->per_page ?? 10);
+        $updates = $query->with([
+            'requestedBy:id,employee_id',
+            'requestedBy.employee:id,first_name,last_name',
+            'reviewedBy:id,employee_id',
+            'reviewedBy.employee:id,first_name,last_name',
+        ])->paginate($request->per_page ?? 10);
 
+        Log::info('in here');
         return ApprovalResource::collection($updates);
     }
 

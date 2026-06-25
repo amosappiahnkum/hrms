@@ -20,8 +20,8 @@ class PolicyDocumentController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $docs = PolicyDocument::with('uploader')
-            ->when($request->category, fn($q, $v) => $q->where('category', $v))
+        $docs = PolicyDocument::with(['uploader', 'documentCategory'])
+            ->when($request->document_category_id, fn($q, $v) => $q->where('document_category_id', $v))
             ->when($request->scope_type, fn($q, $v) => $q->where('scope_type', $v))
             ->when($request->filled('is_active'), fn($q) => $q->where('is_active', $request->boolean('is_active')))
             ->when($request->search, fn($q, $v) => $q->where('title', 'like', "%{$v}%"))
@@ -39,7 +39,7 @@ class PolicyDocumentController extends Controller
         $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'category' => ['required', 'in:policy,manual,handbook,notice,form,other'],
+            'document_category_id' => ['required', 'exists:document_categories,id'],
             'file' => ['required', 'file', 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx', 'max:51200'],
             'is_downloadable' => ['boolean'],
             'scope_type' => ['required', 'in:all,department,job_category,role'],
@@ -66,9 +66,9 @@ class PolicyDocumentController extends Controller
         }
 
         $doc = PolicyDocument::create([
-            'title'           => $request->title,
-            'description'     => $request->description,
-            'category'        => $request->category,
+            'title'                => $request->title,
+            'description'          => $request->description,
+            'document_category_id' => $request->document_category_id,
             'file_path'       => $uploaded['path'],
             'preview_path'    => $previewPath,
             'file_name'       => $file->getClientOriginalName(),
@@ -88,8 +88,8 @@ class PolicyDocumentController extends Controller
     {
         $request->validate([
             'title' => ['sometimes', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'category' => ['sometimes', 'in:policy,manual,handbook,notice,form,other'],
+            'description'          => ['nullable', 'string'],
+            'document_category_id' => ['sometimes', 'exists:document_categories,id'],
             'is_downloadable' => ['boolean'],
             'scope_type' => ['sometimes', 'in:all,department,job_category,role'],
             'scope_ids' => ['nullable', 'array'],
@@ -97,7 +97,7 @@ class PolicyDocumentController extends Controller
         ]);
 
         $policyDocument->update([
-            ...$request->only(['title', 'description', 'category', 'is_downloadable', 'is_active']),
+            ...$request->only(['title', 'description', 'document_category_id', 'is_downloadable', 'is_active']),
             'scope_type' => $request->input('scope_type', $policyDocument->scope_type),
             'scope_ids' => $request->input('scope_type', $policyDocument->scope_type) === 'all'
                 ? null
@@ -141,8 +141,8 @@ class PolicyDocumentController extends Controller
         // Eager-load jobDetail so the scope works without N+1
         $employee->loadMissing(['jobDetail', 'department']);
 
-        $docs = PolicyDocument::accessibleBy($employee)
-            ->when($request->category, fn($q, $v) => $q->where('category', $v))
+        $docs = PolicyDocument::with('documentCategory')->accessibleBy($employee)
+            ->when($request->document_category_id, fn($q, $v) => $q->where('document_category_id', $v))
             ->when($request->search, fn($q, $v) => $q->where('title', 'like', "%{$v}%"))
             ->latest()
             ->paginate($request->integer('per_page', 20));
