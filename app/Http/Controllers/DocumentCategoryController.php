@@ -31,6 +31,8 @@ class DocumentCategoryController extends Controller
 
         $category = DocumentCategory::create($request->only('name', 'description', 'parent_id'));
 
+        activity('document-categories')->performedOn($category)->log("Created document category: {$category->name}");
+
         return ApiResponse::success(
             $category->loadCount(['policyDocuments', 'children']),
             'Category created.',
@@ -56,6 +58,8 @@ class DocumentCategoryController extends Controller
 
         $documentCategory->update($request->only('name', 'description', 'parent_id'));
 
+        activity('document-categories')->performedOn($documentCategory)->log("Updated document category: {$documentCategory->name}");
+
         return ApiResponse::success($documentCategory->loadCount(['policyDocuments', 'children']));
     }
 
@@ -69,7 +73,10 @@ class DocumentCategoryController extends Controller
             return response()->json(['message' => 'Cannot delete a category that has documents assigned to it.'], 422);
         }
 
+        $name = $documentCategory->name;
         $documentCategory->delete();
+
+        activity('document-categories')->log("Deleted document category: {$name}");
 
         return ApiResponse::success([], 'Category deleted.');
     }

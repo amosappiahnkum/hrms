@@ -39,6 +39,7 @@ class ApplicationController extends Controller
     {
         try {
             $application = Application::create($request->validated());
+            activity('recruitment')->performedOn($application)->log("New application submitted");
             return new ApplicationResource($application->load(['candidate', 'jobOpening']));
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -65,6 +66,7 @@ class ApplicationController extends Controller
     {
         try {
             $application->delete();
+            activity('recruitment')->log("Deleted application #{$application->id}");
             return response()->json(['message' => 'Application deleted']);
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -75,6 +77,7 @@ class ApplicationController extends Controller
     {
         $application->load(['candidate', 'jobOpening']);
         $application->update(['status' => ApplicationStatus::SHORTLISTED]);
+        activity('recruitment')->performedOn($application)->log("Shortlisted application: {$application->candidate?->name} for {$application->jobOpening?->title}");
 
         $candidate  = $application->candidate;
         $jobTitle   = $application->jobOpening?->title ?? 'the position';
@@ -98,6 +101,7 @@ class ApplicationController extends Controller
     {
         $application->load(['candidate', 'jobOpening']);
         $application->update(['status' => ApplicationStatus::REJECTED]);
+        activity('recruitment')->performedOn($application)->log("Rejected application: {$application->candidate?->name} for {$application->jobOpening?->title}");
 
         $candidate = $application->candidate;
         $jobTitle  = $application->jobOpening?->title ?? 'the position';
@@ -167,6 +171,10 @@ class ApplicationController extends Controller
                 'action_url'  => env('FRONTEND_URL') . '/candidate/my-applications',
                 'action_text' => 'View My Applications',
             ]));
+
+            activity('recruitment')->performedOn($employee)
+                ->withProperties(['candidate' => $candidate->name, 'job' => $jobTitle, 'staff_id' => $employee->staff_id])
+                ->log("Hired candidate: {$candidate->name} as {$jobTitle}");
 
             DB::commit();
             return ApiResponse::success(new EmployeeResource($employee), 'Candidate hired successfully');

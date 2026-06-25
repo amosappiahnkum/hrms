@@ -211,6 +211,8 @@ class AssessmentAttemptController extends Controller
                     'employee_comment' => $request->employee_comment,
                 ]);
 
+                activity('appraisals')->performedOn($attempt)->log("Appraisal auto-confirmed (top-level HOD): {$attempt->user->name}");
+
                 return ApiResponse::success(
                     AssessmentAttemptResource::make($attempt),
                     'Submitted and forwarded directly to HR for finalization.'
@@ -223,6 +225,8 @@ class AssessmentAttemptController extends Controller
                 'submitted_at'     => now(),
                 'employee_comment' => $request->employee_comment,
             ]);
+
+            activity('appraisals')->performedOn($attempt)->log("Appraisal submitted for supervisor review: {$attempt->user->name}");
 
             $message = $isHod
                 ? 'Submitted for your Dean\'s review.'
@@ -302,6 +306,8 @@ class AssessmentAttemptController extends Controller
             'supervisor_confirmed_at' => now(),
         ]);
 
+        activity('appraisals')->performedOn($attempt)->log("Supervisor confirmed appraisal for {$attempt->user->name}");
+
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
             'Appraisal confirmed and forwarded to HR.'
@@ -326,6 +332,8 @@ class AssessmentAttemptController extends Controller
             'supervisor_id'      => auth()->id(),
             'supervisor_comment' => $request->supervisor_comment,
         ]);
+
+        activity('appraisals')->performedOn($attempt)->log("Supervisor returned appraisal to {$attempt->user->name} for revision");
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
@@ -363,6 +371,8 @@ class AssessmentAttemptController extends Controller
         }
 
         $attempt->update(['status' => AssessmentAttempt::STATUS_COMPLETED]);
+
+        activity('appraisals')->performedOn($attempt)->log("HR completed appraisal for {$attempt->user->name}");
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),

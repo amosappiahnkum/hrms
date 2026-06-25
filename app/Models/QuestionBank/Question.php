@@ -32,11 +32,12 @@ class Question extends ApplicationModel
     ];
 
     protected $casts = [
-        'type' => QuestionType::class,
-        'weight' => 'decimal:2',
-        'is_required' => 'boolean',
-        'is_active' => 'boolean',
-        'order' => 'integer',
+        'type'             => QuestionType::class,
+        'weight'           => 'decimal:2',
+        'is_required'      => 'boolean',
+        'is_active'        => 'boolean',
+        'order'            => 'integer',
+        'show_when_value'  => 'array',
     ];
 
     protected $with = ['options'];

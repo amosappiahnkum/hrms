@@ -48,7 +48,9 @@ class EmployeeResource extends JsonResource
                 'location' => $this->jobDetail->location ?? 'Not Updated',
                 'room' => $this->jobDetail->room ?? 'Not Updated'
             ],
-            'supervisor' => $this->employeeSupervisor?->supervisor->name,
+            'supervisor'   => $this->employeeSupervisor?->supervisor->name,
+            'has_account'  => $this->userAccount !== null,
+            'work_email'   => $this->contactDetail?->work_email,
         ];
     }
 }

@@ -36,7 +36,8 @@ class UpdateQuestionRequest extends FormRequest
             'is_active' => ['sometimes', 'boolean'],
             'order' => ['nullable', 'integer', 'min:0'],
             'depends_on_uuid'  => ['nullable', 'exists:questions,uuid'],
-            'show_when_value'  => ['nullable', 'string', 'max:255'],
+            'show_when_value'    => ['nullable', 'array'],
+            'show_when_value.*'  => ['string', 'max:255'],
         ];
     }
 

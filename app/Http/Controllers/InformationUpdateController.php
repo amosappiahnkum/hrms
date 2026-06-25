@@ -58,7 +58,6 @@ class InformationUpdateController extends Controller
             'reviewedBy.employee:id,first_name,last_name',
         ])->paginate($request->per_page ?? 10);
 
-        Log::info('in here');
         return ApprovalResource::collection($updates);
     }
 
@@ -127,6 +126,9 @@ class InformationUpdateController extends Controller
 
             app(UpdateApprovalService::class)->approve($informationUpdate, Auth::id());
 
+            activity('approvals')->performedOn($informationUpdate)
+                ->log("Approved {$informationUpdate->type} request for " . class_basename($informationUpdate->information_type));
+
             return ApiResponse::success(
                 null,
                 'Approval successful'
@@ -159,6 +161,10 @@ class InformationUpdateController extends Controller
                     Auth::id(),
                     $request->reason
                 );
+
+            activity('approvals')->performedOn($informationUpdate)
+                ->withProperties(['reason' => $request->reason])
+                ->log("Rejected {$informationUpdate->type} request for " . class_basename($informationUpdate->information_type));
 
             return ApiResponse::success(
                 null,

@@ -81,6 +81,8 @@ class PolicyDocumentController extends Controller
             'user_id'         => auth()->id(),
         ]);
 
+        activity('policy-documents')->performedOn($doc)->log("Uploaded document: {$doc->title}");
+
         return ApiResponse::success(PolicyDocumentResource::make($doc), 'Document uploaded.', 201);
     }
 
@@ -104,6 +106,8 @@ class PolicyDocumentController extends Controller
                 : $request->input('scope_ids', $policyDocument->scope_ids),
         ]);
 
+        activity('policy-documents')->performedOn($policyDocument)->log("Updated document: {$policyDocument->title}");
+
         return ApiResponse::success(PolicyDocumentResource::make($policyDocument));
     }
 
@@ -116,7 +120,10 @@ class PolicyDocumentController extends Controller
             $minio->delete($policyDocument->preview_path);
         }
 
+        $title = $policyDocument->title;
         $policyDocument->delete();
+
+        activity('policy-documents')->log("Deleted document: {$title}");
 
         return ApiResponse::success([], 'Document deleted.');
     }

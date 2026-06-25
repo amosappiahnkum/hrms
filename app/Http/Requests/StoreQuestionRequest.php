@@ -38,7 +38,8 @@ class StoreQuestionRequest extends FormRequest
 
             // Conditional display
             'depends_on_uuid'  => ['nullable', 'exists:questions,uuid'],
-            'show_when_value'  => ['nullable', 'string', 'max:255', 'required_with:depends_on_uuid'],
+            'show_when_value'    => ['nullable', 'array', 'required_with:depends_on_uuid'],
+            'show_when_value.*'  => ['string', 'max:255'],
 
             // Options validation
             'options' => [

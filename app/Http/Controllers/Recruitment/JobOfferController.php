@@ -30,6 +30,8 @@ class JobOfferController extends Controller
 
             $application->update(['status' => ApplicationStatus::OFFERED]);
 
+            activity('recruitment')->performedOn($offer)->log("Job offer created for application #{$application->id}");
+
             return new JobOfferResource($offer);
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -51,6 +53,10 @@ class JobOfferController extends Controller
                 $offer->application->update(['status' => ApplicationStatus::OFFERED]);
             }
 
+            activity('recruitment')->performedOn($offer)
+                ->withProperties(['status' => $offer->status])
+                ->log("Updated job offer #{$offer->id}");
+
             return new JobOfferResource($offer->refresh());
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -61,6 +67,7 @@ class JobOfferController extends Controller
     {
         try {
             $offer->delete();
+            activity('recruitment')->log("Deleted job offer #{$offer->id}");
             return response()->json(['message' => 'Offer deleted']);
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);

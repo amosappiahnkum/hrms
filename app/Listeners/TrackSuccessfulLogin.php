@@ -2,7 +2,6 @@
 
 namespace App\Listeners;
 
-use App\Models\ActivityLog;
 use Illuminate\Auth\Events\Login;
 
 class TrackSuccessfulLogin
@@ -13,11 +12,9 @@ class TrackSuccessfulLogin
 
         $user->update(['last_login_at' => now()]);
 
-        ActivityLog::add(
-            "{$user->name} logged in",
-            'login',
-            [],
-            'auth'
-        )->to($user)->as($user);
+        activity('auth')
+            ->performedOn($user)
+            ->causedBy($user)
+            ->log("{$user->name} logged in");
     }
 }

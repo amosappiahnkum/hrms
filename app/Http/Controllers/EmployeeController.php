@@ -19,7 +19,9 @@ use App\Models\SelfService\Employee;
 use App\Models\TerminationReason;
 use App\Models\User;
 use App\Notifications\EmailLinkedNotification;
+use App\Notifications\PasswordResetNotification;
 use App\Services\MinioUploadService;
+use App\Services\SettingService;
 use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use App\Traits\UsePrint;
@@ -41,9 +43,6 @@ use Throwable;
 class EmployeeController extends Controller
 {
     use UsePrint, InformationUpdate;
-
-    protected string $docPath = 'images/employees';
-    protected array $allowedFiles = ['png', 'jpg', 'jpeg'];
 
     /**
      * Display a listing of the resource.
@@ -67,9 +66,9 @@ class EmployeeController extends Controller
         }
 
         if ($request->boolean('archived')) {
-            $query->with('terminationReason');
             return ArchivedEmployeeResource::collection(
-                $query->paginate($request->per_page ?? 10)
+                $query->with(['terminationReason', 'contactDetail', 'rank', 'department'])
+                    ->paginate($request->per_page ?? 10)
             );
         }
 
@@ -137,6 +136,9 @@ class EmployeeController extends Controller
             $employee = Employee::create($request->validated());
             $employee->contactDetail()->create();
             $employee->jobDetail()->create();
+
+            activity('employees')->performedOn($employee)->log("Created employee: {$employee->name}");
+
             DB::commit();
 
             return new EmployeeResource($employee);
@@ -167,22 +169,93 @@ class EmployeeController extends Controller
      *
      * @return JsonResponse|null
      */
-    public function destroy($id): ?JsonResponse
+    public function destroy(Employee $employee): ?JsonResponse
     {
-        DB::beginTransaction();
-        try {
-            $employee = Employee::findOrFail($id);
-            $employee->delete();
-            DB::commit();
+        $name = $employee->name;
+        $employee->delete();
 
-            return response()->json([
-                'message' => 'Employee Deleted'
-            ]);
-        } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+        activity('employees')->log("Archived employee: {$name}");
+
+        return response()->json(['message' => 'Employee archived']);
+    }
+
+    public function createAccount(Request $request, Employee $employee): JsonResponse
+    {
+        if ($employee->userAccount) {
+            return response()->json(['message' => 'This employee already has a user account.'], 422);
         }
+
+        $request->validate([
+            'work_email' => ['required', 'email', 'unique:users,email'],
+        ]);
+
+        $email = $request->work_email;
+        $plainPassword = Str::random(12);
+
+        $employee->contactDetail?->update(['work_email' => $email]);
+
+        $user = User::create([
+            'name' => $employee->name,
+            'username' => $email,
+            'email' => $email,
+            'password' => Hash::make($plainPassword),
+            'employee_id' => $employee->id,
+        ]);
+
+        $user->assignRole('staff');
+
+        $passwordFeatureEnabled = (bool)app(SettingService::class)
+            ->get('features.auth.password', false);
+
+        Notification::route('mail', $email)->notify(
+            new EmailLinkedNotification(
+                name: $employee->first_name,
+                email: $email,
+                password: $passwordFeatureEnabled ? $plainPassword : null,
+            )
+        );
+
+        activity('employees')->performedOn($employee)->log("Created user account for {$employee->name}");
+
+        return response()->json(['message' => 'User account created successfully']);
+    }
+
+    public function resetPassword(Employee $employee): JsonResponse
+    {
+        $user = $employee->userAccount;
+
+        if (!$user) {
+            return response()->json(['message' => 'This employee does not have a user account.'], 422);
+        }
+
+        $plainPassword = Str::random(12);
+
+        $user->update([
+            'password'         => Hash::make($plainPassword),
+            'password_changed' => false,
+        ]);
+
+        Notification::route('mail', $user->email)->notify(
+            new PasswordResetNotification(
+                name:     $employee->first_name,
+                email:    $user->email,
+                password: $plainPassword,
+            )
+        );
+
+        activity('employees')->performedOn($employee)->log("Password reset for {$employee->name}");
+
+        return response()->json(['message' => 'Password reset and email sent successfully']);
+    }
+
+    public function restore(string $uuid): JsonResponse
+    {
+        $employee = Employee::withTrashed()->where('uuid', $uuid)->firstOrFail();
+        $employee->restore();
+
+        activity('employees')->performedOn($employee)->log("Restored employee: {$employee->name}");
+
+        return response()->json(['message' => 'Employee restored']);
     }
 
     public function searchEmployees(Request $request): AnonymousResourceCollection
@@ -245,7 +318,9 @@ class EmployeeController extends Controller
 
         $user->assignRole('staff');
 
-        Notification::route('mail', $email)->notify(new EmailLinkedNotification($employee->first_name));
+        Notification::route('mail', $email)->notify(
+            new EmailLinkedNotification(name: $employee->first_name, email: $email)
+        );
 
         return response()->json(["message" => "Email updated successfully"]);
     }
@@ -267,8 +342,10 @@ class EmployeeController extends Controller
 
             if ($this->isHrAdmin()) {
                 $employee->update($changes);
+                activity('employees')->performedOn($employee)->log("Updated employee record: {$employee->name}");
             } else {
                 app(UpdateApprovalService::class)->update($employee, $changes, Auth::id());
+                activity('employees')->performedOn($employee)->log("Submitted update request for employee: {$employee->name}");
             }
 
             DB::commit();
@@ -335,8 +412,14 @@ class EmployeeController extends Controller
                 "terminated_by" => auth()->id()
             ]);
 
+            $employeeName = $employee->name;
+
             $employee?->userAccount()?->delete();
             $employee->delete();
+
+            activity('employees')
+                ->withProperties(['reason' => $terminationReason->name, 'effective_date' => $request->effective_date])
+                ->log("Terminated employee: {$employeeName}");
 
             DB::commit();
             return response()->json([
@@ -400,6 +483,8 @@ class EmployeeController extends Controller
 
             $jobDetail->job_category_id = $request->job_category_id;
             $jobDetail->save();
+
+            activity('employees')->performedOn($employee)->log("Onboarded employee: {$employee->name}");
 
             DB::commit();
 

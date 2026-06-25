@@ -28,6 +28,9 @@ Route::middleware('feature:employees.enabled')->group(function () {
     Route::get('/org-colleagues', [EmployeeController::class, 'getEmployeeDirectory']);
 
     Route::prefix('employees')->group(function () {
+        Route::post('/{uuid}/restore', [EmployeeController::class, 'restore']);
+        Route::post('/{employee}/create-account', [EmployeeController::class, 'createAccount']);
+        Route::post('/{employee}/reset-password', [EmployeeController::class, 'resetPassword']);
         Route::get('/search', [EmployeeController::class, 'searchEmployees']);
         Route::post('/update-onboarding', [EmployeeController::class, 'onboardEmployee']);
         Route::post('update-level', [EmployeeController::class, 'updateEmployeeLevel']);

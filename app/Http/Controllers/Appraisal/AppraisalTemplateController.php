@@ -39,6 +39,8 @@ class AppraisalTemplateController extends Controller
         $template->jobCategories()->sync($request->input('job_category_ids', []));
         $template->load('jobCategories');
 
+        activity('appraisals')->performedOn($template)->log("Created appraisal template: {$template->title}");
+
         return ApiResponse::success(AppraisalTemplateResource::make($template), 'Template created.', 201);
     }
 
@@ -60,16 +62,22 @@ class AppraisalTemplateController extends Controller
         $assessment->jobCategories()->sync($request->input('job_category_ids', []));
         $assessment->load('jobCategories');
 
+        activity('appraisals')->performedOn($assessment)->log("Updated appraisal template: {$assessment->title}");
+
         return ApiResponse::success(AppraisalTemplateResource::make($assessment));
     }
 
     public function destroy(Assessment $assessment): JsonResponse
     {
+        $title = $assessment->title;
+
         QuestionUsage::where('usable_type', Assessment::class)
             ->where('usable_id', $assessment->id)
             ->delete();
 
         $assessment->delete();
+
+        activity('appraisals')->log("Deleted appraisal template: {$title}");
 
         return ApiResponse::success([], 'Template deleted.');
     }
@@ -145,6 +153,10 @@ class AppraisalTemplateController extends Controller
         }
 
         $assessment->load(['jobCategories', 'questionUsages']);
+
+        activity('appraisals')->performedOn($assessment)
+            ->withProperties(['question_count' => count($request->questions)])
+            ->log("Synced questions on template: {$assessment->title}");
 
         return ApiResponse::success(AppraisalTemplateResource::make($assessment));
     }

@@ -3,12 +3,10 @@
 use App\Http\Controllers\Appraisal\AppraisalTemplateController;
 use App\Http\Controllers\Appraisal\AssessmentAttemptController;
 use App\Http\Controllers\Appraisal\AssessmentWindowController;
-use App\Models\JobCategory;
+use App\Http\Controllers\JobCategoryController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('job-categories', fn() => response()->json([
-    'data' => JobCategory::select('id', 'uuid', 'name')->orderBy('name')->get(),
-]));
+Route::get('job-categories', [JobCategoryController::class, 'index']);
 
 // ── Employee-facing: take assessments ────────────────────────────────────────
 Route::prefix('my/assessments')->group(function () {

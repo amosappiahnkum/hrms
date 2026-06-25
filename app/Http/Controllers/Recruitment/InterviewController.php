@@ -83,6 +83,9 @@ class InterviewController extends Controller
                 ]));
             }
 
+            activity('recruitment')->performedOn($interview)
+                ->log("Scheduled interview for {$candidate?->name} — {$jobTitle} at {$scheduledAt}");
+
             return new InterviewResource($interview->load('interviewers'));
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -106,6 +109,8 @@ class InterviewController extends Controller
                 $interview->interviewers()->sync($interviewerIds);
             }
 
+            activity('recruitment')->performedOn($interview)->log("Updated interview #{$interview->id}");
+
             return new InterviewResource($interview->refresh()->load('interviewers'));
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -116,6 +121,7 @@ class InterviewController extends Controller
     {
         try {
             $interview->delete();
+            activity('recruitment')->log("Deleted interview #{$interview->id}");
             return response()->json(['message' => 'Interview deleted']);
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);

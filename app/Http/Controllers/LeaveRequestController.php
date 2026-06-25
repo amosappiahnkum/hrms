@@ -8,7 +8,6 @@ use App\Http\Requests\HrChangeLeaveStatusRequest;
 use App\Http\Requests\StoreLeaveRequestRequest;
 use App\Http\Resources\LeaveRequestResource;
 use App\Http\Resources\UpcomingLeaveResource;
-use App\Models\ActivityLog;
 use App\Models\Config\LeaveType;
 use App\Models\Config\LeaveTypeLevelConfig;
 use App\Models\LeaveBalanceAdjustment;
@@ -338,11 +337,11 @@ class LeaveRequestController extends Controller
             // notify employee
             $employeeUserAccount->notify(new LeaveStatusNotification($mailData));
 
-            ActivityLog::add($hod->name . ' ' . $decision . ' ' . $daysApproved .
-                ' day(s) leave request starting from ' . $request->start_date . ' to ' . $this->leaveHelper->lastDate,
-                $decision, [''], 'leave-request')
-                ->to($leaveRequest)
-                ->as($hod);
+            activity('leave-request')
+                ->performedOn($leaveRequest)
+                ->causedBy($hod)
+                ->withProperties(['decision' => $decision, 'days_approved' => $daysApproved])
+                ->log("{$hod->name} {$decision} {$daysApproved} day(s) leave request from {$request->start_date} to {$this->leaveHelper->lastDate}");
 
             DB::commit();
 
@@ -401,9 +400,11 @@ class LeaveRequestController extends Controller
                 'days_approved' => $daysApproved,
             ]);
 
-            ActivityLog::add($user->employee->name . ' ' . $decision . ' leave request', $decision, [''], 'leave-request')
-                ->to($leaveRequest)
-                ->as($user);
+            activity('leave-request')
+                ->performedOn($leaveRequest)
+                ->causedBy($user)
+                ->withProperties(['decision' => $decision])
+                ->log("{$user->employee->name} {$decision} leave request");
 
             $employeeUserAccount = $leaveRequest->employee->userAccount;
 

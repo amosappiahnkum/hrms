@@ -34,6 +34,7 @@ class JobOpeningController extends Controller
     {
         try {
             $jobOpening = JobOpening::create($request->validated());
+            activity('recruitment')->performedOn($jobOpening)->log("Created job opening: {$jobOpening->title}");
             return new JobOpeningResource($jobOpening->load(['position', 'department']));
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -50,6 +51,7 @@ class JobOpeningController extends Controller
     {
         try {
             $jobOpening->update($request->validated());
+            activity('recruitment')->performedOn($jobOpening)->log("Updated job opening: {$jobOpening->title}");
             return new JobOpeningResource($jobOpening->refresh()->load(['position', 'department']));
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -59,7 +61,9 @@ class JobOpeningController extends Controller
     public function destroy(JobOpening $jobOpening): JsonResponse
     {
         try {
+            $title = $jobOpening->title;
             $jobOpening->delete();
+            activity('recruitment')->log("Deleted job opening: {$title}");
             return response()->json(['message' => 'Job opening deleted']);
         } catch (Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -69,12 +73,14 @@ class JobOpeningController extends Controller
     public function publish(JobOpening $jobOpening): JsonResponse
     {
         $jobOpening->update(['status' => JobOpeningStatus::OPEN]);
+        activity('recruitment')->performedOn($jobOpening)->log("Published job opening: {$jobOpening->title}");
         return ApiResponse::success(new JobOpeningResource($jobOpening), 'Job opening published');
     }
 
     public function close(JobOpening $jobOpening): JsonResponse
     {
         $jobOpening->update(['status' => JobOpeningStatus::CLOSED]);
+        activity('recruitment')->performedOn($jobOpening)->log("Closed job opening: {$jobOpening->title}");
         return ApiResponse::success(new JobOpeningResource($jobOpening), 'Job opening closed');
     }
 }

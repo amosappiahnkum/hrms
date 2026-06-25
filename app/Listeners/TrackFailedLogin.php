@@ -2,7 +2,6 @@
 
 namespace App\Listeners;
 
-use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Auth\Events\Failed;
 
@@ -20,11 +19,9 @@ class TrackFailedLogin
             return;
         }
 
-        ActivityLog::add(
-            "Failed login attempt for {$user->name} ({$identifier})",
-            'failed_login',
-            [],
-            'auth'
-        )->to($user)->as($user);
+        activity('auth')
+            ->performedOn($user)
+            ->causedBy($user)
+            ->log("Failed login attempt for {$user->name} ({$identifier})");
     }
 }

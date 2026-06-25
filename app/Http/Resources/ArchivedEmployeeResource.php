@@ -29,12 +29,13 @@ class ArchivedEmployeeResource extends JsonResource
             'work_telephone' => $this->contactDetail->work_telephone,
             'work_email' => $this->contactDetail->work_email,
             'other_email' => $this->contactDetail->other_email,
-            'rank' => $this->rank->name,
-            'department' => $this->department->name,
+            'rank' => $this->rank?->name,
+            'department' => $this->department?->name,
             'photo' => $this->photo ? '/storage/images/employees/' . $this->photo->file_name : null,
-            "termination_reason" => $this->terminationReason->reason,
-            "termination_date" => $this->termination_date,
-            "terminated_by" => $this->terminated_by,
+            'termination_reason' => $this->terminationReason?->reason,
+            'termination_date' => $this->termination_date,
+            'terminated_by' => $this->terminated_by,
+            'archived_at' => $this->deleted_at?->format('Y-m-d'),
         ];
     }
 }

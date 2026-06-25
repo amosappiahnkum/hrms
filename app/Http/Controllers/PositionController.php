@@ -25,12 +25,16 @@ class PositionController extends Controller
     {
         $position = Position::create($request->validated());
 
+        activity('positions')->performedOn($position)->log("Created position: {$position->name}");
+
         return new PositionResource($position->loadCount('jobDetails'));
     }
 
     public function update(UpdatePositionRequest $request, Position $position): PositionResource
     {
         $position->update($request->validated());
+
+        activity('positions')->performedOn($position)->log("Updated position: {$position->name}");
 
         return new PositionResource($position->fresh()->loadCount('jobDetails'));
     }
@@ -47,7 +51,10 @@ class PositionController extends Controller
         }
 
         $uuid = $position->uuid;
+        $name = $position->name;
         $position->delete();
+
+        activity('positions')->log("Deleted position: {$name}");
 
         return response()->json(['id' => $uuid]);
     }

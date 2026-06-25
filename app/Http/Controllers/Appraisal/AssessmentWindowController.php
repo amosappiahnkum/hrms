@@ -52,6 +52,8 @@ class AssessmentWindowController extends Controller
 
         $window->load('assessment.jobCategories');
 
+        activity('appraisals')->performedOn($window)->log("Created assessment window: {$window->title}");
+
         return ApiResponse::success(AssessmentWindowResource::make($window), 'Window created.', 201);
     }
 
@@ -73,6 +75,8 @@ class AssessmentWindowController extends Controller
 
         $assessmentWindow->update($request->only(['title', 'description', 'start_date', 'end_date']));
 
+        activity('appraisals')->performedOn($assessmentWindow)->log("Updated assessment window: {$assessmentWindow->title}");
+
         return ApiResponse::success(AssessmentWindowResource::make($assessmentWindow));
     }
 
@@ -82,7 +86,10 @@ class AssessmentWindowController extends Controller
             return response()->json(['message' => 'Cannot delete a window with submitted attempts.'], 422);
         }
 
+        $title = $assessmentWindow->title;
         $assessmentWindow->delete();
+
+        activity('appraisals')->log("Deleted assessment window: {$title}");
 
         return ApiResponse::success([], 'Window deleted.');
     }
@@ -103,12 +110,16 @@ class AssessmentWindowController extends Controller
         // have no effect on in-progress attempts.
         $assessmentWindow->snapshotQuestionsFromTemplate();
 
+        activity('appraisals')->performedOn($assessmentWindow)->log("Opened assessment window: {$assessmentWindow->title}");
+
         return ApiResponse::success(AssessmentWindowResource::make($assessmentWindow), 'Session opened and questions locked in.');
     }
 
     public function close(AssessmentWindow $assessmentWindow): JsonResponse
     {
         $assessmentWindow->update(['status' => 'closed']);
+
+        activity('appraisals')->performedOn($assessmentWindow)->log("Closed assessment window: {$assessmentWindow->title}");
 
         return ApiResponse::success(AssessmentWindowResource::make($assessmentWindow), 'Window closed.');
     }

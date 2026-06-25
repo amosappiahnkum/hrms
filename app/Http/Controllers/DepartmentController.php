@@ -114,6 +114,8 @@ class DepartmentController extends Controller
                 }
             }
 
+            activity('departments')->performedOn($department)->log("Created department: {$department->name}");
+
             DB::commit();
 
             return new DepartmentResource($department->fresh()->loadCount('children'));
@@ -200,6 +202,8 @@ class DepartmentController extends Controller
 
             $department->update($data);
 
+            activity('departments')->performedOn($department)->log("Updated department: {$department->name}");
+
             DB::commit();
 
             return new DepartmentResource($department->fresh()->loadCount('children'));
@@ -232,9 +236,11 @@ class DepartmentController extends Controller
         }
 
         $uuid = $department->uuid;
-
+        $name = $department->name;
 
         $department->delete();
+
+        activity('departments')->log("Deleted department: {$name}");
 
         return response()->json(['id' => $uuid]);
     }
