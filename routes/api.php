@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\InformationUpdateController;
 use App\Http\Controllers\Recruitment\CandidatePortalController;
 use App\Http\Controllers\Recruitment\PublicJobController;
 use App\Http\Controllers\SettingController;
@@ -9,9 +8,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
 
-/*Route::prefix('approvals')->group(function () {
-    Route::get('/', [InformationUpdateController::class, 'index']);
-});*/
 Route::prefix('v1')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::get('settings/public', [SettingController::class, 'public']);

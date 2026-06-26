@@ -36,7 +36,7 @@ class UpdateEmployeeRequest extends FormRequest
             'title' => 'nullable|string',
             'first_name' => 'required|string',
             'gender' => 'required|in:Male,Female',
-            'job_type' => 'required|in:full_time,part_time',
+            'job_type' => ['required', 'string'],
             'last_name' => 'required|string',
             'marital_status' => 'required|in:Single,Married,Divorced,Widow,Separated',
             'middle_name' => 'nullable|string',

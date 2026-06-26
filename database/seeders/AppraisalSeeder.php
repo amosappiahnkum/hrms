@@ -15,10 +15,11 @@ class AppraisalSeeder extends Seeder
     // ── Organisation-specific template definitions ────────────────────────────
     //
     // Each entry maps a template name → the job category names it applies to.
-    // Add a new key here to support a new organisation (ORGANIZATION env value).
+    // job_categories: [] means "applies to all" (no category restriction).
+    // questions_key: key into the question sets built in run().
     //
     private array $orgTemplates = [
-        'abave' => [
+        'cashpoint' => [
             [
                 'name' => 'Managerial Performance Appraisal',
                 'description' => 'Performance appraisal template for managerial staff.',
@@ -32,11 +33,39 @@ class AppraisalSeeder extends Seeder
                 'job_categories' => ['Officers', 'Junior Officers'],
             ],
         ],
+
+        'abave' => [
+            [
+                'name' => 'Employee Performance Review',
+                'description' => 'Mid-year / annual performance review for all Abave staff.',
+                'questions_key' => 'abave_general',
+                'job_categories' => [], // applies to all categories
+            ],
+        ],
+    ];
+
+    // ── Rating scale per organisation ─────────────────────────────────────────
+
+    private array $orgRatingOptions = [
+        'default' => [
+            ['option_text' => 'Poor', 'option_value' => '1', 'order' => 1],
+            ['option_text' => 'Average', 'option_value' => '2', 'order' => 2],
+            ['option_text' => 'Good', 'option_value' => '3', 'order' => 3],
+            ['option_text' => 'Very Good', 'option_value' => '4', 'order' => 4],
+            ['option_text' => 'Excellent', 'option_value' => '5', 'order' => 5],
+        ],
+        'abave' => [
+            ['option_text' => 'Unsatisfactory', 'option_value' => '25', 'order' => 1],
+            ['option_text' => 'Needs Improvement', 'option_value' => '35', 'order' => 2],
+            ['option_text' => 'Meets Expectation', 'option_value' => '50', 'order' => 3],
+            ['option_text' => 'Exceeds Expectations', 'option_value' => '75', 'order' => 4],
+            ['option_text' => 'Outstanding', 'option_value' => '100', 'order' => 5],
+        ],
     ];
 
     public function run(): void
     {
-        $org = strtolower(env('ORGANIZATION', 'ttu'));
+        $org = strtolower(config('kazi360.organization', 'ttu'));
 
         if (!isset($this->orgTemplates[$org])) {
             $this->command->warn("No appraisal template definitions found for organisation \"{$org}\". Skipping.");
@@ -44,32 +73,32 @@ class AppraisalSeeder extends Seeder
         }
 
         $adminUser = User::first();
-
-        // ── Question categories ───────────────────────────────────────────────
-
-        $nonManagerialParent = QuestionCategory::updateOrCreate(
-            ['name' => 'Non-Managerial Performance', 'parent_id' => null],
-            ['description' => 'Appraisal criteria for non-managerial staff', 'is_active' => true, 'user_id' => $adminUser->id]
-        );
-
-        $managerialParent = QuestionCategory::updateOrCreate(
-            ['name' => 'Managerial Performance', 'parent_id' => null],
-            ['description' => 'Appraisal criteria for managerial staff', 'is_active' => true, 'user_id' => $adminUser->id]
-        );
+        $ratingScale = $this->orgRatingOptions[$org] ?? $this->orgRatingOptions['default'];
 
         // ── Build question sets ───────────────────────────────────────────────
 
-        $questionSets = [
-            'non_managerial' => $this->createSectionsAndQuestions($this->nonManagerialSections(), $nonManagerialParent, $adminUser),
-            'managerial' => $this->createSectionsAndQuestions($this->managerialSections(), $managerialParent, $adminUser),
-        ];
+        $questionSets = match ($org) {
+            'cashpoint' => $this->buildCashpointSets($adminUser, $ratingScale),
+            'abave' => $this->buildAbaveSets($adminUser, $ratingScale),
+            default => [],
+        };
 
-        // ── Seed templates for this organisation ──────────────────────────────
+        // ── Deactivate templates from any other org ───────────────────────────
+
+        $currentOrgTitles = array_column($this->orgTemplates[$org], 'name');
+
+        Assessment::where('type', 'appraisal')
+            ->whereNotIn('title', $currentOrgTitles)
+            ->update(['is_active' => false]);
+
+        // ── Seed templates for the current org ───────────────────────────────
 
         $templateCount = 0;
 
         foreach ($this->orgTemplates[$org] as $def) {
-            $categoryIds = JobCategory::whereIn('name', $def['job_categories'])->pluck('id')->toArray();
+            $categoryIds = empty($def['job_categories'])
+                ? []  // empty = no restriction; window query handles this via whereDoesntHave('jobCategories')
+                : JobCategory::whereIn('name', $def['job_categories'])->pluck('id')->toArray();
 
             $this->createTemplate(
                 $def['name'],
@@ -82,7 +111,7 @@ class AppraisalSeeder extends Seeder
             $templateCount++;
         }
 
-        $this->command->info("Appraisal seeder [{$org}]: {$templateCount} templates seeded.");
+        $this->command->info("Appraisal seeder [{$org}]: {$templateCount} template(s) seeded.");
     }
 
     // ── Template creation ─────────────────────────────────────────────────────
@@ -98,7 +127,6 @@ class AppraisalSeeder extends Seeder
             ]
         );
 
-        // Sync many-to-many job categories
         $template->jobCategories()->sync($jobCategoryIds);
 
         foreach ($questions as $item) {
@@ -116,9 +144,9 @@ class AppraisalSeeder extends Seeder
         }
     }
 
-    // ── Question bank builders ────────────────────────────────────────────────
+    // ── Generic section/question builder ──────────────────────────────────────
 
-    private function createSectionsAndQuestions(array $sections, QuestionCategory $parent, User $user): array
+    private function createSectionsAndQuestions(array $sections, QuestionCategory $parent, User $user, array $ratingOptions): array
     {
         $allQuestions = [];
 
@@ -142,13 +170,7 @@ class AppraisalSeeder extends Seeder
                 );
 
                 if ($question->options()->doesntExist()) {
-                    foreach ([
-                                 ['option_text' => 'Poor', 'option_value' => '1', 'order' => 1],
-                                 ['option_text' => 'Average', 'option_value' => '2', 'order' => 2],
-                                 ['option_text' => 'Good', 'option_value' => '3', 'order' => 3],
-                                 ['option_text' => 'Very Good', 'option_value' => '4', 'order' => 4],
-                                 ['option_text' => 'Excellent', 'option_value' => '5', 'order' => 5],
-                             ] as $opt) {
+                    foreach ($ratingOptions as $opt) {
                         $question->options()->create(array_merge($opt, ['user_id' => $user->id]));
                     }
                 }
@@ -160,7 +182,127 @@ class AppraisalSeeder extends Seeder
         return $allQuestions;
     }
 
-    // ── Question data ─────────────────────────────────────────────────────────
+    // ── Cashpoint question-set builder ────────────────────────────────────────
+
+    private function buildCashpointSets(User $user, array $ratingScale): array
+    {
+        $nonManagerialParent = QuestionCategory::updateOrCreate(
+            ['name' => 'Non-Managerial Performance', 'parent_id' => null],
+            ['description' => 'Appraisal criteria for non-managerial staff', 'is_active' => true, 'user_id' => $user->id]
+        );
+
+        $managerialParent = QuestionCategory::updateOrCreate(
+            ['name' => 'Managerial Performance', 'parent_id' => null],
+            ['description' => 'Appraisal criteria for managerial staff', 'is_active' => true, 'user_id' => $user->id]
+        );
+
+        return [
+            'non_managerial' => $this->createSectionsAndQuestions($this->nonManagerialSections(), $nonManagerialParent, $user, $ratingScale),
+            'managerial' => $this->createSectionsAndQuestions($this->managerialSections(), $managerialParent, $user, $ratingScale),
+        ];
+    }
+
+    // ── Abave question-set builder ────────────────────────────────────────────
+
+    private function buildAbaveSets(User $user, array $ratingScale): array
+    {
+        $parent = QuestionCategory::updateOrCreate(
+            ['name' => 'Abave Performance Review', 'parent_id' => null],
+            ['description' => 'General performance appraisal criteria for all Abave staff', 'is_active' => true, 'user_id' => $user->id]
+        );
+
+        return [
+            'abave_general' => $this->createSectionsAndQuestions($this->abaveSections(), $parent, $user, $ratingScale),
+        ];
+    }
+
+    // ── Abave question data ───────────────────────────────────────────────────
+
+    private function abaveSections(): array
+    {
+        return [
+            [
+                'name' => 'Personal Characteristics',
+                'questions' => [
+                    'Positive attitude',
+                    'Cooperative',
+                    'Responsible',
+                    'Dedicated',
+                    'Verbal/Persuasive',
+                    'Ability to learn',
+                ],
+            ],
+            [
+                'name' => 'Goals / Self Perception',
+                'questions' => [
+                    'Realistic appraisal of self',
+                    'Reason for interest in field',
+                    'Realistic career goals',
+                    'Qualifications',
+                ],
+            ],
+            [
+                'name' => 'Education & Training',
+                'questions' => [
+                    'Accomplishments',
+                    'Skills',
+                    'Continual upgrade of experience/knowledge',
+                    'Computer Skills',
+                ],
+            ],
+            [
+                'name' => 'Professionalism & Collegiality',
+                'questions' => [
+                    'Professional attitude with clients',
+                    'Respect code of ethics',
+                    'Collegiality and teamwork',
+                    'Commitment to tasks',
+                    'Punctuality in training and task completion',
+                ],
+            ],
+            [
+                'name' => 'Adaptability & Independence at Work',
+                'questions' => [
+                    'Adaptability to changes in the working environment',
+                    'Self-initiative',
+                    'Availability for engagement',
+                    'Openness to new professional challenges',
+                    'Follow instructions and work related procedures',
+                    'Punctuality and timeliness in independent work',
+                    'Capable of making decisions and solving problems',
+                    'Specific Knowledge of the job and ability to apply it',
+                    'Works under minimal supervision',
+                    'Capacity and ambition for advancement',
+                ],
+            ],
+            [
+                'name' => 'Decision Making / Problem Solving',
+                'questions' => [
+                    'Creativity',
+                    'Logic',
+                ],
+            ],
+            [
+                'name' => 'Quality & Safety',
+                'questions' => [
+                    'Comply with the quality procedures',
+                ],
+            ],
+            [
+                'name' => 'HSE (Health, Safety & Environment)',
+                'questions' => [
+                    'Compliance with HSE procedures and work instructions',
+                    'Proper use of PPE and safety equipment',
+                    'Participation in weekly safety meetings (TBT Attendance records)',
+                    'Housekeeping and maintenance of safe work environment',
+                    'Digital Reporting and the Use of Resources',
+                    'Total Number of HSE Training Completed',
+                ],
+            ],
+        ];
+    }
+
+    // ── Cashpoint question data ───────────────────────────────────────────────
 
     private function nonManagerialSections(): array
     {

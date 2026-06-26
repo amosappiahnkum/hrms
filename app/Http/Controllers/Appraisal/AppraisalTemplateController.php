@@ -18,11 +18,15 @@ class AppraisalTemplateController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $templates = Assessment::where('type', 'appraisal')
-            ->withCount('questionUsages as questions_count')
+        $query = Assessment::withCount('questionUsages as questions_count')
             ->with('jobCategories')
-            ->latest()
-            ->paginate($request->input('per_page', 15));
+            ->latest();
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+
+        $templates = $query->paginate($request->input('per_page', 15));
 
         return AppraisalTemplateResource::collection($templates);
     }
@@ -31,15 +35,15 @@ class AppraisalTemplateController extends Controller
     {
         $template = Assessment::create([
             'title'       => $request->name,
+            'type'        => $request->type,
             'description' => $request->description,
-            'type'        => 'appraisal',
             'is_active'   => $request->input('is_active', true),
         ]);
 
         $template->jobCategories()->sync($request->input('job_category_ids', []));
         $template->load('jobCategories');
 
-        activity('appraisals')->performedOn($template)->log("Created appraisal template: {$template->title}");
+        activity('appraisals')->performedOn($template)->log("Created {$template->type} template: {$template->title}");
 
         return ApiResponse::success(AppraisalTemplateResource::make($template), 'Template created.', 201);
     }
@@ -55,6 +59,7 @@ class AppraisalTemplateController extends Controller
     {
         $assessment->update([
             'title'       => $request->name,
+            'type'        => $request->type,
             'description' => $request->description,
             'is_active'   => $request->input('is_active', $assessment->is_active),
         ]);
@@ -62,7 +67,7 @@ class AppraisalTemplateController extends Controller
         $assessment->jobCategories()->sync($request->input('job_category_ids', []));
         $assessment->load('jobCategories');
 
-        activity('appraisals')->performedOn($assessment)->log("Updated appraisal template: {$assessment->title}");
+        activity('appraisals')->performedOn($assessment)->log("Updated {$assessment->type} template: {$assessment->title}");
 
         return ApiResponse::success(AppraisalTemplateResource::make($assessment));
     }
@@ -77,7 +82,7 @@ class AppraisalTemplateController extends Controller
 
         $assessment->delete();
 
-        activity('appraisals')->log("Deleted appraisal template: {$title}");
+        activity('appraisals')->log("Deleted template: {$title}");
 
         return ApiResponse::success([], 'Template deleted.');
     }

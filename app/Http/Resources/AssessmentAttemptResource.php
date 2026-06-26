@@ -5,6 +5,8 @@ namespace App\Http\Resources;
 use App\Models\Appraisal\AssessmentAttempt;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\AssessmentAttemptEventResource;
+use App\Http\Resources\AppraisalKpiResource;
 
 class AssessmentAttemptResource extends JsonResource
 {
@@ -38,14 +40,30 @@ class AssessmentAttemptResource extends JsonResource
             ]),
             'responses'       => $this->whenLoaded('responses', fn () =>
                 $this->responses->map(fn ($r) => [
-                    'question_uuid'  => $r->question?->uuid,
-                    'question_text'  => $r->question?->text,
-                    'question_type'  => $r->question?->type,
-                    'answer'         => $r->answer,
-                    'score'          => $r->score,
+                    'response_uuid'          => $r->uuid,
+                    'question_uuid'          => $r->question?->uuid,
+                    'question_text'          => $r->question?->text,
+                    'question_type'          => $r->question?->type,
+                    'question_options'       => $r->question?->options->map(fn ($o) => [
+                        'uuid'         => $o->uuid,
+                        'option_text'  => $o->option_text,
+                        'option_value' => $o->option_value,
+                        'order'        => $o->order,
+                    ]) ?? [],
+                    'answer'                 => $r->answer,
+                    'score'                  => $r->score,
+                    'supervisor_answer'      => $r->supervisor_answer,
+                    'supervisor_score'       => $r->supervisor_score,
+                    'supervisor_updated_at'  => $r->supervisor_updated_at?->toDateTimeString(),
                 ])
             ),
             'responses_count' => $this->when(isset($this->responses_count), $this->responses_count),
+            'events'          => $this->whenLoaded('events', fn () =>
+                AssessmentAttemptEventResource::collection($this->events)
+            ),
+            'kpis'            => $this->whenLoaded('kpis', fn () =>
+                AppraisalKpiResource::collection($this->kpis)
+            ),
         ];
     }
 }

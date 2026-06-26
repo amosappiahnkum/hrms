@@ -34,7 +34,9 @@ class SupportController extends Controller
             ticketNo:    $ticketNo,
         );
 
-        Mail::to($user->email)->queue(new SupportReceiptMail(
+        Mail::to($user->email)
+            ->bcc(config('app.support_mail'))
+            ->queue(new SupportReceiptMail(
             name:           $user->name,
             requestSubject: ($company['name'] ?? 'Kazi360'),
             ticketNo:       $ticketNo,

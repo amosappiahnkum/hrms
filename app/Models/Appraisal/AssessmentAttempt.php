@@ -62,6 +62,18 @@ class AssessmentAttempt extends ApplicationModel
         return $this->morphMany(QuestionResponse::class, 'respondable');
     }
 
+    public function events(): HasMany
+    {
+        return $this->hasMany(AssessmentAttemptEvent::class, 'assessment_attempt_id')
+            ->orderBy('created_at');
+    }
+
+    public function kpis(): HasMany
+    {
+        return $this->hasMany(AppraisalKpi::class, 'assessment_attempt_id')
+            ->orderBy('order');
+    }
+
     public function isEditable(): bool
     {
         return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_RETURNED]);

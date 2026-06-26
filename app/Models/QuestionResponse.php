@@ -18,10 +18,16 @@ class QuestionResponse extends ApplicationModel
         'respondable_id',
         'answer',
         'score',
+        'supervisor_answer',
+        'supervisor_score',
+        'supervisor_id',
+        'supervisor_updated_at',
     ];
 
     protected $casts = [
-        'score' => 'integer',
+        'score'                => 'integer',
+        'supervisor_score'     => 'integer',
+        'supervisor_updated_at' => 'datetime',
     ];
 
     public function question(): BelongsTo

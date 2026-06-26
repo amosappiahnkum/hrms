@@ -36,6 +36,7 @@ class StoreEmployeeRequest extends FormRequest
             'rank_id' => $rankRequired ? ['required', 'sometimes', 'exists:ranks,id'] : ['nullable', 'sometimes', 'exists:ranks,id'],
             'department_uuid' => 'required|uuid|exists:departments,uuid',
             'department_id' => 'sometimes|exists:departments,id',
+            'work_email' => ['nullable', 'email', 'unique:users,email'],
         ];
     }
 

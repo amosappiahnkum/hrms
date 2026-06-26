@@ -107,5 +107,15 @@
         ],
         "group": "Recruitment",
         "permissions": []
+    },
+    {
+        "roles": [
+            "appraisal_officer"
+        ],
+        "group": "Appraisal",
+        "permissions": [
+            "view-hr-appraisals",
+            "finalize-hr-appraisals"
+        ]
     }
 ]

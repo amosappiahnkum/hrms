@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Exports\EmployeeExport;
 use App\Helpers\ApiResponse;
-use App\Helpers\Helper;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Http\Requests\TerminateEmployeeRequest;
 use App\Http\Requests\UpdateEmployeeJobTypeRequest;
@@ -133,9 +132,13 @@ class EmployeeController extends Controller
         DB::beginTransaction();
 
         try {
-            $employee = Employee::create($request->validated());
+            $employee = Employee::create($request->safe()->except('work_email'));
             $employee->contactDetail()->create();
             $employee->jobDetail()->create();
+
+            if ($request->filled('work_email')) {
+                $this->provisionUserAccount($employee, $request->work_email);
+            }
 
             activity('employees')->performedOn($employee)->log("Created employee: {$employee->name}");
 
@@ -143,6 +146,7 @@ class EmployeeController extends Controller
 
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
+            DB::rollBack();
             return response()->json([
                 'message' => $exception->getMessage()
             ], 400);
@@ -189,35 +193,39 @@ class EmployeeController extends Controller
             'work_email' => ['required', 'email', 'unique:users,email'],
         ]);
 
-        $email = $request->work_email;
+        $this->provisionUserAccount($employee, $request->work_email);
+
+        return response()->json(['message' => 'User account created successfully']);
+    }
+
+    private function provisionUserAccount(Employee $employee, string $email): void
+    {
         $plainPassword = Str::random(12);
 
         $employee->contactDetail?->update(['work_email' => $email]);
 
         $user = User::create([
-            'name' => $employee->name,
-            'username' => $email,
-            'email' => $email,
-            'password' => Hash::make($plainPassword),
+            'name'        => $employee->name,
+            'username'    => $email,
+            'email'       => $email,
+            'password'    => Hash::make($plainPassword),
             'employee_id' => $employee->id,
         ]);
 
         $user->assignRole('staff');
 
-        $passwordFeatureEnabled = (bool)app(SettingService::class)
+        $passwordFeatureEnabled = (bool) app(SettingService::class)
             ->get('features.auth.password', false);
 
         Notification::route('mail', $email)->notify(
             new EmailLinkedNotification(
-                name: $employee->first_name,
-                email: $email,
+                name:     $employee->first_name,
+                email:    $email,
                 password: $passwordFeatureEnabled ? $plainPassword : null,
             )
         );
 
         activity('employees')->performedOn($employee)->log("Created user account for {$employee->name}");
-
-        return response()->json(['message' => 'User account created successfully']);
     }
 
     public function resetPassword(Employee $employee): JsonResponse

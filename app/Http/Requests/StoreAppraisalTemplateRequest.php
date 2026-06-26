@@ -15,6 +15,7 @@ class StoreAppraisalTemplateRequest extends FormRequest
     {
         return [
             'name'                => ['required', 'string', 'max:255'],
+            'type'                => ['required', 'string', 'in:appraisal,training,survey'],
             'description'         => ['nullable', 'string', 'max:2000'],
             'job_category_ids'    => ['nullable', 'array'],
             'job_category_ids.*'  => ['exists:job_categories,id'],

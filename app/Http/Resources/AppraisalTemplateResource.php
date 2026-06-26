@@ -12,6 +12,7 @@ class AppraisalTemplateResource extends JsonResource
         return [
             'uuid'        => $this->uuid,
             'name'        => $this->title,
+            'type'        => $this->type,
             'description' => $this->description,
             'is_active'   => $this->is_active,
             'job_categories' => $this->whenLoaded('jobCategories', fn () =>
