@@ -40,6 +40,7 @@ Route::middleware('feature:employees.enabled')->group(function () {
         Route::put('/{employee}/contact', [ContactDetailController::class, 'update']);
 
         Route::get('/{employee}/stats', [EmployeeController::class, 'employeeStats']);
+        Route::get('/{employee}/profile-completion', [EmployeeController::class, 'profileCompletion']);
 
         Route::get('/{employee}/job-detail', [JobDetailController::class, 'show']);
         Route::put('/{employee}/job-detail', [JobDetailController::class, 'update']);

@@ -23,6 +23,9 @@ class AssessmentWindowController extends Controller
                 $q->whereHas('assessment', fn ($a) => $a->where('uuid', $uuid))
             )
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
+            ->when($request->type, fn ($q, $t) =>
+                $q->whereHas('assessment', fn ($a) => $a->where('type', $t))
+            )
             ->latest()
             ->paginate($request->input('per_page', 15));
 
@@ -124,12 +127,12 @@ class AssessmentWindowController extends Controller
         return ApiResponse::success(AssessmentWindowResource::make($assessmentWindow), 'Window closed.');
     }
 
-    public function attempts(AssessmentWindow $assessmentWindow): AnonymousResourceCollection
+    public function attempts(Request $request, AssessmentWindow $assessmentWindow): AnonymousResourceCollection
     {
         $attempts = $assessmentWindow->attempts()
-            ->with(['responses'])
+            ->with(['user', 'responses.question.options', 'events', 'kpis', 'supervisor'])
             ->withCount('responses')
-            ->get();
+            ->paginate($request->input('per_page', 20));
 
         return AssessmentAttemptResource::collection($attempts);
     }

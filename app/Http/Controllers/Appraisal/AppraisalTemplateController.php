@@ -55,6 +55,37 @@ class AppraisalTemplateController extends Controller
         return ApiResponse::success(AppraisalTemplateResource::make($assessment));
     }
 
+    public function preview(Assessment $assessment): JsonResponse
+    {
+        $assessment->load(['questionUsages.question.options', 'questionUsages.question.dependsOn']);
+
+        $questions = $assessment->questionUsages
+            ->sortBy('order')
+            ->values()
+            ->map(fn ($usage) => [
+                'uuid'            => $usage->question->uuid,
+                'text'            => $usage->question->text,
+                'description'     => $usage->question->description,
+                'type'            => $usage->question->type,
+                'is_required'     => $usage->is_required_override ?? $usage->question->is_required,
+                'order'           => $usage->order,
+                'depends_on_uuid' => $usage->question->dependsOn?->uuid,
+                'show_when_value' => $usage->question->show_when_value,
+                'options'         => $usage->question->options->map(fn ($o) => [
+                    'uuid'         => $o->uuid,
+                    'option_text'  => $o->option_text,
+                    'option_value' => $o->option_value,
+                    'order'        => $o->order,
+                ]),
+            ]);
+
+        return ApiResponse::success([
+            'name'      => $assessment->title,
+            'type'      => $assessment->type,
+            'questions' => $questions,
+        ]);
+    }
+
     public function update(StoreAppraisalTemplateRequest $request, Assessment $assessment): JsonResponse
     {
         $assessment->update([

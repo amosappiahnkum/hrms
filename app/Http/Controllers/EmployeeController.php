@@ -627,4 +627,64 @@ class EmployeeController extends Controller
 
         return ApiResponse::success($employee->bio, 'Specializations updated successfully');
     }
+
+    public function profileCompletion(Employee $employee): JsonResponse
+    {
+        $employee->loadMissing(['contactDetail', 'jobDetail', 'nextOfKin']);
+
+        $contact = $employee->contactDetail;
+        $job     = $employee->jobDetail;
+        $kin     = $employee->nextOfKin;
+
+        $sections = [
+            'personal_info' => [
+                'label'    => 'Personal Information',
+                'complete' => filled($employee->dob) && filled($employee->gender) && filled($employee->marital_status),
+            ],
+            'contact' => [
+                'label'    => 'Contact Info',
+                'complete' => $contact !== null
+                    && (filled($contact->telephone) || filled($contact->work_telephone))
+                    && filled($contact->address),
+            ],
+            'job_detail' => [
+                'label'    => 'Job Detail',
+                'complete' => $job !== null && filled($job->joined_date),
+            ],
+            'biography' => [
+                'label'    => 'Biography',
+                'complete' => filled($employee->bio),
+            ],
+            'dependants' => [
+                'label'    => 'Dependants',
+                'complete' => $employee->dependants()->exists(),
+            ],
+            'next_of_kin' => [
+                'label'    => 'Next of Kin',
+                'complete' => $kin !== null && filled($kin->name),
+            ],
+            'emergency_contact' => [
+                'label'    => 'Emergency Contact',
+                'complete' => $employee->emergencyContacts()->exists(),
+            ],
+            'qualifications' => [
+                'label'    => 'Qualifications',
+                'complete' => $employee->qualifications()->exists(),
+            ],
+            'experience' => [
+                'label'    => 'Experience',
+                'complete' => $employee->experiences()->exists(),
+            ],
+        ];
+
+        $completed = collect($sections)->filter(fn ($s) => $s['complete'])->count();
+        $total     = count($sections);
+
+        return ApiResponse::success([
+            'percentage' => (int) round(($completed / $total) * 100),
+            'completed'  => $completed,
+            'total'      => $total,
+            'sections'   => $sections,
+        ]);
+    }
 }

@@ -45,6 +45,7 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
         Route::get('/', [AppraisalTemplateController::class, 'index']);
         Route::post('/', [AppraisalTemplateController::class, 'store']);
         Route::get('/{assessment}', [AppraisalTemplateController::class, 'show']);
+        Route::get('/{assessment}/preview', [AppraisalTemplateController::class, 'preview']);
         Route::put('/{assessment}', [AppraisalTemplateController::class, 'update']);
         Route::delete('/{assessment}', [AppraisalTemplateController::class, 'destroy']);
         Route::post('/{assessment}/questions/sync', [AppraisalTemplateController::class, 'syncQuestions']);
