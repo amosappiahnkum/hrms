@@ -20,6 +20,11 @@ class AppraisalKpi extends ApplicationModel
         'order',
     ];
 
+    protected $casts = [
+        'target' => 'decimal:2',
+        'actual' => 'decimal:2',
+    ];
+
     public function attempt(): BelongsTo
     {
         return $this->belongsTo(AssessmentAttempt::class, 'assessment_attempt_id');

@@ -30,6 +30,12 @@ class AssessmentAttemptResource extends JsonResource
             'supervisor_comment'      => $this->supervisor_comment,
             'supervisor_confirmed_at' => $this->supervisor_confirmed_at?->toDateTimeString(),
 
+            // Frozen scores — set when HR/appraisal officer finalises
+            'score'        => $this->score,
+            'self_score'   => $this->self_score,
+            'kpi_score'    => $this->kpi_score,
+            'finalized_at' => $this->finalized_at?->toDateTimeString(),
+
             'window'          => $this->whenLoaded('window', fn () =>
                 AssessmentWindowResource::make($this->window)
             ),
@@ -61,8 +67,11 @@ class AssessmentAttemptResource extends JsonResource
             'events'          => $this->whenLoaded('events', fn () =>
                 AssessmentAttemptEventResource::collection($this->events)
             ),
-            'kpis'            => $this->whenLoaded('kpis', fn () =>
+            'kpis'        => $this->whenLoaded('kpis', fn () =>
                 AppraisalKpiResource::collection($this->kpis)
+            ),
+            'kpi_summary' => $this->whenLoaded('responses', fn () =>
+                $this->computeKpiSummary()
             ),
         ];
     }

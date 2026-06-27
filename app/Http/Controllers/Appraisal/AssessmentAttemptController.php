@@ -111,7 +111,7 @@ class AssessmentAttemptController extends Controller
     {
         $attempt = AssessmentAttempt::where('assessment_window_id', $assessmentWindow->id)
             ->where('user_id', auth()->id())
-            ->with(['responses.question', 'events.actor'])
+            ->with(['responses.question', 'events.actor', 'kpis'])
             ->firstOrFail();
 
         $assessmentWindow->load(['questionUsages.question']);
@@ -137,9 +137,14 @@ class AssessmentAttemptController extends Controller
         ]);
 
         return ApiResponse::success([
-            'status'    => $attempt->status,
-            'responses' => $responses,
-            'events'    => $attempt->events->map(fn ($e) => [
+            'status'       => $attempt->status,
+            'score'        => $attempt->score,
+            'self_score'   => $attempt->self_score,
+            'kpi_score'    => $attempt->kpi_score,
+            'finalized_at' => $attempt->finalized_at?->toDateTimeString(),
+            'responses'    => $responses,
+            'kpis'         => AppraisalKpiResource::collection($attempt->kpis),
+            'events'       => $attempt->events->map(fn ($e) => [
                 'uuid'       => $e->uuid,
                 'event_type' => $e->event_type,
                 'comment'    => $e->comment,
@@ -302,7 +307,7 @@ class AssessmentAttemptController extends Controller
                     });
                 });
             })
-            ->with(['user', 'window.assessment', 'responses.question', 'events.actor', 'kpis'])
+            ->with(['user', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
             ->paginate(50);
 
         return AssessmentAttemptResource::collection($attempts);
@@ -441,7 +446,7 @@ class AssessmentAttemptController extends Controller
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
             // HR employees' appraisals are routed to the appraisal_officer, not HR itself
             ->whereDoesntHave('user.roles', fn ($q) => $q->where('name', 'hr'))
-            ->with(['user', 'supervisor', 'window.assessment', 'responses.question', 'events.actor', 'kpis'])
+            ->with(['user', 'supervisor', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
             ->latest('supervisor_confirmed_at')
             ->paginate($request->input('per_page', 50));
 
@@ -461,11 +466,21 @@ class AssessmentAttemptController extends Controller
             return response()->json(['message' => 'This appraisal has not been confirmed by a supervisor yet.'], 422);
         }
 
-        $attempt->update(['status' => AssessmentAttempt::STATUS_COMPLETED]);
+        DB::transaction(function () use ($attempt) {
+            $scores = $this->computeScores($attempt);
 
-        $this->recordEvent($attempt, 'hr_completed');
+            $attempt->update([
+                'status'       => AssessmentAttempt::STATUS_COMPLETED,
+                'score'        => $scores['score'],
+                'self_score'   => $scores['self_score'],
+                'kpi_score'    => $scores['kpi_score'],
+                'finalized_at' => now(),
+            ]);
 
-        activity('appraisals')->performedOn($attempt)->log("HR completed appraisal for {$attempt->user->name}");
+            $this->recordEvent($attempt, 'hr_completed');
+
+            activity('appraisals')->performedOn($attempt)->log("HR completed appraisal for {$attempt->user->name}");
+        });
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
@@ -486,10 +501,10 @@ class AssessmentAttemptController extends Controller
         }
 
         $request->validate([
-            'kpis'                => ['required', 'array'],
-            'kpis.*.description'  => ['required', 'string', 'max:1000'],
-            'kpis.*.target'       => ['required', 'string', 'max:1000'],
-            'kpis.*.actual'       => ['nullable', 'string', 'max:1000'],
+            'kpis'               => ['required', 'array'],
+            'kpis.*.description' => ['required', 'string', 'max:1000'],
+            'kpis.*.target'      => ['required', 'numeric', 'min:0'],
+            'kpis.*.actual'      => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $attempt->kpis()->delete();
@@ -526,7 +541,7 @@ class AssessmentAttemptController extends Controller
         ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
             ->whereHas('user.roles', fn ($q) => $q->where('name', 'hr'))
-            ->with(['user', 'supervisor', 'window.assessment', 'responses.question', 'events.actor', 'kpis'])
+            ->with(['user', 'supervisor', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
             ->latest('supervisor_confirmed_at')
             ->paginate($request->input('per_page', 50));
 
@@ -546,11 +561,21 @@ class AssessmentAttemptController extends Controller
             return response()->json(['message' => 'This appraisal has not been confirmed by a supervisor yet.'], 422);
         }
 
-        $attempt->update(['status' => AssessmentAttempt::STATUS_COMPLETED]);
+        DB::transaction(function () use ($attempt) {
+            $scores = $this->computeScores($attempt);
 
-        $this->recordEvent($attempt, 'hr_completed');
+            $attempt->update([
+                'status'       => AssessmentAttempt::STATUS_COMPLETED,
+                'score'        => $scores['score'],
+                'self_score'   => $scores['self_score'],
+                'kpi_score'    => $scores['kpi_score'],
+                'finalized_at' => now(),
+            ]);
 
-        activity('appraisals')->performedOn($attempt)->log("Appraisal officer completed appraisal for {$attempt->user->name}");
+            $this->recordEvent($attempt, 'hr_completed');
+
+            activity('appraisals')->performedOn($attempt)->log("Appraisal officer completed appraisal for {$attempt->user->name}");
+        });
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
@@ -559,6 +584,57 @@ class AssessmentAttemptController extends Controller
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Compute weighted response scores and KPI achievement rate for an attempt.
+     * Frozen at finalization so later template/weight edits don't alter the record.
+     *
+     * Returns: score (supervisor-adjusted), self_score (employee only), kpi_score (% achievement).
+     */
+    private function computeScores(AssessmentAttempt $attempt): array
+    {
+        $attempt->load([
+            'responses.question',
+            'window.questionUsages',
+            'kpis',
+        ]);
+
+        $usagesByQuestionId = $attempt->window->questionUsages->keyBy('question_id');
+
+        $totalWeight   = 0;
+        $weightedScore = 0;
+        $selfWeighted  = 0;
+
+        foreach ($attempt->responses as $response) {
+            $effectiveScore = $response->supervisor_score ?? $response->score;
+            $selfScore      = $response->score;
+
+            if ($effectiveScore === null && $selfScore === null) {
+                continue;
+            }
+
+            $usage  = $usagesByQuestionId[$response->question_id] ?? null;
+            $weight = (float) ($usage?->custom_weight ?? $response->question?->weight ?? 1);
+
+            $totalWeight   += $weight;
+            $weightedScore += ($effectiveScore ?? 0) * $weight;
+            $selfWeighted  += ($selfScore ?? 0) * $weight;
+        }
+
+        $score     = $totalWeight > 0 ? round($weightedScore / $totalWeight, 2) : null;
+        $selfScore = $totalWeight > 0 ? round($selfWeighted / $totalWeight, 2) : null;
+
+        $achievable = $attempt->kpis->filter(fn ($k) => (float) $k->target > 0 && $k->actual !== null);
+        $kpiScore   = $achievable->isNotEmpty()
+            ? round($achievable->avg(fn ($k) => ((float) $k->actual / (float) $k->target) * 100), 2)
+            : null;
+
+        return [
+            'score'      => $score,
+            'self_score' => $selfScore,
+            'kpi_score'  => $kpiScore,
+        ];
+    }
 
     private function recordEvent(
         AssessmentAttempt $attempt,

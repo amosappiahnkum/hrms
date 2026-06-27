@@ -13,8 +13,8 @@ return new class extends Migration
             $table->uuid()->unique();
             $table->foreignId('assessment_attempt_id')->constrained('assessment_attempts')->cascadeOnDelete();
             $table->text('description');        // Task / Responsibility
-            $table->text('target');             // Target / KPI
-            $table->text('actual')->nullable(); // Actual Achieved
+            $table->decimal('target', 10, 2);
+            $table->decimal('actual', 10, 2)->nullable();
             $table->unsignedSmallInteger('order')->default(0);
             $table->timestamps();
 

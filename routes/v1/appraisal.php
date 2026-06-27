@@ -63,5 +63,6 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
         Route::post('/{assessmentWindow}/open', [AssessmentWindowController::class, 'open']);
         Route::post('/{assessmentWindow}/close', [AssessmentWindowController::class, 'close']);
         Route::get('/{assessmentWindow}/attempts', [AssessmentWindowController::class, 'attempts']);
+        Route::get('/{assessmentWindow}/stats', [AssessmentWindowController::class, 'stats']);
     });
 });

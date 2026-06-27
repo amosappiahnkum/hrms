@@ -12,6 +12,7 @@ use App\Models\Appraisal\AssessmentWindow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class AssessmentWindowController extends Controller
 {
@@ -130,10 +131,93 @@ class AssessmentWindowController extends Controller
     public function attempts(Request $request, AssessmentWindow $assessmentWindow): AnonymousResourceCollection
     {
         $attempts = $assessmentWindow->attempts()
-            ->with(['user', 'responses.question.options', 'events', 'kpis', 'supervisor'])
+            ->with(['user', 'responses.question.questionCategory', 'events', 'kpis', 'supervisor', 'window.questionUsages'])
             ->withCount('responses')
             ->paginate($request->input('per_page', 20));
 
         return AssessmentAttemptResource::collection($attempts);
+    }
+
+    /**
+     * Aggregate KPIs for the window: participation rate, dept avg scores,
+     * on-time submission rate, and supervisor confirmation lag.
+     */
+    public function stats(AssessmentWindow $assessmentWindow): JsonResponse
+    {
+        $assessmentWindow->loadMissing('assessment.jobCategories');
+
+        // ── Participation Rate ────────────────────────────────────────────────
+        $jobCategoryIds = $assessmentWindow->assessment->jobCategories->pluck('id');
+
+        $eligibleQuery = DB::table('employees')
+            ->join('job_details', 'job_details.employee_id', '=', 'employees.id')
+            ->join('users', 'users.employee_id', '=', 'employees.id')
+            ->whereNull('employees.deleted_at')
+            ->whereNull('users.deleted_at');
+
+        if ($jobCategoryIds->isNotEmpty()) {
+            $eligibleQuery->whereIn('job_details.job_category_id', $jobCategoryIds);
+        }
+
+        $eligibleCount  = $eligibleQuery->count('employees.id');
+        $submittedCount = $assessmentWindow->attempts()
+            ->where('status', '!=', AssessmentAttempt::STATUS_DRAFT)
+            ->count();
+
+        $participationRate = $eligibleCount > 0
+            ? round(($submittedCount / $eligibleCount) * 100, 1)
+            : null;
+
+        // ── Department Average Score (completed attempts only) ────────────────
+        $deptScores = $assessmentWindow->attempts()
+            ->where('status', AssessmentAttempt::STATUS_COMPLETED)
+            ->whereNotNull('score')
+            ->with(['user.employee.department'])
+            ->get(['id', 'user_id', 'score'])
+            ->groupBy(fn ($a) => $a->user?->employee?->department?->name ?? 'Unknown')
+            ->map(fn ($g) => round($g->avg('score'), 2))
+            ->sortKeys()
+            ->all();
+
+        // ── On-Time Submission Rate ───────────────────────────────────────────
+        $onTimeRate = null;
+        if ($assessmentWindow->end_date) {
+            $totalSubmitted = $assessmentWindow->attempts()
+                ->whereNotNull('submitted_at')
+                ->count();
+
+            $onTime = $assessmentWindow->attempts()
+                ->whereNotNull('submitted_at')
+                ->where('submitted_at', '<=', $assessmentWindow->end_date)
+                ->count();
+
+            $onTimeRate = $totalSubmitted > 0
+                ? round(($onTime / $totalSubmitted) * 100, 1)
+                : null;
+        }
+
+        // ── Supervisor Confirmation Lag ───────────────────────────────────────
+        $lagAttempts = $assessmentWindow->attempts()
+            ->whereNotNull('submitted_at')
+            ->whereNotNull('supervisor_confirmed_at')
+            ->get(['submitted_at', 'supervisor_confirmed_at']);
+
+        $avgLagDays = $lagAttempts->isNotEmpty()
+            ? round(
+                $lagAttempts->avg(
+                    fn ($a) => $a->submitted_at->diffInHours($a->supervisor_confirmed_at) / 24
+                ),
+                1
+            )
+            : null;
+
+        return ApiResponse::success([
+            'eligible_employees'      => $eligibleCount,
+            'submitted_count'         => $submittedCount,
+            'participation_rate'      => $participationRate,
+            'department_avg_scores'   => $deptScores,
+            'on_time_submission_rate' => $onTimeRate,
+            'avg_supervisor_lag_days' => $avgLagDays,
+        ]);
     }
 }
