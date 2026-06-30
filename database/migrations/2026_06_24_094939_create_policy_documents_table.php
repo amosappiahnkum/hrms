@@ -17,8 +17,7 @@ return new class extends Migration
 
             $table->string('title');
             $table->text('description')->nullable();
-            $table->enum('category', ['policy', 'manual', 'handbook', 'notice', 'form', 'other'])
-                  ->default('policy');
+            $table->foreignId('document_category_id')->constrained('document_categories');
 
             // Stored file info
             $table->string('file_path');          // S3 object key

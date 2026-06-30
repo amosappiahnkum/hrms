@@ -4,6 +4,7 @@ namespace App\Models\QuestionBank;
 
 use App\Enums\QuestionType;
 use App\Models\ApplicationModel;
+use App\Models\Training\Course;
 use App\Traits\HasUserId;
 use App\Traits\HasUuid;
 use Database\Factories\QuestionBank\QuestionFactory;
@@ -19,6 +20,8 @@ class Question extends ApplicationModel
     protected $fillable = [
         'question_category_id',
         'uuid',
+        'scope',
+        'course_id',
         'type',
         'text',
         'description',
@@ -38,6 +41,7 @@ class Question extends ApplicationModel
         'is_active'        => 'boolean',
         'order'            => 'integer',
         'show_when_value'  => 'array',
+        'course_id'        => 'integer',
     ];
 
     protected $with = ['options'];
@@ -45,6 +49,11 @@ class Question extends ApplicationModel
     public function questionCategory(): BelongsTo
     {
         return $this->belongsTo(QuestionCategory::class);
+    }
+
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
     }
 
     /** The question this one depends on (nullable). */

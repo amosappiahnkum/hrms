@@ -4,6 +4,9 @@ namespace App\Models\Appraisal;
 
 use App\Models\ApplicationModel;
 use App\Models\QuestionResponse;
+use App\Models\Training\ChapterProgress;
+use App\Models\Training\CourseEnrollment;
+use App\Models\Training\CourseChapter;
 use App\Models\User;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +29,9 @@ class AssessmentAttempt extends ApplicationModel
 
     protected $fillable = [
         'assessment_window_id',
+        'assessment_id',
+        'course_enrollment_id',
+        'course_chapter_id',
         'user_id',
         'status',
         'started_at',
@@ -82,14 +88,94 @@ class AssessmentAttempt extends ApplicationModel
             ->orderBy('order');
     }
 
+    // ── Training quiz relations ───────────────────────────────────────────────
+
+    public function directAssessment(): BelongsTo
+    {
+        return $this->belongsTo(Assessment::class, 'assessment_id');
+    }
+
+    public function enrollment(): BelongsTo
+    {
+        return $this->belongsTo(CourseEnrollment::class, 'course_enrollment_id');
+    }
+
+    public function trainingChapter(): BelongsTo
+    {
+        return $this->belongsTo(CourseChapter::class, 'course_chapter_id');
+    }
+
+    // ── State helpers ─────────────────────────────────────────────────────────
+
     public function isEditable(): bool
     {
         return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_RETURNED]);
     }
 
+    public function isTrainingQuiz(): bool
+    {
+        return !is_null($this->course_enrollment_id);
+    }
+
     public function isAppraisal(): bool
     {
+        if ($this->isTrainingQuiz()) {
+            return false;
+        }
         return $this->window?->assessment?->type === 'appraisal';
+    }
+
+    /**
+     * Called after a training quiz attempt is submitted.
+     * Records the attempt UUID in chapter_progress and triggers completion check.
+     */
+    public function handleTrainingQuizSubmission(): void
+    {
+        $enrollment = $this->enrollment ?? $this->load('enrollment')->enrollment;
+
+        if ($this->course_chapter_id) {
+            ChapterProgress::updateOrCreate(
+                [
+                    'enrollment_id' => $enrollment->id,
+                    'chapter_id'    => $this->course_chapter_id,
+                ],
+                ['quiz_attempt_id' => $this->id]
+            );
+        }
+
+        // Score the attempt: weighted average of response scores (0–5 scale)
+        $this->loadMissing(['responses', 'directAssessment.questionUsages']);
+        $score = $this->computeTrainingScore();
+        if ($score !== null) {
+            $this->update(['score' => $score]);
+        }
+
+        $enrollment->refresh();
+        $enrollment->checkCompletion();
+    }
+
+    /**
+     * Weighted point total for training quiz auto-grading.
+     * Each response's score × its question weight = points earned.
+     * Open-text responses (score=null) are excluded.
+     */
+    private function computeTrainingScore(): ?float
+    {
+        $usages = $this->directAssessment?->questionUsages ?? collect();
+        $usagesByQId = $usages->keyBy('question_id');
+
+        $earned    = 0.0;
+        $hasScores = false;
+
+        foreach ($this->responses as $r) {
+            if ($r->score === null) continue;
+            $usage   = $usagesByQId->get($r->question_id);
+            $weight  = (float) ($usage?->custom_weight ?? $r->question?->weight ?? 1);
+            $earned += $r->score * $weight;
+            $hasScores = true;
+        }
+
+        return $hasScores ? round($earned, 2) : null;
     }
 
     /**

@@ -37,6 +37,10 @@ RUN pecl install redis && docker-php-ext-enable redis
 # Opcache (performance)
 RUN docker-php-ext-install opcache
 
+# Raise upload limits
+RUN echo "upload_max_filesize=100M\npost_max_size=105M\nmemory_limit=256M\nmax_execution_time=300" \
+    > /usr/local/etc/php/conf.d/uploads.ini
+
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 

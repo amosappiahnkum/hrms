@@ -25,11 +25,24 @@ return new class extends Migration
             $table->boolean('is_required')->default(false);
             $table->boolean('is_active')->default(true);
             $table->integer('order')->default(0);
+            $table->foreignId('depends_on_question_id')
+                ->nullable()
+                ->constrained('questions')
+                ->onDelete('set null');
+            $table->json('show_when_value')->nullable();
             $table->foreignId('user_id')->constrained();
+            $table->enum('scope', ['hr', 'training'])->nullable();
+            // When set, this question belongs to a specific course's question bank
+            $table->foreignId('course_id')
+                ->nullable()
+                ->constrained('courses')
+                ->nullOnDelete();
             $table->timestamps();
 
             $table->index(['question_category_id', 'is_active']);
             $table->index(['type', 'is_active']);
+            $table->index(['scope', 'is_active']);
+            $table->index(['course_id', 'is_active']);
         });
     }
 

@@ -652,7 +652,7 @@ class EmployeeController extends Controller
                 'complete' => $job !== null && filled($job->joined_date),
             ],
             'biography' => [
-                'label'    => 'Biography',
+                'label'    => 'Professional Summary',
                 'complete' => filled($employee->bio),
             ],
             'dependants' => [
