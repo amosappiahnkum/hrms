@@ -24,7 +24,7 @@ return new class extends Migration
                 'survey',
             ]);
 
-            $table->morphs('assignable');
+            $table->nullableMorphs('assignable');
             // Employee, Department, Role, etc.
 
             $table->boolean('is_active')->default(true);

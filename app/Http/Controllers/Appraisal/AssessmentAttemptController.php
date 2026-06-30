@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Appraisal;
 
+use App\Exports\AppraisalExport;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AppraisalKpiResource;
@@ -11,12 +12,17 @@ use App\Models\Appraisal\AssessmentAttempt;
 use App\Models\Appraisal\AssessmentAttemptEvent;
 use App\Models\Appraisal\AssessmentWindow;
 use App\Models\Appraisal\AppraisalKpi;
+use App\Models\Appraisal\JobKpi;
 use App\Models\QuestionBank\Question;
 use App\Models\QuestionResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AssessmentAttemptController extends Controller
 {
@@ -206,6 +212,19 @@ class AssessmentAttemptController extends Controller
 
         $this->validateRequiredQuestionsAnswered($attempt);
 
+        // Training quiz: no supervisor stage, just submit and update progress
+        if ($attempt->isTrainingQuiz()) {
+            $attempt->update([
+                'status'       => AssessmentAttempt::STATUS_SUBMITTED,
+                'submitted_at' => now(),
+            ]);
+            $this->recordEvent($attempt, 'submitted');
+            $attempt->handleTrainingQuizSubmission();
+            $attempt->refresh();
+
+            return ApiResponse::success(AssessmentAttemptResource::make($attempt), 'Quiz submitted.');
+        }
+
         $attempt->load(['window.assessment', 'user.employee.department']);
         $isAppraisal = $attempt->window->assessment->type === 'appraisal';
 
@@ -269,8 +288,9 @@ class AssessmentAttemptController extends Controller
 
     /**
      * Supervisor sees their direct reports' pending appraisal attempts.
+     * Supports: search (name/email), status, from/to (submitted_at), window_uuid.
      */
-    public function supervisorPending(): AnonymousResourceCollection
+    public function supervisorPending(Request $request): AnonymousResourceCollection
     {
         $supervisorEmployeeId = DB::table('employees')
             ->join('users', 'users.employee_id', '=', 'employees.id')
@@ -282,7 +302,7 @@ class AssessmentAttemptController extends Controller
             ->where('hod', $supervisorEmployeeId)
             ->pluck('id');
 
-        $attempts = AssessmentAttempt::whereIn('status', [
+        $query = AssessmentAttempt::whereIn('status', [
                 AssessmentAttempt::STATUS_PENDING_SUPERVISOR,
                 AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
                 AssessmentAttempt::STATUS_RETURNED,
@@ -290,27 +310,46 @@ class AssessmentAttemptController extends Controller
             ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
             ->where(function ($q) use ($supervisorEmployeeId, $myDeptIds) {
-
-                // Case 1: Regular employee whose department HOD is me.
-                // Exclude myself so a HOD never sees their own submission here.
                 $q->whereHas('user.employee', function ($e) use ($myDeptIds, $supervisorEmployeeId) {
                     $e->whereIn('department_id', $myDeptIds)
                       ->where('id', '!=', $supervisorEmployeeId);
                 });
-
-                // Case 2: HOD of a sub-department where my department is the parent.
-                // Their appraisal bypassed their own dept and was routed up to me.
                 $q->orWhereHas('user.employee', function ($e) use ($myDeptIds) {
                     $e->whereHas('department', function ($d) use ($myDeptIds) {
-                        $d->whereColumn('hod', 'employees.id')           // submitter IS their dept's HOD
-                          ->whereIn('parent_department_id', $myDeptIds); // that dept's parent is mine
+                        $d->whereColumn('hod', 'employees.id')
+                          ->whereIn('parent_department_id', $myDeptIds);
                     });
                 });
             })
             ->with(['user', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
-            ->paginate(50);
+            ->latest('submitted_at');
 
-        return AssessmentAttemptResource::collection($attempts);
+        if ($search = trim((string) $request->input('search'))) {
+            $query->whereHas('user', fn ($q) =>
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+            );
+        }
+
+        if ($status = $request->input('status')) {
+            $query->where('status', $status);
+        }
+
+        if ($from = $request->input('from')) {
+            $query->whereDate('submitted_at', '>=', $from);
+        }
+
+        if ($to = $request->input('to')) {
+            $query->whereDate('submitted_at', '<=', $to);
+        }
+
+        if ($windowUuid = $request->input('window_uuid')) {
+            $query->whereHas('window', fn ($q) => $q->where('uuid', $windowUuid));
+        }
+
+        return AssessmentAttemptResource::collection(
+            $query->paginate($request->input('per_page', 20))
+        );
     }
 
     /**
@@ -436,21 +475,45 @@ class AssessmentAttemptController extends Controller
 
     /**
      * HR sees all appraisals confirmed by supervisor.
+     * Supports: search (name/email), status, from/to (supervisor_confirmed_at), window_uuid.
      */
     public function hrPending(Request $request): AnonymousResourceCollection
     {
-        $attempts = AssessmentAttempt::whereIn('status', [
+        $query = AssessmentAttempt::whereIn('status', [
                 AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
                 AssessmentAttempt::STATUS_COMPLETED,
             ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
-            // HR employees' appraisals are routed to the appraisal_officer, not HR itself
             ->whereDoesntHave('user.roles', fn ($q) => $q->where('name', 'hr'))
             ->with(['user', 'supervisor', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
-            ->latest('supervisor_confirmed_at')
-            ->paginate($request->input('per_page', 50));
+            ->latest('supervisor_confirmed_at');
 
-        return AssessmentAttemptResource::collection($attempts);
+        if ($search = trim((string) $request->input('search'))) {
+            $query->whereHas('user', fn ($q) =>
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+            );
+        }
+
+        if ($status = $request->input('status')) {
+            $query->where('status', $status);
+        }
+
+        if ($from = $request->input('from')) {
+            $query->whereDate('supervisor_confirmed_at', '>=', $from);
+        }
+
+        if ($to = $request->input('to')) {
+            $query->whereDate('supervisor_confirmed_at', '<=', $to);
+        }
+
+        if ($windowUuid = $request->input('window_uuid')) {
+            $query->whereHas('window', fn ($q) => $q->where('uuid', $windowUuid));
+        }
+
+        return AssessmentAttemptResource::collection(
+            $query->paginate($request->input('per_page', 20))
+        );
     }
 
     /**
@@ -488,11 +551,143 @@ class AssessmentAttemptController extends Controller
         );
     }
 
+    /**
+     * Generate a PDF report for a single appraisal attempt.
+     */
+    public function hrPrintPdf(AssessmentAttempt $attempt)
+    {
+        $attempt->load([
+            'user.employee.department',
+            'user.employee.rank',
+            'supervisor',
+            'window.assessment',
+            'window.questionUsages.question.questionCategory',
+            'responses.question.questionCategory',
+            'events.actor',
+            'kpis',
+        ]);
+
+        // Build ordered responses using the window question snapshot
+        $orderedQuestions = $attempt->window->questionUsages
+            ->sortBy('order')
+            ->values();
+
+        $responsesByQuestionId = $attempt->responses->keyBy('question_id');
+
+        $responses = $orderedQuestions->map(function ($usage) use ($responsesByQuestionId) {
+            $r = $responsesByQuestionId->get($usage->question_id);
+            return [
+                'question_text'     => $usage->question->text,
+                'category'          => $usage->question->questionCategory?->name ?? 'General',
+                'answer'            => $r?->answer,
+                'self_score'        => $r?->score,
+                'supervisor_answer' => $r?->supervisor_answer,
+                'supervisor_score'  => $r?->supervisor_score,
+            ];
+        });
+
+        // Company info from settings
+        $settingKeys = ['company.name', 'company.abbreviation', 'company.tagline', 'company.logo_url'];
+        $settings = \App\Models\Config\Setting::whereIn('key', $settingKeys)
+            ->get()
+            ->mapWithKeys(fn ($s) => [ltrim(strstr($s->key, '.'), '.') => $s->value]);
+
+        // Embed logo as base64 so DomPDF can render it without HTTP
+        $logoBase64 = null;
+        if ($logoKey = $settings->get('logo_url')) {
+            try {
+                $logoContent = Storage::disk('common')->get($logoKey);
+                if ($logoContent) {
+                    $mime = Storage::disk('common')->mimeType($logoKey) ?: 'image/png';
+                    $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($logoContent);
+                }
+            } catch (\Throwable) {
+                // Logo unavailable — render without it
+            }
+        }
+
+        $pdf = Pdf::loadView('appraisal.pdf', [
+            'attempt'     => $attempt,
+            'responses'   => $responses,
+            'kpis'        => $attempt->kpis,
+            'events'      => $attempt->events,
+            'company'     => $settings,
+            'logoBase64'  => $logoBase64,
+        ])->setPaper('a4', 'portrait');
+
+        $filename = 'appraisal-' . str($attempt->user->name)->slug() . '-' . now()->format('Y-m-d') . '.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Export HR appraisal list to Excel. Applies the same filters as hrPending.
+     */
+    public function hrExport(Request $request): BinaryFileResponse
+    {
+        $query = AssessmentAttempt::whereIn('status', [
+                AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+                AssessmentAttempt::STATUS_COMPLETED,
+            ])
+            ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
+            ->whereDoesntHave('user.roles', fn ($q) => $q->where('name', 'hr'))
+            ->with(['user.employee.department', 'supervisor', 'window.assessment'])
+            ->latest('supervisor_confirmed_at');
+
+        if ($search = trim((string) $request->input('search'))) {
+            $query->whereHas('user', fn ($q) =>
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+            );
+        }
+
+        if ($status = $request->input('status')) {
+            $query->where('status', $status);
+        }
+
+        if ($from = $request->input('from')) {
+            $query->whereDate('supervisor_confirmed_at', '>=', $from);
+        }
+
+        if ($to = $request->input('to')) {
+            $query->whereDate('supervisor_confirmed_at', '<=', $to);
+        }
+
+        if ($windowUuid = $request->input('window_uuid')) {
+            $query->whereHas('window', fn ($q) => $q->where('uuid', $windowUuid));
+        }
+
+        $filename = 'appraisals-' . now()->format('Y-m-d') . '.xlsx';
+
+        return Excel::download(new AppraisalExport($query->get()), $filename);
+    }
+
     // ── KPIs ──────────────────────────────────────────────────────────────────
 
     /**
+     * Return the saved KPI library for the department the attempt's employee belongs to.
+     * Used by the supervisor to pick from previously-entered descriptions.
+     */
+    public function departmentKpis(AssessmentAttempt $attempt): JsonResponse
+    {
+        $attempt->load('user.employee');
+        $departmentId = $attempt->user?->employee?->department_id;
+
+        if (!$departmentId) {
+            return ApiResponse::success([]);
+        }
+
+        $kpis = JobKpi::where('department_id', $departmentId)
+            ->orderBy('description')
+            ->get(['uuid', 'description']);
+
+        return ApiResponse::success($kpis);
+    }
+
+    /**
      * Supervisor syncs job-description-specific KPIs for an appraisal.
-     * Replaces all existing KPIs with the submitted list.
+     * Replaces all existing KPIs with the submitted list and upserts new
+     * descriptions into the department's KPI library for future reuse.
      */
     public function syncKpis(Request $request, AssessmentAttempt $attempt): JsonResponse
     {
@@ -501,11 +696,19 @@ class AssessmentAttemptController extends Controller
         }
 
         $request->validate([
-            'kpis'               => ['required', 'array'],
+            'kpis'               => ['present', 'array'],
             'kpis.*.description' => ['required', 'string', 'max:1000'],
             'kpis.*.target'      => ['required', 'numeric', 'min:0'],
             'kpis.*.actual'      => ['nullable', 'numeric', 'min:0'],
         ]);
+
+        $descriptions = array_map(fn ($k) => strtolower(trim($k['description'])), $request->kpis);
+        if (count($descriptions) !== count(array_unique($descriptions))) {
+            return response()->json(['message' => 'Duplicate KPI descriptions are not allowed in the same appraisal.'], 422);
+        }
+
+        $attempt->load('user.employee');
+        $departmentId = $attempt->user?->employee?->department_id;
 
         $attempt->kpis()->delete();
 
@@ -517,6 +720,11 @@ class AssessmentAttemptController extends Controller
                 'actual'                => $item['actual'] ?? null,
                 'order'                 => $index,
             ]);
+
+            // Persist unique descriptions to the department library for future reuse
+            if ($departmentId) {
+                JobKpi::upsertForDepartment($departmentId, $item['description'], auth()->id());
+            }
         }
 
         $attempt->load('kpis');
@@ -532,20 +740,45 @@ class AssessmentAttemptController extends Controller
     /**
      * Appraisal officer sees supervisor-confirmed appraisals where the employee
      * is an HR staff member (has the 'hr' role).
+     * Supports: search (name/email), status, from/to (supervisor_confirmed_at), window_uuid.
      */
     public function appraisalOfficerPending(Request $request): AnonymousResourceCollection
     {
-        $attempts = AssessmentAttempt::whereIn('status', [
-            AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
-            AssessmentAttempt::STATUS_COMPLETED,
-        ])
+        $query = AssessmentAttempt::whereIn('status', [
+                AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+                AssessmentAttempt::STATUS_COMPLETED,
+            ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
             ->whereHas('user.roles', fn ($q) => $q->where('name', 'hr'))
             ->with(['user', 'supervisor', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
-            ->latest('supervisor_confirmed_at')
-            ->paginate($request->input('per_page', 50));
+            ->latest('supervisor_confirmed_at');
 
-        return AssessmentAttemptResource::collection($attempts);
+        if ($search = trim((string) $request->input('search'))) {
+            $query->whereHas('user', fn ($q) =>
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+            );
+        }
+
+        if ($status = $request->input('status')) {
+            $query->where('status', $status);
+        }
+
+        if ($from = $request->input('from')) {
+            $query->whereDate('supervisor_confirmed_at', '>=', $from);
+        }
+
+        if ($to = $request->input('to')) {
+            $query->whereDate('supervisor_confirmed_at', '<=', $to);
+        }
+
+        if ($windowUuid = $request->input('window_uuid')) {
+            $query->whereHas('window', fn ($q) => $q->where('uuid', $windowUuid));
+        }
+
+        return AssessmentAttemptResource::collection(
+            $query->paginate($request->input('per_page', 20))
+        );
     }
 
     /**
@@ -659,6 +892,11 @@ class AssessmentAttemptController extends Controller
 
     private function validateRequiredQuestionsAnswered(AssessmentAttempt $attempt): void
     {
+        // Training quiz attempts have no window — questions belong to the assessment directly.
+        if ($attempt->isTrainingQuiz()) {
+            return;
+        }
+
         $window = $attempt->window->load('questionUsages.question');
 
         // All questions in the session snapshot must be answered before submitting.

@@ -22,8 +22,18 @@ class AppraisalTemplateController extends Controller
             ->with('jobCategories')
             ->latest();
 
-        if ($request->filled('type')) {
+        if ($request->filled('types')) {
+            $query->whereIn('type', (array) $request->input('types'));
+        } elseif ($request->filled('type')) {
             $query->where('type', $request->type);
+        }
+
+        if ($search = trim((string) $request->input('search'))) {
+            $query->where('title', 'like', "%{$search}%");
+        }
+
+        if ($request->filled('is_active')) {
+            $query->where('is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
         }
 
         $templates = $query->paginate($request->input('per_page', 15));

@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->uuid();
 
-            $table->foreignId('question_id');
+            $table->foreignId('question_id')->constrained('questions');
             $table->foreignId('user_id');
 
             $table->morphs('respondable');
@@ -23,6 +23,12 @@ return new class extends Migration
 
             $table->text('answer')->nullable();
             $table->integer('score')->nullable();
+
+            $table->text('supervisor_answer')->nullable();
+            $table->integer('supervisor_score')->nullable();
+            $table->foreignId('supervisor_id')->nullable()
+                ->constrained('users')->nullOnDelete();
+            $table->timestamp('supervisor_updated_at')->nullable();
 
             $table->timestamps();
         });
