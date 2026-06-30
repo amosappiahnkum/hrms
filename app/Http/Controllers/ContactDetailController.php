@@ -65,7 +65,7 @@ class ContactDetailController extends Controller
             } else {
                 app(UpdateApprovalService::class)->update($contact, $changes, Auth::id());
             }
-            Helper::updateSRMS($request->staff_id, $contact?->work_telephone);
+//            Helper::updateSRMS($request->staff_id, $contact?->work_telephone);
             DB::commit();
             return ApiResponse::success([]);
         } catch (Exception $exception) {
