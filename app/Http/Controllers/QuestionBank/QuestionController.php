@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers\QuestionBank;
 
+use App\Exports\QuestionTemplateExport;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreQuestionRequest;
 use App\Http\Requests\UpdateQuestionRequest;
 use App\Http\Resources\QuestionResource;
+use App\Imports\QuestionImport;
 use App\Models\QuestionBank\Question;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class QuestionController extends Controller
 {
@@ -162,6 +166,26 @@ class QuestionController extends Controller
         return response()->json([
             'message' => 'Questions reordered successfully',
         ]);
+    }
+
+    public function templateDownload(): BinaryFileResponse
+    {
+        return Excel::download(new QuestionTemplateExport(), 'question-bank-template.xlsx');
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls,csv|max:5120',
+        ]);
+
+        $import = new QuestionImport();
+        Excel::import($import, $request->file('file'));
+
+        return ApiResponse::success([
+            'imported' => $import->imported,
+            'errors'   => $import->errors,
+        ], $import->imported . ' question(s) imported successfully.');
     }
 
     /**

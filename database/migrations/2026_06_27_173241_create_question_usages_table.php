@@ -23,7 +23,6 @@ return new class extends Migration
             $table->boolean('is_required_override')->nullable();
             $table->foreignId('user_id')->constrained();
             $table->timestamps();
-
             $table->unique(['question_id', 'usable_type', 'usable_id'], 'question_usage_unique');
         });
     }

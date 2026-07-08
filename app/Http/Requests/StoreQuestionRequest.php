@@ -85,6 +85,12 @@ class StoreQuestionRequest extends FormRequest
         if ($this->category_uuid) {
             $category = QuestionCategory::query()->where('uuid', $this->category_uuid)->firstOrFail();
             $this->merge(['question_category_id' => $category->id]);
+        } elseif (!$this->question_category_id) {
+            $uncategorized = QuestionCategory::firstOrCreate(
+                ['name' => 'Uncategorized'],
+                ['uuid' => \Illuminate\Support\Str::uuid()],
+            );
+            $this->merge(['question_category_id' => $uncategorized->id]);
         }
 
         if ($this->depends_on_uuid) {

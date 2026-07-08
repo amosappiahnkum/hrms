@@ -3,15 +3,21 @@
 namespace App\Http\Controllers\Training;
 
 use App\Enums\QuestionType;
+use App\Exports\TrainingQuestionTemplateExport;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\QuestionResource;
+use App\Imports\TrainingQuestionImport;
 use App\Models\QuestionBank\Question;
+use App\Models\QuestionBank\QuestionCategory;
 use App\Models\Training\Course;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Enum;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class TrainingQuestionBankController extends Controller
 {
@@ -33,6 +39,12 @@ class TrainingQuestionBankController extends Controller
             $query->where('type', $request->type);
         }
 
+        if ($request->filled('category_uuid')) {
+            $query->whereHas('questionCategory', fn ($q) =>
+                $q->where('uuid', $request->category_uuid)
+            );
+        }
+
         if ($request->has('is_active')) {
             $query->where('is_active', $request->boolean('is_active'));
         }
@@ -44,12 +56,41 @@ class TrainingQuestionBankController extends Controller
     }
 
     /**
+     * Download a blank import template.
+     * GET /training/courses/{course}/questions/template
+     */
+    public function templateDownload(Course $course): BinaryFileResponse
+    {
+        return Excel::download(new TrainingQuestionTemplateExport(), "training-questions-template-{$course->uuid}.xlsx");
+    }
+
+    /**
+     * Bulk-import questions from an uploaded spreadsheet.
+     * POST /training/courses/{course}/questions/import
+     */
+    public function import(Request $request, Course $course): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls,csv|max:5120',
+        ]);
+
+        $import = new TrainingQuestionImport($course);
+        Excel::import($import, $request->file('file'));
+
+        return ApiResponse::success([
+            'imported' => $import->imported,
+            'errors'   => $import->errors,
+        ], $import->imported . ' question(s) imported successfully.');
+    }
+
+    /**
      * Create a new question in a course's question bank.
      * POST /training/courses/{course}/questions
      */
     public function store(Request $request, Course $course): JsonResponse
     {
         $validated = $request->validate([
+            'category_uuid' => ['nullable', 'exists:question_categories,uuid'],
             'type' => ['required', new Enum(QuestionType::class)],
             'text' => ['required', 'string', 'max:1000'],
             'description' => ['nullable', 'string', 'max:2000'],
@@ -67,6 +108,7 @@ class TrainingQuestionBankController extends Controller
             'scope' => 'training',
             'course_id' => $course->id,
             'user_id' => auth()->id(),
+            'question_category_id' => $this->resolveCategory($validated['category_uuid'] ?? null),
         ]);
 
         if (!empty($validated['options'])) {
@@ -113,6 +155,18 @@ class TrainingQuestionBankController extends Controller
         $question->load(['questionCategory', 'options']);
 
         return ApiResponse::success(QuestionResource::make($question));
+    }
+
+    private function resolveCategory(?string $uuid): int
+    {
+        if ($uuid) {
+            return QuestionCategory::where('uuid', $uuid)->value('id');
+        }
+
+        return QuestionCategory::firstOrCreate(
+            ['name' => 'Uncategorized'],
+            ['uuid' => Str::uuid()],
+        )->id;
     }
 
     /**

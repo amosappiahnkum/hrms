@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\LoginRequest;
 use App\Http\Requests\ChangePasswordRequest;
+use App\Http\Requests\GetMiniProfileRequest;
 use App\Http\Resources\AuthResponseResource;
+use App\Models\SelfService\ContactDetail;
 use App\Models\SelfService\Employee;
 use App\Models\User;
 use Exception;
@@ -37,9 +40,9 @@ class AuthController extends Controller
                 AttemptToAuthenticate::class,
                 PrepareAuthenticatedSession::class,
             ])
-            ->then(fn () => response()->json([
+            ->then(fn() => response()->json([
                 'message' => 'Logged in successfully',
-                'user'    => new AuthResponseResource(Auth::user()),
+                'user' => new AuthResponseResource(Auth::user()),
             ]));
     }
 
@@ -55,7 +58,7 @@ class AuthController extends Controller
         try {
             return response()->json([
                 'message' => 'Logged in successfully',
-                'user'    => new AuthResponseResource(Auth::user()),
+                'user' => new AuthResponseResource(Auth::user()),
             ]);
         } catch (Exception $exception) {
             Log::error($exception->getMessage());
@@ -196,7 +199,6 @@ class AuthController extends Controller
         }
     }
 
-
     public function changePassword(ChangePasswordRequest $request): Application|Response|JsonResponse|\Illuminate\Contracts\Foundation\Application|ResponseFactory
     {
         DB::beginTransaction();
@@ -233,6 +235,45 @@ class AuthController extends Controller
         } catch (Exception $exception) {
             DB::rollBack();
             return response('Something went wrong!', 400);
+        }
+    }
+
+    public function getMiniProfile(GetMiniProfileRequest $request): JsonResponse
+    {
+        try {
+            $contact = ContactDetail::where('work_email', $request->email)->firstOrFail();
+
+            if (!$contact) {
+                return response()->json([
+                    'data' => null,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            $employee = $contact->employee;
+
+            $department = $employee?->department;
+            return response()->json([
+                'data' => [
+                    "title" => $employee?->title,
+                    "name" => $employee?->name,
+                    "staff_id" => $employee?->staff_id,
+                    "phone_number" => $employee?->phone_number,
+                    "photo" => Helper::getTempPhoto($employee?->photo),
+                    "department_id" => $department?->uuid,
+                    "department_name" => $department?->name,
+                ],
+                'message' => 'User Info'
+            ]);
+
+
+        } catch (\Exception $exception) {
+            Log::error($exception);
+
+            return response()->json([
+                'data' => null,
+                'message' => 'Something went wrong!'
+            ], 400);
         }
     }
 }

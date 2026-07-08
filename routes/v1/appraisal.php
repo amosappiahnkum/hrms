@@ -8,16 +8,23 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('job-categories', [JobCategoryController::class, 'index']);
 
-// ── Employee-facing: take assessments ────────────────────────────────────────
-Route::prefix('my/assessments')->group(function () {
-    Route::get('/', [AssessmentAttemptController::class, 'myWindows']);
-    Route::post('/{assessmentWindow}/start', [AssessmentAttemptController::class, 'startOrResume']);
-    Route::get('/{assessmentWindow}/review', [AssessmentAttemptController::class, 'myAttemptReview']);
-    Route::post('/attempts/{attempt}/responses', [AssessmentAttemptController::class, 'saveResponses']);
-    Route::post('/attempts/{attempt}/submit', [AssessmentAttemptController::class, 'submit']);
-});
 
 Route::middleware('feature:appraisal.enabled')->group(function () {
+
+// ── Employee-facing: take assessments ────────────────────────────────────────
+    Route::prefix('my/assessments')->group(function () {
+        Route::get('/', [AssessmentAttemptController::class, 'myWindows']);
+        Route::post('/{assessmentWindow}/start', [AssessmentAttemptController::class, 'startOrResume']);
+        Route::get('/{assessmentWindow}/review', [AssessmentAttemptController::class, 'myAttemptReview']);
+        Route::post('/attempts/{attempt}/responses', [AssessmentAttemptController::class, 'saveResponses']);
+        Route::post('/attempts/{attempt}/submit', [AssessmentAttemptController::class, 'submit']);
+        Route::post('/attempts/{attempt}/acknowledge', [AssessmentAttemptController::class, 'employeeAcknowledge']);
+        Route::post('/attempts/{attempt}/disagree', [AssessmentAttemptController::class, 'employeeDisagree']);
+        Route::post('/attempts/{attempt}/sign', [AssessmentAttemptController::class, 'employeeSign']);
+    });
+
+    // ── Shared: PDF download (employee, supervisor, HR — internal auth check) ───
+    Route::get('/appraisal/attempts/{attempt}/pdf', [AssessmentAttemptController::class, 'printPdf']);
 
     // ── Supervisor: review direct reports' appraisals ─────────────────────────
     Route::prefix('appraisal/supervisor')->group(function () {
@@ -25,6 +32,7 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
         Route::post('/attempts/{attempt}/confirm', [AssessmentAttemptController::class, 'supervisorConfirm']);
         Route::post('/attempts/{attempt}/return', [AssessmentAttemptController::class, 'supervisorReturn']);
         Route::post('/attempts/{attempt}/responses/override', [AssessmentAttemptController::class, 'supervisorOverrideResponses']);
+        Route::post('/attempts/{attempt}/sign', [AssessmentAttemptController::class, 'supervisorSign']);
         Route::get('/attempts/{attempt}/kpis/department', [AssessmentAttemptController::class, 'departmentKpis']);
         Route::post('/attempts/{attempt}/kpis/sync', [AssessmentAttemptController::class, 'syncKpis']);
     });

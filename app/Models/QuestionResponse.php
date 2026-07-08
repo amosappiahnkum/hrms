@@ -22,6 +22,7 @@ class QuestionResponse extends ApplicationModel
         'supervisor_score',
         'supervisor_id',
         'supervisor_updated_at',
+        'supervisor_justification',
     ];
 
     protected $casts = [

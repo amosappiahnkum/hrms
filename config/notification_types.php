@@ -59,6 +59,49 @@ return [
         ],
     ],
 
+    'appraisal' => [
+        'label'       => 'Appraisal',
+        'description' => 'Notifications for each step of the performance appraisal process.',
+        'icon'        => 'file-text',
+        'types'       => [
+            'appraisal_session_opened' => [
+                'label'         => 'Appraisal Session Opened',
+                'description'   => 'When an appraisal session is opened and you are eligible to participate.',
+                'default_email' => true,
+            ],
+            'appraisal_submitted' => [
+                'label'         => 'Employee Appraisal Submitted',
+                'description'   => 'When a direct report submits their appraisal and it is awaiting your review.',
+                'default_email' => true,
+            ],
+            'appraisal_returned' => [
+                'label'         => 'Appraisal Returned for Revision',
+                'description'   => 'When your supervisor returns your appraisal for revision.',
+                'default_email' => true,
+            ],
+            'appraisal_review_required' => [
+                'label'         => 'Appraisal Review Required',
+                'description'   => 'When your supervisor has reviewed or changed your responses and you need to accept or disagree.',
+                'default_email' => true,
+            ],
+            'appraisal_employee_disagreed' => [
+                'label'         => 'Employee Disagreed with Changes',
+                'description'   => 'When an employee disagrees with the changes you made to their appraisal.',
+                'default_email' => true,
+            ],
+            'appraisal_forwarded_to_hr' => [
+                'label'         => 'Appraisal Forwarded to HR',
+                'description'   => 'When an appraisal is confirmed and ready for HR finalization.',
+                'default_email' => true,
+            ],
+            'appraisal_completed' => [
+                'label'         => 'Appraisal Finalized',
+                'description'   => 'When HR finalizes your appraisal.',
+                'default_email' => true,
+            ],
+        ],
+    ],
+
     // Add future groups here — e.g.:
     // 'certifications' => [
     //     'label' => 'Certifications',

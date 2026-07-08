@@ -119,7 +119,7 @@ class TrainingQuizController extends Controller
 
     private function buildStartPayload(AssessmentAttempt $attempt, Assessment $assessment): array
     {
-        $assessment->load(['questionUsages.question.options', 'questionUsages.question.dependsOn']);
+        $assessment->load(['questionUsages.question.options', 'questionUsages.question.dependsOn', 'questionUsages.question.questionCategory']);
         $attempt->load(['responses.question']);
 
         return [
@@ -136,6 +136,9 @@ class TrainingQuizController extends Controller
                     'order'           => $usage->order,
                     'depends_on_uuid' => $usage->question->dependsOn?->uuid,
                     'show_when_value' => $usage->question->show_when_value,
+                    'category'        => $usage->question->questionCategory
+                        ? ['uuid' => $usage->question->questionCategory->uuid, 'name' => $usage->question->questionCategory->name]
+                        : null,
                     'options'         => $usage->question->options->map(fn ($o) => [
                         'uuid'         => $o->uuid,
                         'option_text'  => $o->option_text,

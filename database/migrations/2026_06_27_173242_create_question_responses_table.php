@@ -29,6 +29,7 @@ return new class extends Migration
             $table->foreignId('supervisor_id')->nullable()
                 ->constrained('users')->nullOnDelete();
             $table->timestamp('supervisor_updated_at')->nullable();
+            $table->text('supervisor_justification')->nullable();
 
             $table->timestamps();
         });

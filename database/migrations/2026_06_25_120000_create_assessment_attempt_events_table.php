@@ -18,6 +18,11 @@ return new class extends Migration
                 'supervisor_confirmed',
                 'hr_completed',
                 'answers_edited',
+                'employee_disagreed',
+                'employee_acknowledged',
+                'pending_signatures',
+                'supervisor_signed',
+                'employee_signed',
             ]);
             $table->foreignId('actor_id')->nullable()->constrained('users')->nullOnDelete();
             $table->text('comment')->nullable();

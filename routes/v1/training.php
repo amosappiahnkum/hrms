@@ -42,6 +42,7 @@ Route::middleware('feature:training.enabled')->group(function () {
         Route::post('/{course}/unpublish', [CourseController::class, 'unpublish']);
         Route::post('/{course}/assign', [CourseController::class, 'assign']);
         Route::get('/{course}/enrollments', [CourseController::class, 'enrollments']);
+        Route::get('/{course}/quiz-results/{assessment}', [CourseController::class, 'quizResults']);
 
         // Admin enrollment management
         Route::post('/{course}/enrollments', [CourseEnrollmentController::class, 'store']);
@@ -68,6 +69,8 @@ Route::middleware('feature:training.enabled')->group(function () {
     // Admin: enrollment management
     Route::prefix('training/enrollments')->group(function () {
         Route::get('/', [CourseEnrollmentController::class, 'index']);
+        Route::get('/{courseEnrollment}/quiz-results', [CourseEnrollmentController::class, 'quizResults']);
+        Route::get('/{courseEnrollment}/quiz-results/{assessment}', [CourseEnrollmentController::class, 'attemptResponses']);
         Route::delete('/{courseEnrollment}', [CourseEnrollmentController::class, 'destroy']);
     });
 
@@ -89,6 +92,8 @@ Route::middleware('feature:training.enabled')->group(function () {
 
     // ── Course question bank (admin) ──────────────────────────────────────────
     Route::prefix('training/courses/{course}/questions')->group(function () {
+        Route::get('/template', [TrainingQuestionBankController::class, 'templateDownload']);
+        Route::post('/import', [TrainingQuestionBankController::class, 'import']);
         Route::get('/', [TrainingQuestionBankController::class, 'index']);
         Route::post('/', [TrainingQuestionBankController::class, 'store']);
     });
@@ -102,7 +107,9 @@ Route::middleware('feature:training.enabled')->group(function () {
     Route::prefix('training/reports')->group(function () {
         Route::get('/overview', [TrainingReportController::class, 'overview']);
         Route::get('/courses', [TrainingReportController::class, 'courseStats']);
+        Route::get('/recent-enrollments', [TrainingReportController::class, 'recentEnrollments']);
         Route::get('/transcripts', [TrainingReportController::class, 'enrollmentTranscripts']);
+        Route::get('/transcripts/{user}', [TrainingReportController::class, 'userTranscript']);
     });
 
     // ── Employee self-service: enrolled courses ───────────────────────────────

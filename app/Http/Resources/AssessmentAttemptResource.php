@@ -34,7 +34,9 @@ class AssessmentAttemptResource extends JsonResource
             'score'        => $this->score,
             'self_score'   => $this->self_score,
             'kpi_score'    => $this->kpi_score,
-            'finalized_at' => $this->finalized_at?->toDateTimeString(),
+            'finalized_at'        => $this->finalized_at?->toDateTimeString(),
+            'employee_signed_at'  => $this->employee_signed_at?->toDateTimeString(),
+            'supervisor_signed_at' => $this->supervisor_signed_at?->toDateTimeString(),
 
             'window'          => $this->whenLoaded('window', fn () =>
                 AssessmentWindowResource::make($this->window)
@@ -58,9 +60,10 @@ class AssessmentAttemptResource extends JsonResource
                     ]) ?? [],
                     'answer'                 => $r->answer,
                     'score'                  => $r->score,
-                    'supervisor_answer'      => $r->supervisor_answer,
-                    'supervisor_score'       => $r->supervisor_score,
-                    'supervisor_updated_at'  => $r->supervisor_updated_at?->toDateTimeString(),
+                    'supervisor_answer'         => $r->supervisor_answer,
+                    'supervisor_score'          => $r->supervisor_score,
+                    'supervisor_justification'  => $r->supervisor_justification,
+                    'supervisor_updated_at'     => $r->supervisor_updated_at?->toDateTimeString(),
                 ])
             ),
             'responses_count' => $this->when(isset($this->responses_count), $this->responses_count),

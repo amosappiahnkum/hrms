@@ -23,10 +23,12 @@ return new class extends Migration
             $table->enum('status', [
                 'draft',
                 'pending_supervisor',
+                'pending_employee_acknowledgment',
                 'supervisor_confirmed',
                 'completed',
                 'returned',
                 'submitted',
+                'pending_signatures',
             ])->default('draft');
 
             $table->timestamp('started_at')->nullable();
@@ -48,6 +50,9 @@ return new class extends Migration
             $table->decimal('self_score', 5, 2)->nullable();
             $table->decimal('kpi_score', 5, 2)->nullable();
             $table->timestamp('finalized_at')->nullable();
+
+            $table->timestamp('employee_signed_at')->nullable();
+            $table->timestamp('supervisor_signed_at')->nullable();
 
             $table->timestamps();
 

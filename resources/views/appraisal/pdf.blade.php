@@ -294,6 +294,15 @@
             margin-bottom: 5px;
         }
         .sig-label { font-size: 8px; color: #6b7280; }
+        .sig-signed-name {
+            font-size: 11px;
+            font-weight: bold;
+            font-style: italic;
+            color: #1a1a2e;
+            padding-bottom: 3px;
+        }
+        .sig-signed-date { font-size: 7.5px; color: #6b7280; margin-bottom: 2px; }
+        .sig-pending { font-size: 8px; color: #d97706; font-style: italic; padding-bottom: 6px; }
 
         .text-muted { color: #9ca3af; font-style: italic; font-size: 9px; }
     </style>
@@ -316,8 +325,9 @@
                         &nbsp;&nbsp;
                         @php
                             $statusMap = [
-                                'supervisor_confirmed' => ['Pending HR Review', 'status-pending'],
-                                'completed'            => ['Completed',          'status-completed'],
+                                'supervisor_confirmed' => ['Pending HR Review',    'status-pending'],
+                                'pending_signatures'   => ['Pending Signatures',   'status-pending'],
+                                'completed'            => ['Completed',             'status-completed'],
                             ];
                             [$statusLabel, $statusClass] = $statusMap[$attempt->status] ?? [$attempt->status, ''];
                         @endphp
@@ -499,11 +509,15 @@
     <table class="timeline-table">
         @php
             $eventLabels = [
-                'submitted'            => 'Submitted by employee',
-                'supervisor_confirmed' => 'Confirmed by supervisor',
-                'returned'             => 'Returned for revision',
-                'answers_edited'       => 'Responses edited by supervisor',
-                'hr_completed'         => 'Finalized by HR',
+                'submitted'             => 'Submitted by employee',
+                'supervisor_confirmed'  => 'Confirmed by supervisor',
+                'returned'              => 'Returned for revision',
+                'answers_edited'        => 'Responses edited by supervisor',
+                'employee_acknowledged' => 'Changes accepted by employee',
+                'employee_disagreed'    => 'Employee disagreed with changes',
+                'hr_completed'          => 'Finalized by HR',
+                'employee_signed'       => 'Signed by employee',
+                'supervisor_signed'     => 'Signed by supervisor',
             ];
         @endphp
         @foreach($events as $event)
@@ -527,16 +541,34 @@
     <table class="sig-table">
         <tr>
             <td class="sig-cell">
+                @if($attempt->employee_signed_at)
+                    <div class="sig-signed-name">{{ $attempt->user->name }}</div>
+                    <div class="sig-signed-date">Signed: {{ $attempt->employee_signed_at->format('d M Y, H:i') }}</div>
+                @else
+                    <div class="sig-pending">Pending signature</div>
+                @endif
                 <div class="sig-line"></div>
                 <div class="sig-label">{{ $attempt->user->name }}<br>Employee</div>
             </td>
             <td class="sig-cell">
+                @if($attempt->supervisor_signed_at)
+                    <div class="sig-signed-name">{{ $attempt->supervisor?->name ?? 'Supervisor' }}</div>
+                    <div class="sig-signed-date">Signed: {{ $attempt->supervisor_signed_at->format('d M Y, H:i') }}</div>
+                @else
+                    <div class="sig-pending">Pending signature</div>
+                @endif
                 <div class="sig-line"></div>
                 <div class="sig-label">{{ $attempt->supervisor?->name ?? 'Supervisor' }}<br>Supervisor / HOD</div>
             </td>
             <td class="sig-cell">
+                @if(isset($hrFinalizer))
+                    <div class="sig-signed-name">{{ $hrFinalizer->name }}</div>
+                    @if($attempt->finalized_at)
+                        <div class="sig-signed-date">Finalized: {{ $attempt->finalized_at->format('d M Y, H:i') }}</div>
+                    @endif
+                @endif
                 <div class="sig-line"></div>
-                <div class="sig-label">HR Representative<br>Human Resources</div>
+                <div class="sig-label">{{ isset($hrFinalizer) ? $hrFinalizer->name : 'HR Representative' }}<br>Human Resources</div>
             </td>
         </tr>
     </table>

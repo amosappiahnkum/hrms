@@ -15,14 +15,20 @@ use App\Models\Appraisal\AppraisalKpi;
 use App\Models\Appraisal\JobKpi;
 use App\Models\QuestionBank\Question;
 use App\Models\QuestionResponse;
+use App\Models\User;
+use App\Notifications\Appraisal\AppraisalNotification;
+use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Throwable;
 
 class AssessmentAttemptController extends Controller
 {
@@ -78,7 +84,7 @@ class AssessmentAttemptController extends Controller
         }
 
         // Load questions from the window snapshot (not the template — they may have diverged)
-        $assessmentWindow->load(['assessment.jobCategories', 'questionUsages.question.options', 'questionUsages.question.dependsOn']);
+        $assessmentWindow->load(['assessment.jobCategories', 'questionUsages.question.options', 'questionUsages.question.dependsOn', 'questionUsages.question.questionCategory']);
 
         $attempt->load(['responses.question']);
 
@@ -95,6 +101,9 @@ class AssessmentAttemptController extends Controller
                 'order'            => $usage->order,
                 'depends_on_uuid'  => $usage->question->dependsOn?->uuid,
                 'show_when_value'  => $usage->question->show_when_value,
+                'category'         => $usage->question->questionCategory
+                    ? ['uuid' => $usage->question->questionCategory->uuid, 'name' => $usage->question->questionCategory->name]
+                    : null,
                 'options'          => $usage->question->options->map(fn ($o) => [
                     'uuid'         => $o->uuid,
                     'option_text'  => $o->option_text,
@@ -136,19 +145,26 @@ class AssessmentAttemptController extends Controller
         $responsesByUuid = $attempt->responses->keyBy(fn ($r) => $r->question?->uuid);
 
         $responses = $orderedQuestions->map(fn ($q) => [
-            'question_uuid' => $q['uuid'],
-            'question_text' => $q['text'],
-            'answer'        => $responsesByUuid[$q['uuid']]?->answer,
-            'score'         => $responsesByUuid[$q['uuid']]?->score,
+            'question_uuid'            => $q['uuid'],
+            'question_text'            => $q['text'],
+            'answer'                   => $responsesByUuid[$q['uuid']]?->answer,
+            'score'                    => $responsesByUuid[$q['uuid']]?->score,
+            'supervisor_answer'        => $responsesByUuid[$q['uuid']]?->supervisor_answer,
+            'supervisor_score'         => $responsesByUuid[$q['uuid']]?->supervisor_score,
+            'supervisor_justification' => $responsesByUuid[$q['uuid']]?->supervisor_justification,
+            'supervisor_updated_at'    => $responsesByUuid[$q['uuid']]?->supervisor_updated_at?->toDateTimeString(),
         ]);
 
         return ApiResponse::success([
-            'status'       => $attempt->status,
-            'score'        => $attempt->score,
-            'self_score'   => $attempt->self_score,
-            'kpi_score'    => $attempt->kpi_score,
-            'finalized_at' => $attempt->finalized_at?->toDateTimeString(),
-            'responses'    => $responses,
+            'status'               => $attempt->status,
+            'attempt_uuid'         => $attempt->uuid,
+            'score'                => $attempt->score,
+            'self_score'           => $attempt->self_score,
+            'kpi_score'            => $attempt->kpi_score,
+            'finalized_at'         => $attempt->finalized_at?->toDateTimeString(),
+            'employee_signed_at'   => $attempt->employee_signed_at?->toDateTimeString(),
+            'supervisor_signed_at' => $attempt->supervisor_signed_at?->toDateTimeString(),
+            'responses'            => $responses,
             'kpis'         => AppraisalKpiResource::collection($attempt->kpis),
             'events'       => $attempt->events->map(fn ($e) => [
                 'uuid'       => $e->uuid,
@@ -178,21 +194,23 @@ class AssessmentAttemptController extends Controller
             'responses.*.score'         => ['nullable', 'integer'],
         ]);
 
-        foreach ($request->responses as $item) {
-            $question = Question::where('uuid', $item['question_uuid'])->firstOrFail();
-            QuestionResponse::updateOrCreate(
-                [
-                    'question_id'      => $question->id,
-                    'user_id'          => auth()->id(),
-                    'respondable_type' => AssessmentAttempt::class,
-                    'respondable_id'   => $attempt->id,
-                ],
-                [
-                    'answer' => $item['answer'] ?? null,
-                    'score'  => $item['score'] ?? null,
-                ]
-            );
-        }
+        DB::transaction(function () use ($request, $attempt) {
+            foreach ($request->responses as $item) {
+                $question = Question::where('uuid', $item['question_uuid'])->firstOrFail();
+                QuestionResponse::updateOrCreate(
+                    [
+                        'question_id'      => $question->id,
+                        'user_id'          => auth()->id(),
+                        'respondable_type' => AssessmentAttempt::class,
+                        'respondable_id'   => $attempt->id,
+                    ],
+                    [
+                        'answer' => $item['answer'] ?? null,
+                        'score'  => $item['score'] ?? null,
+                    ]
+                );
+            }
+        });
 
         return ApiResponse::success(['saved' => count($request->responses)]);
     }
@@ -214,12 +232,14 @@ class AssessmentAttemptController extends Controller
 
         // Training quiz: no supervisor stage, just submit and update progress
         if ($attempt->isTrainingQuiz()) {
-            $attempt->update([
-                'status'       => AssessmentAttempt::STATUS_SUBMITTED,
-                'submitted_at' => now(),
-            ]);
-            $this->recordEvent($attempt, 'submitted');
-            $attempt->handleTrainingQuizSubmission();
+            DB::transaction(function () use ($attempt) {
+                $attempt->update([
+                    'status'       => AssessmentAttempt::STATUS_SUBMITTED,
+                    'submitted_at' => now(),
+                ]);
+                $this->recordEvent($attempt, 'submitted');
+                $attempt->handleTrainingQuizSubmission();
+            });
             $attempt->refresh();
 
             return ApiResponse::success(AssessmentAttemptResource::make($attempt), 'Quiz submitted.');
@@ -239,16 +259,18 @@ class AssessmentAttemptController extends Controller
 
             // HOD with no parent department → auto-confirm, skip supervisor step
             if ($isHod && !$department->parent_department_id) {
-                $attempt->update([
-                    'status'           => AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
-                    'submitted_at'     => now(),
-                    'employee_comment' => $request->employee_comment,
-                ]);
+                DB::transaction(function () use ($attempt, $request) {
+                    $attempt->update([
+                        'status'           => AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+                        'submitted_at'     => now(),
+                        'employee_comment' => $request->employee_comment,
+                    ]);
 
-                $this->recordEvent($attempt, 'submitted', $request->employee_comment);
-                $this->recordEvent($attempt, 'supervisor_confirmed', 'Auto-confirmed (top-level HOD)');
+                    $this->recordEvent($attempt, 'submitted', $request->employee_comment);
+                    $this->recordEvent($attempt, 'supervisor_confirmed', 'Auto-confirmed (top-level HOD)');
 
-                activity('appraisals')->performedOn($attempt)->log("Appraisal auto-confirmed (top-level HOD): {$attempt->user->name}");
+                    activity('appraisals')->performedOn($attempt)->log("Appraisal auto-confirmed (top-level HOD): {$attempt->user->name}");
+                });
 
                 return ApiResponse::success(
                     AssessmentAttemptResource::make($attempt),
@@ -257,15 +279,29 @@ class AssessmentAttemptController extends Controller
             }
 
             // Regular employee OR HOD whose parent dept HOD must review
-            $attempt->update([
-                'status'           => AssessmentAttempt::STATUS_PENDING_SUPERVISOR,
-                'submitted_at'     => now(),
-                'employee_comment' => $request->employee_comment,
-            ]);
+            DB::transaction(function () use ($attempt, $request) {
+                $attempt->update([
+                    'status'           => AssessmentAttempt::STATUS_PENDING_SUPERVISOR,
+                    'submitted_at'     => now(),
+                    'employee_comment' => $request->employee_comment,
+                ]);
 
-            $this->recordEvent($attempt, 'submitted', $request->employee_comment);
+                $this->recordEvent($attempt, 'submitted', $request->employee_comment);
 
-            activity('appraisals')->performedOn($attempt)->log("Appraisal submitted for supervisor review: {$attempt->user->name}");
+                activity('appraisals')->performedOn($attempt)->log("Appraisal submitted for supervisor review: {$attempt->user->name}");
+            });
+
+            $supervisor = $this->findSupervisorUser($attempt);
+            if ($supervisor) {
+                $supervisor->notify(new AppraisalNotification(
+                    type:     'appraisal_submitted',
+                    subject:  "{$attempt->user->name}'s Appraisal Awaits Your Review",
+                    greeting: "Hello {$supervisor->name},",
+                    lines:    [
+                        "{$attempt->user->name} has submitted their appraisal for \"{$attempt->window->title}\" and it is pending your review.",
+                    ],
+                ));
+            }
 
             $message = $isHod
                 ? 'Submitted for your Dean\'s review.'
@@ -274,12 +310,14 @@ class AssessmentAttemptController extends Controller
             return ApiResponse::success(AssessmentAttemptResource::make($attempt), $message);
         }
 
-        $attempt->update([
-            'status'       => AssessmentAttempt::STATUS_SUBMITTED,
-            'submitted_at' => now(),
-        ]);
+        DB::transaction(function () use ($attempt) {
+            $attempt->update([
+                'status'       => AssessmentAttempt::STATUS_SUBMITTED,
+                'submitted_at' => now(),
+            ]);
 
-        $this->recordEvent($attempt, 'submitted');
+            $this->recordEvent($attempt, 'submitted');
+        });
 
         return ApiResponse::success(AssessmentAttemptResource::make($attempt), 'Assessment submitted.');
     }
@@ -304,7 +342,9 @@ class AssessmentAttemptController extends Controller
 
         $query = AssessmentAttempt::whereIn('status', [
                 AssessmentAttempt::STATUS_PENDING_SUPERVISOR,
+                AssessmentAttempt::STATUS_PENDING_EMPLOYEE_ACKNOWLEDGMENT,
                 AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+                AssessmentAttempt::STATUS_PENDING_SIGNATURES,
                 AssessmentAttempt::STATUS_RETURNED,
                 AssessmentAttempt::STATUS_COMPLETED,
             ])
@@ -367,48 +407,65 @@ class AssessmentAttemptController extends Controller
         }
 
         $request->validate([
-            'responses'                 => ['required', 'array', 'min:1'],
-            'responses.*.question_uuid' => ['required', 'exists:questions,uuid'],
-            'responses.*.answer'        => ['nullable', 'string'],
-            'responses.*.score'         => ['nullable', 'integer'],
+            'responses'                        => ['required', 'array', 'min:1'],
+            'responses.*.question_uuid'        => ['required', 'exists:questions,uuid'],
+            'responses.*.answer'               => ['nullable', 'string'],
+            'responses.*.score'                => ['nullable', 'integer'],
+            'responses.*.justification'        => ['nullable', 'string', 'max:2000'],
         ]);
 
         $attempt->load('responses.question');
 
         $changed = 0;
 
-        foreach ($request->responses as $item) {
-            $response = $attempt->responses->first(
-                fn ($r) => $r->question?->uuid === $item['question_uuid']
+        DB::transaction(function () use ($request, $attempt, &$changed) {
+            foreach ($request->responses as $item) {
+                $response = $attempt->responses->first(
+                    fn ($r) => $r->question?->uuid === $item['question_uuid']
+                );
+
+                if (!$response) continue;
+
+                $response->update([
+                    'supervisor_answer'         => $item['answer'] ?? null,
+                    'supervisor_score'          => $item['score'] ?? null,
+                    'supervisor_id'             => auth()->id(),
+                    'supervisor_updated_at'     => now(),
+                    'supervisor_justification'  => $item['justification'] ?? null,
+                ]);
+
+                $changed++;
+            }
+
+            $attempt->update(['status' => AssessmentAttempt::STATUS_PENDING_EMPLOYEE_ACKNOWLEDGMENT]);
+
+            $this->recordEvent(
+                $attempt,
+                'answers_edited',
+                "{$changed} answer(s) updated by supervisor — sent to employee for acknowledgment",
             );
 
-            if (!$response) continue;
+            activity('appraisals')->performedOn($attempt)
+                ->withProperties(['changed' => $changed])
+                ->log("Supervisor updated {$changed} answer(s) for {$attempt->user->name} — awaiting employee acknowledgment");
+        });
 
-            $response->update([
-                'supervisor_answer'     => $item['answer'] ?? null,
-                'supervisor_score'      => $item['score'] ?? null,
-                'supervisor_id'         => auth()->id(),
-                'supervisor_updated_at' => now(),
-            ]);
-
-            $changed++;
-        }
-
-        $this->recordEvent(
-            $attempt,
-            'answers_edited',
-            "{$changed} answer(s) updated by supervisor",
-        );
-
-        activity('appraisals')->performedOn($attempt)
-            ->withProperties(['changed' => $changed])
-            ->log("Supervisor updated {$changed} answer(s) for {$attempt->user->name}");
+        $attempt->loadMissing('user');
+        $attempt->user->notify(new AppraisalNotification(
+            type:     'appraisal_review_required',
+            subject:  'Your HOD Has Made Changes to Your Appraisal',
+            greeting: "Hello {$attempt->user->name},",
+            lines:    [
+                "Your HOD has updated {$changed} response(s) on your appraisal for \"{$attempt->window->title}\".",
+                'Please log in to review the changes and accept or disagree.',
+            ],
+        ));
 
         $attempt->load('responses.question');
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
-            "{$changed} answer(s) updated."
+            "{$changed} answer(s) saved. The employee has been notified to review and accept the changes."
         );
     }
 
@@ -425,20 +482,32 @@ class AssessmentAttemptController extends Controller
             return response()->json(['message' => 'This attempt is not pending supervisor review.'], 422);
         }
 
-        $attempt->update([
-            'status'                  => AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
-            'supervisor_id'           => auth()->id(),
-            'supervisor_comment'      => $request->supervisor_comment,
-            'supervisor_confirmed_at' => now(),
-        ]);
+        DB::transaction(function () use ($request, $attempt) {
+            $attempt->update([
+                'status'             => AssessmentAttempt::STATUS_PENDING_EMPLOYEE_ACKNOWLEDGMENT,
+                'supervisor_id'      => auth()->id(),
+                'supervisor_comment' => $request->supervisor_comment,
+            ]);
 
-        $this->recordEvent($attempt, 'supervisor_confirmed', $request->supervisor_comment);
+            $this->recordEvent($attempt, 'supervisor_confirmed', $request->supervisor_comment);
 
-        activity('appraisals')->performedOn($attempt)->log("Supervisor confirmed appraisal for {$attempt->user->name}");
+            activity('appraisals')->performedOn($attempt)->log("Supervisor confirmed appraisal for {$attempt->user->name} — awaiting employee acknowledgment");
+        });
+
+        $attempt->loadMissing('user');
+        $attempt->user->notify(new AppraisalNotification(
+            type:     'appraisal_review_required',
+            subject:  'Your Supervisor Has Reviewed Your Appraisal',
+            greeting: "Hello {$attempt->user->name},",
+            lines:    [
+                "Your supervisor has reviewed and confirmed your appraisal for \"{$attempt->window->title}\".",
+                'Please log in to review and accept to forward it to HR.',
+            ],
+        ));
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
-            'Appraisal confirmed and forwarded to HR.'
+            'Appraisal confirmed. Employee will be notified to review and accept the changes.'
         );
     }
 
@@ -455,19 +524,195 @@ class AssessmentAttemptController extends Controller
             return response()->json(['message' => 'This attempt is not pending supervisor review.'], 422);
         }
 
-        $attempt->update([
-            'status'             => AssessmentAttempt::STATUS_RETURNED,
-            'supervisor_id'      => auth()->id(),
-            'supervisor_comment' => $request->supervisor_comment,
-        ]);
+        DB::transaction(function () use ($request, $attempt) {
+            $attempt->update([
+                'status'             => AssessmentAttempt::STATUS_RETURNED,
+                'supervisor_id'      => auth()->id(),
+                'supervisor_comment' => $request->supervisor_comment,
+            ]);
 
-        $this->recordEvent($attempt, 'returned', $request->supervisor_comment);
+            $this->recordEvent($attempt, 'returned', $request->supervisor_comment);
 
-        activity('appraisals')->performedOn($attempt)->log("Supervisor returned appraisal to {$attempt->user->name} for revision");
+            activity('appraisals')->performedOn($attempt)->log("Supervisor returned appraisal to {$attempt->user->name} for revision");
+        });
+
+        $attempt->loadMissing('user');
+        $attempt->user->notify(new AppraisalNotification(
+            type:     'appraisal_returned',
+            subject:  'Your Appraisal Has Been Returned for Revision',
+            greeting: "Hello {$attempt->user->name},",
+            lines:    [
+                "Your supervisor has returned your appraisal for \"{$attempt->window->title}\" for revision.",
+                "Reason: {$request->supervisor_comment}",
+                'Please log in to make the necessary revisions and resubmit.',
+            ],
+        ));
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
             'Appraisal returned to employee for revision.'
+        );
+    }
+
+    /**
+     * Employee disagrees with supervisor changes → returns to pending_supervisor for the supervisor to revise or re-confirm.
+     * @throws Throwable
+     */
+    public function employeeDisagree(Request $request, AssessmentAttempt $attempt): JsonResponse
+    {
+        DB::beginTransaction();
+        try {
+            $this->authorizeAttempt($attempt);
+
+            if ($attempt->status !== AssessmentAttempt::STATUS_PENDING_EMPLOYEE_ACKNOWLEDGMENT) {
+                return response()->json(['message' => 'No supervisor changes are pending your acknowledgment.'], 422);
+            }
+
+            $request->validate([
+                'comment' => ['required', 'string', 'max:2000'],
+            ]);
+
+            $attempt->update(['status' => AssessmentAttempt::STATUS_PENDING_SUPERVISOR]);
+
+            $this->recordEvent($attempt, 'employee_disagreed', $request->comment);
+
+            activity('appraisals')->performedOn($attempt)->log("Employee disagreed with supervisor changes: {$attempt->user->name}");
+
+            DB::commit();
+
+            $supervisor = $this->findSupervisorUser($attempt);
+            if ($supervisor) {
+                $supervisor->notify(new AppraisalNotification(
+                    type:     'appraisal_employee_disagreed',
+                    subject:  "{$attempt->user->name} Disagreed with Your Appraisal Changes",
+                    greeting: "Hello {$supervisor->name},",
+                    lines:    [
+                        "{$attempt->user->name} has disagreed with the changes you made to their appraisal for \"{$attempt->window->title}\".",
+                        "Their reason: {$request->comment}",
+                        'Please log in to review their feedback and revise or re-confirm.',
+                    ],
+                ));
+            }
+
+            return ApiResponse::success(
+                AssessmentAttemptResource::make($attempt),
+                'Your disagreement has been recorded. The appraisal has been returned to your supervisor.'
+            );
+        }catch (Exception $exception){
+            DB::rollBack();
+
+            Log::error('Disagree', [$exception]);
+            return ApiResponse::error('Could not save changes');
+        }
+    }
+
+    /**
+     * Employee acknowledges supervisor changes → moves to supervisor_confirmed (visible to HR).
+     */
+    public function employeeAcknowledge(AssessmentAttempt $attempt): JsonResponse
+    {
+        $this->authorizeAttempt($attempt);
+
+        if ($attempt->status !== AssessmentAttempt::STATUS_PENDING_EMPLOYEE_ACKNOWLEDGMENT) {
+            return response()->json(['message' => 'No supervisor changes are pending your acknowledgment.'], 422);
+        }
+
+        DB::transaction(function () use ($attempt) {
+            $attempt->update([
+                'status'                  => AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+                'supervisor_confirmed_at' => now(),
+            ]);
+
+            $this->recordEvent($attempt, 'employee_acknowledged');
+
+            activity('appraisals')->performedOn($attempt)->log("Employee acknowledged supervisor changes: {$attempt->user->name}");
+        });
+
+        $hrUsers = User::whereHas('roles', fn ($q) => $q->where('name', 'hr'))->get();
+        if ($hrUsers->isNotEmpty()) {
+            Notification::send($hrUsers, new AppraisalNotification(
+                type:     'appraisal_forwarded_to_hr',
+                subject:  "Appraisal Ready for Finalization: {$attempt->user->name}",
+                greeting: 'Hello,',
+                lines:    [
+                    "{$attempt->user->name}'s appraisal for \"{$attempt->window->title}\" has been confirmed and is ready for finalization.",
+                ],
+            ));
+        }
+
+        return ApiResponse::success(
+            AssessmentAttemptResource::make($attempt),
+            'Changes acknowledged. Your appraisal has been forwarded to HR.'
+        );
+    }
+
+    /**
+     * Employee digitally signs the finalized appraisal outcome.
+     * If the supervisor has already signed, the appraisal moves to completed.
+     */
+    public function employeeSign(AssessmentAttempt $attempt): JsonResponse
+    {
+        $this->authorizeAttempt($attempt);
+
+        if ($attempt->status !== AssessmentAttempt::STATUS_PENDING_SIGNATURES) {
+            return response()->json(['message' => 'This appraisal is not pending signatures.'], 422);
+        }
+
+        DB::transaction(function () use ($attempt) {
+            $attempt->update(['employee_signed_at' => now()]);
+
+            $this->recordEvent($attempt, 'employee_signed');
+
+            if ($attempt->supervisor_signed_at) {
+                $attempt->update(['status' => AssessmentAttempt::STATUS_COMPLETED]);
+            }
+
+            activity('appraisals')->performedOn($attempt)->log("Employee signed appraisal: {$attempt->user->name}");
+        });
+
+        return ApiResponse::success(
+            AssessmentAttemptResource::make($attempt),
+            $attempt->status === AssessmentAttempt::STATUS_COMPLETED
+                ? 'Appraisal signed and completed.'
+                : 'Appraisal signed. Awaiting supervisor signature.'
+        );
+    }
+
+    /**
+     * Supervisor digitally signs the finalized appraisal outcome.
+     * If the employee has already signed, the appraisal moves to completed.
+     */
+    public function supervisorSign(AssessmentAttempt $attempt): JsonResponse
+    {
+        if ($attempt->status !== AssessmentAttempt::STATUS_PENDING_SIGNATURES) {
+            return response()->json(['message' => 'This appraisal is not pending signatures.'], 422);
+        }
+
+        $supervisorUser = $this->findSupervisorUser($attempt);
+        if (!$supervisorUser || $supervisorUser->id !== auth()->id()) {
+            return response()->json(['message' => 'You are not the supervisor for this appraisal.'], 403);
+        }
+
+        DB::transaction(function () use ($attempt) {
+            $attempt->update([
+                'supervisor_signed_at' => now(),
+                'supervisor_id'        => $attempt->supervisor_id ?? auth()->id(),
+            ]);
+
+            $this->recordEvent($attempt, 'supervisor_signed');
+
+            if ($attempt->employee_signed_at) {
+                $attempt->update(['status' => AssessmentAttempt::STATUS_COMPLETED]);
+            }
+
+            activity('appraisals')->performedOn($attempt)->log("Supervisor signed appraisal for {$attempt->user->name}");
+        });
+
+        return ApiResponse::success(
+            AssessmentAttemptResource::make($attempt),
+            $attempt->status === AssessmentAttempt::STATUS_COMPLETED
+                ? 'Appraisal signed and completed.'
+                : 'Appraisal signed. Awaiting employee signature.'
         );
     }
 
@@ -481,6 +726,7 @@ class AssessmentAttemptController extends Controller
     {
         $query = AssessmentAttempt::whereIn('status', [
                 AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+                AssessmentAttempt::STATUS_PENDING_SIGNATURES,
                 AssessmentAttempt::STATUS_COMPLETED,
             ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
@@ -517,7 +763,8 @@ class AssessmentAttemptController extends Controller
     }
 
     /**
-     * HR finalises the appraisal → completed.
+     * HR finalises the appraisal → pending_signatures.
+     * Scores are frozen here; both employee and supervisor must sign to complete.
      */
     public function hrComplete(AssessmentAttempt $attempt): JsonResponse
     {
@@ -533,7 +780,7 @@ class AssessmentAttemptController extends Controller
             $scores = $this->computeScores($attempt);
 
             $attempt->update([
-                'status'       => AssessmentAttempt::STATUS_COMPLETED,
+                'status'       => AssessmentAttempt::STATUS_PENDING_SIGNATURES,
                 'score'        => $scores['score'],
                 'self_score'   => $scores['self_score'],
                 'kpi_score'    => $scores['kpi_score'],
@@ -542,12 +789,37 @@ class AssessmentAttemptController extends Controller
 
             $this->recordEvent($attempt, 'hr_completed');
 
-            activity('appraisals')->performedOn($attempt)->log("HR completed appraisal for {$attempt->user->name}");
+            activity('appraisals')->performedOn($attempt)->log("HR finalized appraisal for {$attempt->user->name} — pending signatures");
         });
+
+        $attempt->loadMissing('user');
+
+        $attempt->user->notify(new AppraisalNotification(
+            type:     'appraisal_completed',
+            subject:  'Your Appraisal Has Been Finalized — Signature Required',
+            greeting: "Hello {$attempt->user->name},",
+            lines:    [
+                "Your appraisal for \"{$attempt->window->title}\" has been reviewed and finalized by HR.",
+                'Please log in to review the outcome and sign to complete the process.',
+            ],
+        ));
+
+        $supervisor = $this->findSupervisorUser($attempt);
+        if ($supervisor) {
+            $supervisor->notify(new AppraisalNotification(
+                type:     'appraisal_completed',
+                subject:  "Appraisal Signature Required: {$attempt->user->name}",
+                greeting: "Hello {$supervisor->name},",
+                lines:    [
+                    "The appraisal for {$attempt->user->name} (\"{$attempt->window->title}\") has been finalized by HR.",
+                    'Please log in to review the outcome and add your signature.',
+                ],
+            ));
+        }
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
-            'Appraisal completed.'
+            'Appraisal finalized. Employee and supervisor have been notified to sign.'
         );
     }
 
@@ -601,10 +873,96 @@ class AssessmentAttemptController extends Controller
                     $mime = Storage::disk('common')->mimeType($logoKey) ?: 'image/png';
                     $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($logoContent);
                 }
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // Logo unavailable — render without it
             }
         }
+
+        $hrFinalizer = $attempt->events->firstWhere('event_type', 'hr_completed')?->actor;
+
+        $pdf = Pdf::loadView('appraisal.pdf', [
+            'attempt'      => $attempt,
+            'responses'    => $responses,
+            'kpis'         => $attempt->kpis,
+            'events'       => $attempt->events,
+            'company'      => $settings,
+            'logoBase64'   => $logoBase64,
+            'hrFinalizer'  => $hrFinalizer,
+        ])->setPaper('a4', 'portrait');
+
+        $filename = 'appraisal-' . str($attempt->user->name)->slug() . '-' . now()->format('Y-m-d') . '.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * PDF download shared across employee, supervisor, and HR.
+     * Only available once the appraisal is finalized (pending_signatures or completed).
+     */
+    public function printPdf(AssessmentAttempt $attempt)
+    {
+        // Authorization: own attempt, supervisor, or HR/admin
+        $userId = auth()->id();
+        $isEmployee  = $attempt->user_id === $userId;
+        $isHrOrAdmin = auth()->user()->hasRole(['hr', 'super-admin', 'appraisal_officer']);
+
+        if (!$isEmployee && !$isHrOrAdmin) {
+            $supervisorUser = $this->findSupervisorUser($attempt);
+            if (!$supervisorUser || $supervisorUser->id !== $userId) {
+                abort(403);
+            }
+        }
+
+        if (!in_array($attempt->status, [
+            AssessmentAttempt::STATUS_PENDING_SIGNATURES,
+            AssessmentAttempt::STATUS_COMPLETED,
+        ])) {
+            return response()->json(['message' => 'PDF is only available after HR finalizes the appraisal.'], 422);
+        }
+
+        $attempt->load([
+            'user.employee.department',
+            'user.employee.rank',
+            'supervisor',
+            'window.assessment',
+            'window.questionUsages.question.questionCategory',
+            'responses.question.questionCategory',
+            'events.actor',
+            'kpis',
+        ]);
+
+        $orderedQuestions = $attempt->window->questionUsages->sortBy('order')->values();
+        $responsesByQuestionId = $attempt->responses->keyBy('question_id');
+
+        $responses = $orderedQuestions->map(function ($usage) use ($responsesByQuestionId) {
+            $r = $responsesByQuestionId->get($usage->question_id);
+            return [
+                'question_text'     => $usage->question->text,
+                'category'          => $usage->question->questionCategory?->name ?? 'General',
+                'answer'            => $r?->answer,
+                'self_score'        => $r?->score,
+                'supervisor_answer' => $r?->supervisor_answer,
+                'supervisor_score'  => $r?->supervisor_score,
+            ];
+        });
+
+        $settingKeys = ['company.name', 'company.abbreviation', 'company.tagline', 'company.logo_url'];
+        $settings = \App\Models\Config\Setting::whereIn('key', $settingKeys)
+            ->get()
+            ->mapWithKeys(fn ($s) => [ltrim(strstr($s->key, '.'), '.') => $s->value]);
+
+        $logoBase64 = null;
+        if ($logoKey = $settings->get('logo_url')) {
+            try {
+                $logoContent = Storage::disk('common')->get($logoKey);
+                if ($logoContent) {
+                    $mime = Storage::disk('common')->mimeType($logoKey) ?: 'image/png';
+                    $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode($logoContent);
+                }
+            } catch (Throwable) {}
+        }
+
+        $hrFinalizer = $attempt->events->firstWhere('event_type', 'hr_completed')?->actor;
 
         $pdf = Pdf::loadView('appraisal.pdf', [
             'attempt'     => $attempt,
@@ -613,6 +971,7 @@ class AssessmentAttemptController extends Controller
             'events'      => $attempt->events,
             'company'     => $settings,
             'logoBase64'  => $logoBase64,
+            'hrFinalizer' => $hrFinalizer,
         ])->setPaper('a4', 'portrait');
 
         $filename = 'appraisal-' . str($attempt->user->name)->slug() . '-' . now()->format('Y-m-d') . '.pdf';
@@ -627,6 +986,7 @@ class AssessmentAttemptController extends Controller
     {
         $query = AssessmentAttempt::whereIn('status', [
                 AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+                AssessmentAttempt::STATUS_PENDING_SIGNATURES,
                 AssessmentAttempt::STATUS_COMPLETED,
             ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
@@ -710,22 +1070,24 @@ class AssessmentAttemptController extends Controller
         $attempt->load('user.employee');
         $departmentId = $attempt->user?->employee?->department_id;
 
-        $attempt->kpis()->delete();
+        DB::transaction(function () use ($request, $attempt, $departmentId) {
+            $attempt->kpis()->delete();
 
-        foreach ($request->kpis as $index => $item) {
-            AppraisalKpi::create([
-                'assessment_attempt_id' => $attempt->id,
-                'description'           => $item['description'],
-                'target'                => $item['target'],
-                'actual'                => $item['actual'] ?? null,
-                'order'                 => $index,
-            ]);
+            foreach ($request->kpis as $index => $item) {
+                AppraisalKpi::create([
+                    'assessment_attempt_id' => $attempt->id,
+                    'description'           => $item['description'],
+                    'target'                => $item['target'],
+                    'actual'                => $item['actual'] ?? null,
+                    'order'                 => $index,
+                ]);
 
-            // Persist unique descriptions to the department library for future reuse
-            if ($departmentId) {
-                JobKpi::upsertForDepartment($departmentId, $item['description'], auth()->id());
+                // Persist unique descriptions to the department library for future reuse
+                if ($departmentId) {
+                    JobKpi::upsertForDepartment($departmentId, $item['description'], auth()->id());
+                }
             }
-        }
+        });
 
         $attempt->load('kpis');
 
@@ -746,6 +1108,7 @@ class AssessmentAttemptController extends Controller
     {
         $query = AssessmentAttempt::whereIn('status', [
                 AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+                AssessmentAttempt::STATUS_PENDING_SIGNATURES,
                 AssessmentAttempt::STATUS_COMPLETED,
             ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
@@ -798,7 +1161,7 @@ class AssessmentAttemptController extends Controller
             $scores = $this->computeScores($attempt);
 
             $attempt->update([
-                'status'       => AssessmentAttempt::STATUS_COMPLETED,
+                'status'       => AssessmentAttempt::STATUS_PENDING_SIGNATURES,
                 'score'        => $scores['score'],
                 'self_score'   => $scores['self_score'],
                 'kpi_score'    => $scores['kpi_score'],
@@ -807,12 +1170,37 @@ class AssessmentAttemptController extends Controller
 
             $this->recordEvent($attempt, 'hr_completed');
 
-            activity('appraisals')->performedOn($attempt)->log("Appraisal officer completed appraisal for {$attempt->user->name}");
+            activity('appraisals')->performedOn($attempt)->log("Appraisal officer finalized appraisal for {$attempt->user->name} — pending signatures");
         });
+
+        $attempt->loadMissing('user');
+
+        $attempt->user->notify(new AppraisalNotification(
+            type:     'appraisal_completed',
+            subject:  'Your Appraisal Has Been Finalized — Signature Required',
+            greeting: "Hello {$attempt->user->name},",
+            lines:    [
+                "Your appraisal for \"{$attempt->window->title}\" has been reviewed and finalized.",
+                'Please log in to review the outcome and sign to complete the process.',
+            ],
+        ));
+
+        $supervisor = $this->findSupervisorUser($attempt);
+        if ($supervisor) {
+            $supervisor->notify(new AppraisalNotification(
+                type:     'appraisal_completed',
+                subject:  "Appraisal Signature Required: {$attempt->user->name}",
+                greeting: "Hello {$supervisor->name},",
+                lines:    [
+                    "The appraisal for {$attempt->user->name} (\"{$attempt->window->title}\") has been finalized.",
+                    'Please log in to review the outcome and add your signature.',
+                ],
+            ));
+        }
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
-            'Appraisal completed.'
+            'Appraisal finalized. Employee and supervisor have been notified to sign.'
         );
     }
 
@@ -888,6 +1276,15 @@ class AssessmentAttemptController extends Controller
         if ($attempt->user_id !== auth()->id()) {
             abort(403);
         }
+    }
+
+    private function findSupervisorUser(AssessmentAttempt $attempt): ?User
+    {
+        $attempt->loadMissing('user.employee.department');
+        $hodEmployeeId = $attempt->user?->employee?->department?->hod;
+        if (!$hodEmployeeId) return null;
+
+        return User::whereHas('employee', fn ($q) => $q->where('id', $hodEmployeeId))->first();
     }
 
     private function validateRequiredQuestionsAnswered(AssessmentAttempt $attempt): void

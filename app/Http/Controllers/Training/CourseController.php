@@ -6,9 +6,12 @@ use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Training\CourseEnrollmentResource;
 use App\Http\Resources\Training\CourseResource;
+use App\Mail\Training\CourseEnrolledMail;
 use App\Models\Appraisal\Assessment;
+use App\Models\Appraisal\AssessmentAttempt;
 use App\Models\Training\Course;
 use App\Models\Training\CourseAssignment;
+use App\Models\Training\CourseCategory;
 use App\Models\Config\Department;
 use App\Models\JobCategory;
 use App\Models\Training\CourseEnrollment;
@@ -19,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class CourseController extends Controller
@@ -48,6 +52,12 @@ class CourseController extends Controller
         ]);
 
         $attributes = $request->only(['title', 'description', 'course_category_id', 'duration_minutes', 'passing_score']);
+
+        if (!isset($attributes['course_category_id'])) {
+            $attributes['course_category_id'] = CourseCategory::firstOrCreate(
+                ['name' => 'Uncategorized'],
+            )->id;
+        }
 
         if ($request->hasFile('banner')) {
             $uploaded = app(MinioUploadService::class)
@@ -210,6 +220,87 @@ class CourseController extends Controller
         return CourseEnrollmentResource::collection($enrollments);
     }
 
+    /**
+     * Quiz results for all enrolled learners for a specific quiz in this course.
+     * GET /training/courses/{course}/quiz-results/{assessment}
+     */
+    public function quizResults(Request $request, Course $course, Assessment $assessment): JsonResponse
+    {
+        // Confirm quiz belongs to this course
+        abort_unless(
+            $assessment->assignable_type === Course::class && $assessment->assignable_id === $course->id,
+            403,
+            'Quiz does not belong to this course.'
+        );
+
+        // Max possible score = sum of (custom_weight ?? question.weight) across all usages
+        $maxScore = (float) $assessment->questionUsages()
+            ->join('questions', 'questions.id', '=', 'question_usages.question_id')
+            ->sum(DB::raw('COALESCE(app_question_usages.custom_weight, app_questions.weight, 1)'));
+
+        $search = $request->input('search');
+
+        $enrollments = $course->enrollments()
+            ->with('user')
+            ->when($search, fn ($q) => $q->whereHas('user', fn ($u) =>
+                $u->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+            ))
+            ->latest('enrolled_at')
+            ->paginate($request->integer('per_page', 20));
+
+        // Fetch all attempts for this quiz scoped to the current page's enrollments
+        $enrollmentIds = $enrollments->pluck('id');
+        $attempts = AssessmentAttempt::where('assessment_id', $assessment->id)
+            ->whereIn('course_enrollment_id', $enrollmentIds)
+            ->get()
+            ->keyBy('course_enrollment_id');
+
+        $passingScore = $course->passing_score; // percentage threshold (0–100)
+
+        $data = $enrollments->through(function ($enrollment) use ($attempts, $maxScore, $passingScore) {
+            $attempt = $attempts->get($enrollment->id);
+
+            $scorePercent = null;
+            $passed       = null;
+            if ($attempt && $attempt->score !== null && $maxScore > 0) {
+                $scorePercent = round(($attempt->score / $maxScore) * 100, 1);
+                if ($passingScore !== null) {
+                    $passed = $scorePercent >= $passingScore;
+                }
+            }
+
+            return [
+                'enrollment_uuid'   => $enrollment->uuid,
+                'enrollment_status' => $enrollment->status,
+                'user' => [
+                    'uuid'  => $enrollment->user->uuid,
+                    'name'  => $enrollment->user->name,
+                    'email' => $enrollment->user->email,
+                ],
+                'attempt' => $attempt ? [
+                    'uuid'         => $attempt->uuid,
+                    'status'       => $attempt->status,
+                    'score'        => $attempt->score,
+                    'score_pct'    => $scorePercent,
+                    'passed'       => $passed,
+                    'started_at'   => $attempt->started_at?->toISOString(),
+                    'submitted_at' => $attempt->submitted_at?->toISOString(),
+                ] : null,
+            ];
+        });
+
+        return ApiResponse::success([
+            'quiz' => [
+                'uuid'      => $assessment->uuid,
+                'title'     => $assessment->title,
+                'max_score' => $maxScore,
+            ],
+            'passing_score' => $passingScore,
+            'results'       => $data,
+        ]);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private function resolveUserIds(CourseAssignment $assignment): \Illuminate\Support\Collection
@@ -284,6 +375,8 @@ class CourseController extends Controller
 
     private function insertEnrollments(Course $course, \Illuminate\Support\Collection $userIds, ?string $sharedDueDate = null, array $perUserDueDates = []): void
     {
+        if ($userIds->isEmpty()) return;
+
         $now = now();
 
         $rows = $userIds->map(fn($uid) => [
@@ -300,5 +393,14 @@ class CourseController extends Controller
         foreach (array_chunk($rows, 500) as $chunk) {
             CourseEnrollment::insert($chunk);
         }
+
+        // Queue one enrollment notification per newly enrolled user
+        User::whereIn('id', $userIds)
+            ->whereNotNull('email')
+            ->get(['id', 'name', 'email'])
+            ->each(function (User $user) use ($course, $sharedDueDate, $perUserDueDates) {
+                $dueDate = $sharedDueDate ?? ($perUserDueDates[$user->id] ?? null);
+                Mail::to($user->email)->queue(new CourseEnrolledMail($user, $course, $dueDate));
+            });
     }
 }

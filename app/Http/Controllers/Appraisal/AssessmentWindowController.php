@@ -9,10 +9,13 @@ use App\Http\Resources\AssessmentWindowResource;
 use App\Models\Appraisal\Assessment;
 use App\Models\Appraisal\AssessmentAttempt;
 use App\Models\Appraisal\AssessmentWindow;
+use App\Models\User;
+use App\Notifications\Appraisal\AppraisalNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 class AssessmentWindowController extends Controller
 {
@@ -115,6 +118,10 @@ class AssessmentWindowController extends Controller
         $assessmentWindow->snapshotQuestionsFromTemplate();
 
         activity('appraisals')->performedOn($assessmentWindow)->log("Opened assessment window: {$assessmentWindow->title}");
+
+        if ($assessmentWindow->assessment->type === 'appraisal') {
+            $this->notifyEligibleEmployees($assessmentWindow);
+        }
 
         return ApiResponse::success(AssessmentWindowResource::make($assessmentWindow), 'Session opened and questions locked in.');
     }
@@ -219,5 +226,37 @@ class AssessmentWindowController extends Controller
             'on_time_submission_rate' => $onTimeRate,
             'avg_supervisor_lag_days' => $avgLagDays,
         ]);
+    }
+
+    private function notifyEligibleEmployees(AssessmentWindow $window): void
+    {
+        $window->loadMissing('assessment.jobCategories');
+        $jobCategoryIds = $window->assessment->jobCategories->pluck('id');
+
+        $query = User::join('employees', 'users.employee_id', '=', 'employees.id')
+            ->join('job_details', 'job_details.employee_id', '=', 'employees.id')
+            ->whereNull('users.deleted_at')
+            ->whereNull('employees.deleted_at')
+            ->select('users.*');
+
+        if ($jobCategoryIds->isNotEmpty()) {
+            $query->whereIn('job_details.job_category_id', $jobCategoryIds);
+        }
+
+        $users = $query->get();
+        if ($users->isEmpty()) return;
+
+        Notification::send($users, new AppraisalNotification(
+            type:     'appraisal_session_opened',
+            subject:  "Appraisal Session Now Open: {$window->title}",
+            greeting: 'Hello,',
+            lines:    [
+                "The appraisal session \"{$window->title}\" is now open.",
+                'Please log in to complete your self-assessment.',
+                $window->end_date
+                    ? "Deadline: {$window->end_date->format('d M Y, g:i A')}."
+                    : 'No closing date has been set for this session.',
+            ],
+        ));
     }
 }

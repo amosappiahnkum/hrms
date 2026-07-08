@@ -18,11 +18,15 @@ class AssessmentAttempt extends ApplicationModel
     use HasUuid;
 
     // Non-appraisal types go: draft → submitted
-    // Appraisal type goes: draft → pending_supervisor → supervisor_confirmed → completed
-    //   supervisor can return → employee revises → pending_supervisor again
+    // Appraisal type goes:
+    //   draft → pending_supervisor → pending_employee_acknowledgment → supervisor_confirmed
+    //   → pending_signatures (both employee + supervisor must sign) → completed
+    //   supervisor can return at pending_supervisor → employee revises → pending_supervisor again
     const string STATUS_DRAFT = 'draft';
     const string STATUS_PENDING_SUPERVISOR = 'pending_supervisor';
+    const string STATUS_PENDING_EMPLOYEE_ACKNOWLEDGMENT = 'pending_employee_acknowledgment';
     const string STATUS_SUPERVISOR_CONFIRMED = 'supervisor_confirmed';
+    const string STATUS_PENDING_SIGNATURES = 'pending_signatures';
     const string STATUS_COMPLETED = 'completed';
     const string STATUS_RETURNED = 'returned';
     const string STATUS_SUBMITTED = 'submitted'; // non-appraisal final state
@@ -44,6 +48,8 @@ class AssessmentAttempt extends ApplicationModel
         'self_score',
         'kpi_score',
         'finalized_at',
+        'employee_signed_at',
+        'supervisor_signed_at',
     ];
 
     protected $casts = [
@@ -51,6 +57,8 @@ class AssessmentAttempt extends ApplicationModel
         'submitted_at'            => 'datetime',
         'supervisor_confirmed_at' => 'datetime',
         'finalized_at'            => 'datetime',
+        'employee_signed_at'      => 'datetime',
+        'supervisor_signed_at'    => 'datetime',
         'score'                   => 'decimal:2',
         'self_score'              => 'decimal:2',
         'kpi_score'               => 'decimal:2',

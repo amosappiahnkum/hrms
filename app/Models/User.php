@@ -4,10 +4,12 @@ namespace App\Models;
 
 use App\Models\SelfService\Employee;
 use App\Models\SelfService\GrantAndFund;
+use App\Models\Training\CourseEnrollment;
 use App\Traits\HasActivityLogs;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -35,6 +37,11 @@ class User extends Authenticatable
         'password_changed',
         'last_login_at',
     ];
+
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
+    }
 
     /**
      * The attributes that should be hidden for arrays.
@@ -67,5 +74,10 @@ class User extends Authenticatable
     public function grantAndFunds()
     {
         return $this->hasMany(GrantAndFund::class);
+    }
+
+    public function courseEnrollments(): HasMany
+    {
+        return $this->hasMany(CourseEnrollment::class);
     }
 }
