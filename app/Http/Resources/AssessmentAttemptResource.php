@@ -2,11 +2,8 @@
 
 namespace App\Http\Resources;
 
-use App\Models\Appraisal\AssessmentAttempt;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use App\Http\Resources\AssessmentAttemptEventResource;
-use App\Http\Resources\AppraisalKpiResource;
 
 class AssessmentAttemptResource extends JsonResource
 {
@@ -41,11 +38,11 @@ class AssessmentAttemptResource extends JsonResource
             'window'          => $this->whenLoaded('window', fn () =>
                 AssessmentWindowResource::make($this->window)
             ),
-            'user'            => $this->whenLoaded('user', fn () => [
-                'uuid'  => $this->user->uuid,
-                'name'  => $this->user->name,
-                'email' => $this->user->email,
-            ]),
+            'user'            => $this->whenLoaded('user', fn () =>
+                $this->user->employee
+                    ? MiniEmployeeResource::make($this->user->employee)
+                    : null
+            ),
             'responses'       => $this->whenLoaded('responses', fn () =>
                 $this->responses->map(fn ($r) => [
                     'response_uuid'          => $r->uuid,

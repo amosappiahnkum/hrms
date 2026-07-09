@@ -361,7 +361,7 @@ class AssessmentAttemptController extends Controller
                     });
                 });
             })
-            ->with(['user', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
+            ->with(['user.employee.department', 'user.employee.photo', 'user.employee.rank', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
             ->latest('submitted_at');
 
         if ($search = trim((string) $request->input('search'))) {
