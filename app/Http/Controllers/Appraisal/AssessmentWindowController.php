@@ -120,7 +120,7 @@ class AssessmentWindowController extends Controller
         activity('appraisals')->performedOn($assessmentWindow)->log("Opened assessment window: {$assessmentWindow->title}");
 
         if ($assessmentWindow->assessment->type === 'appraisal') {
-            $this->notifyEligibleEmployees($assessmentWindow);
+//            $this->notifyEligibleEmployees($assessmentWindow);
         }
 
         return ApiResponse::success(AssessmentWindowResource::make($assessmentWindow), 'Session opened and questions locked in.');
