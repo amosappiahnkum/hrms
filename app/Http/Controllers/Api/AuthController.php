@@ -253,6 +253,8 @@ class AuthController extends Controller
             $employee = $contact->employee;
 
             $department = $employee?->department;
+
+            Log::info('data', [$employee, $department]);
             return response()->json([
                 'data' => [
                     "title" => $employee?->title,
