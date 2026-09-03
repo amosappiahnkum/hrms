@@ -104,6 +104,9 @@ class SettingSeeder extends Seeder
         // === DIRECT REPORTS ===
         $service->setDefault('features.direct_reports.enabled', true, 'direct_reports');
 
+        // === CERTIFICATIONS ===
+        $service->setDefault('features.certifications.enabled', true, 'certifications');
+
         // === QUICK EMAIL ===
         $service->setDefault('features.quick_email.enabled', true, 'quick_email');
 

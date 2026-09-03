@@ -4,6 +4,7 @@ namespace App\Models\SelfService;
 
 use App\Models\AppModel;
 use App\Models\Config\Department;
+use App\Models\EmployeeCertification;
 use App\Models\EmployeeSupervisor;
 use App\Models\InformationUpdate;
 use App\Models\JobDetail;
@@ -305,5 +306,10 @@ class Employee extends AppModel
     public function highestQualification()
     {
         return $this->hasOne(Education::class)->ofMany('education_level_rank', 'max');
+    }
+
+    public function certifications(): HasMany
+    {
+        return $this->hasMany(EmployeeCertification::class);
     }
 }

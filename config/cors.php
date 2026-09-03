@@ -19,15 +19,12 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        'https://careers.ttu.edu.gh',
-        'https://directory.ttu.edu.gh',
-        'https://hrms.ttuportal.com',
+//    'allowed_origins' => [
 //        'https://abave.kazi-360',
 //        'http://localhost:5173',
 //        'http://localhost:5174',
-    ],
-//    'allowed_origins' => ['*'],
+//    ],
+    'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:5173')),
 
     'allowed_origins_patterns' => [],
 

@@ -102,18 +102,23 @@ return [
         ],
     ],
 
-    // Add future groups here — e.g.:
-    // 'certifications' => [
-    //     'label' => 'Certifications',
-    //     'description' => 'Reminders about expiring certifications.',
-    //     'icon' => 'trophy',
-    //     'types' => [
-    //         'certification_expiry_reminder' => [
-    //             'label' => 'Expiring Certification Reminder',
-    //             'description' => 'When one of your certifications is about to expire.',
-    //             'default_email' => true,
-    //             'default_in_app' => true,
-    //         ],
-    //     ],
-    // ],
+    'certifications' => [
+        'label'       => 'Certifications',
+        'description' => 'Reminders about expiring employee certifications.',
+        'icon'        => 'certificate',
+        'types'       => [
+            'certification_expiry_reminder' => [
+                'label'          => 'Certification Expiry Reminder',
+                'description'    => 'Escalating reminders when a certification is approaching its expiry date (6 months → expiry).',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'certification_action' => [
+                'label'          => 'Certification Added / Updated / Removed',
+                'description'    => 'When HR uploads, edits, or deletes a certification on your profile.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+        ],
+    ],
 ];
