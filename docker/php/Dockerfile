@@ -1,7 +1,7 @@
 FROM php:8.4-fpm
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     unzip \
     libzip-dev \
@@ -38,11 +38,12 @@ RUN pecl install redis && docker-php-ext-enable redis
 RUN docker-php-ext-install opcache
 
 # Raise upload limits
-RUN echo "upload_max_filesize=100M\npost_max_size=105M\nmemory_limit=256M\nmax_execution_time=300" \
+RUN printf "upload_max_filesize=100M\npost_max_size=105M\nmemory_limit=256M\nmax_execution_time=300\n" \
     > /usr/local/etc/php/conf.d/uploads.ini
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+ENV COMPOSER_ALLOW_SUPERUSER=1
 
 # Set working directory
 WORKDIR /var/www

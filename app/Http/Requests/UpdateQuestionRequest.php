@@ -38,6 +38,11 @@ class UpdateQuestionRequest extends FormRequest
             'depends_on_uuid'  => ['nullable', 'exists:questions,uuid'],
             'show_when_value'    => ['nullable', 'array'],
             'show_when_value.*'  => ['string', 'max:255'],
+
+            'options' => ['sometimes', 'array', 'min:1'],
+            'options.*.option_text' => ['required_with:options', 'string', 'max:255'],
+            'options.*.option_value' => ['nullable', 'string', 'max:255'],
+            'options.*.order' => ['nullable', 'integer', 'min:0'],
         ];
     }
 
@@ -56,6 +61,19 @@ class UpdateQuestionRequest extends FormRequest
         } elseif ($this->has('depends_on_uuid')) {
             // Explicitly set to null — clear the dependency
             $this->merge(['depends_on_question_id' => null, 'show_when_value' => null]);
+        }
+
+        // The frontend sends option_value as a number (it's a numeric score);
+        // the column is a string, so normalize before validation runs.
+        if (is_array($this->input('options'))) {
+            $this->merge([
+                'options' => array_map(function ($option) {
+                    if (is_array($option) && array_key_exists('option_value', $option) && $option['option_value'] !== null) {
+                        $option['option_value'] = (string) $option['option_value'];
+                    }
+                    return $option;
+                }, $this->input('options')),
+            ]);
         }
     }
 }

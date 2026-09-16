@@ -99,5 +99,18 @@ class StoreQuestionRequest extends FormRequest
                 $this->merge(['depends_on_question_id' => $parent->id]);
             }
         }
+
+        // The frontend sends option_value as a number (it's a numeric score);
+        // the column is a string, so normalize before validation runs.
+        if (is_array($this->input('options'))) {
+            $this->merge([
+                'options' => array_map(function ($option) {
+                    if (is_array($option) && array_key_exists('option_value', $option) && $option['option_value'] !== null) {
+                        $option['option_value'] = (string) $option['option_value'];
+                    }
+                    return $option;
+                }, $this->input('options')),
+            ]);
+        }
     }
 }
