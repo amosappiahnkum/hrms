@@ -28,10 +28,38 @@ class EmployeeCertificationController extends Controller
             ->when($request->status === 'expired', fn($q) => $q->expired())
             ->when($request->status === 'expiring_soon', fn($q) => $q->expiringSoon())
             ->when($request->search, fn($q, $v) => $q->where('title', 'like', "%{$v}%"))
-            ->latest()
+            // Most urgent first: expired/expiring soonest at the top, "does not expire" at the bottom.
+            ->orderByRaw('CASE WHEN does_not_expire = 1 OR expiry_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('expiry_date')
+            ->latest('id')
             ->paginate($request->integer('per_page', 20));
 
         return EmployeeCertificationResource::collection($query);
+    }
+
+    /** Counts for the status summary strip — respects the same filters as index() except status itself. */
+    public function stats(Request $request): JsonResponse
+    {
+        $base = EmployeeCertification::query()
+            ->when($request->employee_id, fn($q, $v) => $q->whereHas(
+                'employee', fn($eq) => $eq->where('uuid', $v)
+            ))
+            ->when($request->provider_id, fn($q, $v) => $q->where('certification_provider_id', $v))
+            ->when($request->search, fn($q, $v) => $q->where('title', 'like', "%{$v}%"));
+
+        $total        = (clone $base)->count();
+        $expired      = (clone $base)->expired()->count();
+        $expiringSoon = (clone $base)->expiringSoon()->count();
+        $noExpiry     = (clone $base)->where('does_not_expire', true)->count();
+        $valid        = max($total - $expired - $expiringSoon - $noExpiry, 0);
+
+        return ApiResponse::success([
+            'total'         => $total,
+            'expired'       => $expired,
+            'expiring_soon' => $expiringSoon,
+            'valid'         => $valid,
+            'no_expiry'     => $noExpiry,
+        ]);
     }
 
     public function store(Request $request): JsonResponse

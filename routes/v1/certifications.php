@@ -15,6 +15,7 @@ Route::middleware('feature:certifications.enabled')->group(function () {
     // ── HR / Admin management ─────────────────────────────────────────────────
     Route::prefix('certifications')->group(function () {
         Route::get('/', [EmployeeCertificationController::class, 'index']);
+        Route::get('/stats', [EmployeeCertificationController::class, 'stats']);
         Route::post('/', [EmployeeCertificationController::class, 'store']);
         Route::get('/{employeeCertification}', [EmployeeCertificationController::class, 'show']);
         Route::put('/{employeeCertification}', [EmployeeCertificationController::class, 'update']);
