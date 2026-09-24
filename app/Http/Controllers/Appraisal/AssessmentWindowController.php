@@ -44,6 +44,8 @@ class AssessmentWindowController extends Controller
             'description'     => ['nullable', 'string'],
             'start_date'      => ['nullable', 'date'],
             'end_date'        => ['nullable', 'date', 'after_or_equal:start_date'],
+            'period_start'    => ['nullable', 'date'],
+            'period_end'      => ['nullable', 'date', 'after_or_equal:period_start'],
         ]);
 
         $assessment = Assessment::where('uuid', $request->assessment_uuid)->firstOrFail();
@@ -54,6 +56,8 @@ class AssessmentWindowController extends Controller
             'description'   => $request->description,
             'start_date'    => $request->start_date,
             'end_date'      => $request->end_date,
+            'period_start'  => $request->period_start,
+            'period_end'    => $request->period_end,
             'status'        => 'draft',
         ]);
 
@@ -78,9 +82,11 @@ class AssessmentWindowController extends Controller
             'description' => ['nullable', 'string'],
             'start_date' => ['nullable', 'date'],
             'end_date'   => ['nullable', 'date', 'after_or_equal:start_date'],
+            'period_start' => ['nullable', 'date'],
+            'period_end'   => ['nullable', 'date', 'after_or_equal:period_start'],
         ]);
 
-        $assessmentWindow->update($request->only(['title', 'description', 'start_date', 'end_date']));
+        $assessmentWindow->update($request->only(['title', 'description', 'start_date', 'end_date', 'period_start', 'period_end']));
 
         activity('appraisals')->performedOn($assessmentWindow)->log("Updated assessment window: {$assessmentWindow->title}");
 
@@ -138,7 +144,7 @@ class AssessmentWindowController extends Controller
     public function attempts(Request $request, AssessmentWindow $assessmentWindow): AnonymousResourceCollection
     {
         $attempts = $assessmentWindow->attempts()
-            ->with(['user', 'responses.question.questionCategory', 'events', 'kpis', 'supervisor', 'window.questionUsages'])
+            ->with(['user', 'responses.question.questionCategory', 'events', 'kpis', 'nextKpis', 'supervisor', 'window.questionUsages'])
             ->withCount('responses')
             ->paginate($request->input('per_page', 20));
 

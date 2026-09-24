@@ -17,6 +17,7 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
         Route::post('/{assessmentWindow}/start', [AssessmentAttemptController::class, 'startOrResume']);
         Route::get('/{assessmentWindow}/review', [AssessmentAttemptController::class, 'myAttemptReview']);
         Route::post('/attempts/{attempt}/responses', [AssessmentAttemptController::class, 'saveResponses']);
+        Route::post('/attempts/{attempt}/trainings', [AssessmentAttemptController::class, 'syncTrainings']);
         Route::post('/attempts/{attempt}/submit', [AssessmentAttemptController::class, 'submit']);
         Route::post('/attempts/{attempt}/acknowledge', [AssessmentAttemptController::class, 'employeeAcknowledge']);
         Route::post('/attempts/{attempt}/disagree', [AssessmentAttemptController::class, 'employeeDisagree']);

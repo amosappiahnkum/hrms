@@ -6,12 +6,14 @@ use App\Exports\AppraisalExport;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AppraisalKpiResource;
+use App\Http\Resources\AppraisalTrainingResource;
 use App\Http\Resources\AssessmentAttemptResource;
 use App\Http\Resources\AssessmentWindowResource;
 use App\Models\Appraisal\AssessmentAttempt;
 use App\Models\Appraisal\AssessmentAttemptEvent;
 use App\Models\Appraisal\AssessmentWindow;
 use App\Models\Appraisal\AppraisalKpi;
+use App\Models\Appraisal\AppraisalTraining;
 use App\Models\Appraisal\JobKpi;
 use App\Models\QuestionBank\Question;
 use App\Models\QuestionResponse;
@@ -86,12 +88,26 @@ class AssessmentAttemptController extends Controller
         // Load questions from the window snapshot (not the template — they may have diverged)
         $assessmentWindow->load(['assessment.jobCategories', 'questionUsages.question.options', 'questionUsages.question.dependsOn', 'questionUsages.question.questionCategory']);
 
-        $attempt->load(['responses.question']);
+        $includeTrainings = (bool) $assessmentWindow->assessment->include_training_section;
+        if ($attempt->wasRecentlyCreated) {
+            $attempt->setRelation('window', $assessmentWindow);
+
+            if ($includeTrainings) {
+                $attempt->prefillTrainings();
+            }
+            if ($assessmentWindow->assessment->type === 'appraisal') {
+                $attempt->carryOverNextPeriodTargets();
+            }
+        }
+
+        $attempt->load(['responses.question', 'trainings']);
 
         return ApiResponse::success([
             'attempt'         => AssessmentAttemptResource::make($attempt),
             'window'          => AssessmentWindowResource::make($assessmentWindow),
             'requires_approval' => $assessmentWindow->assessment->type === 'appraisal',
+            'include_training_section' => $includeTrainings,
+            'trainings'       => AppraisalTrainingResource::collection($attempt->trainings),
             'questions'       => $assessmentWindow->questionUsages->map(fn ($usage) => [
                 'uuid'             => $usage->question->uuid,
                 'text'             => $usage->question->text,
@@ -126,10 +142,10 @@ class AssessmentAttemptController extends Controller
     {
         $attempt = AssessmentAttempt::where('assessment_window_id', $assessmentWindow->id)
             ->where('user_id', auth()->id())
-            ->with(['responses.question', 'events.actor', 'kpis'])
+            ->with(['responses.question', 'events.actor', 'kpis', 'nextKpis', 'trainings'])
             ->firstOrFail();
 
-        $assessmentWindow->load(['questionUsages.question']);
+        $assessmentWindow->load(['assessment', 'questionUsages.question']);
 
         // Build an ordered map of question_uuid → question_text using the window snapshot order
         $orderedQuestions = $assessmentWindow->questionUsages
@@ -166,6 +182,10 @@ class AssessmentAttemptController extends Controller
             'supervisor_signed_at' => $attempt->supervisor_signed_at?->toDateTimeString(),
             'responses'            => $responses,
             'kpis'         => AppraisalKpiResource::collection($attempt->kpis),
+            'next_kpis'    => AppraisalKpiResource::collection($attempt->nextKpis),
+            'include_next_period_targets' => (bool) $assessmentWindow->assessment?->include_next_period_targets,
+            'include_training_section' => (bool) $assessmentWindow->assessment?->include_training_section,
+            'trainings'    => AppraisalTrainingResource::collection($attempt->trainings),
             'events'       => $attempt->events->map(fn ($e) => [
                 'uuid'       => $e->uuid,
                 'event_type' => $e->event_type,
@@ -174,6 +194,56 @@ class AssessmentAttemptController extends Controller
                 'created_at' => $e->created_at?->toDateTimeString(),
             ]),
         ]);
+    }
+
+    /**
+     * Employee replaces the Training & Development list while the attempt is editable.
+     * Rows sent with a uuid keep their source link (internal course / certification);
+     * new rows are recorded as manual entries.
+     */
+    public function syncTrainings(Request $request, AssessmentAttempt $attempt): JsonResponse
+    {
+        $this->authorizeAttempt($attempt);
+
+        if (!$attempt->isEditable()) {
+            return response()->json(['message' => 'This attempt can no longer be edited.'], 422);
+        }
+
+        $request->validate([
+            'trainings'              => ['present', 'array', 'max:50'],
+            'trainings.*.uuid'       => ['nullable', 'string'],
+            'trainings.*.subject'    => ['required', 'string', 'max:255'],
+            'trainings.*.type'       => ['required', 'in:' . implode(',', AppraisalTraining::TYPES)],
+            'trainings.*.start_date' => ['nullable', 'date'],
+            'trainings.*.end_date'   => ['nullable', 'date', 'after_or_equal:trainings.*.start_date'],
+        ]);
+
+        DB::transaction(function () use ($request, $attempt) {
+            $existing = $attempt->trainings()->get()->keyBy('uuid');
+            $attempt->trainings()->delete();
+
+            foreach ($request->trainings as $index => $item) {
+                $previous = isset($item['uuid']) ? $existing->get($item['uuid']) : null;
+
+                AppraisalTraining::create([
+                    'uuid'                      => $previous?->uuid,
+                    'assessment_attempt_id'     => $attempt->id,
+                    'subject'                   => $item['subject'],
+                    'type'                      => $item['type'],
+                    'start_date'                => $item['start_date'] ?? null,
+                    'end_date'                  => $item['end_date'] ?? null,
+                    'source'                    => $previous?->source ?? AppraisalTraining::SOURCE_MANUAL,
+                    'course_enrollment_id'      => $previous?->course_enrollment_id,
+                    'employee_certification_id' => $previous?->employee_certification_id,
+                    'order'                     => $index,
+                ]);
+            }
+        });
+
+        return ApiResponse::success(
+            AppraisalTrainingResource::collection($attempt->trainings()->get()),
+            'Training records saved.'
+        );
     }
 
     /**
@@ -361,7 +431,7 @@ class AssessmentAttemptController extends Controller
                     });
                 });
             })
-            ->with(['user.employee.department', 'user.employee.photo', 'user.employee.rank', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
+            ->with(['user.employee.department', 'user.employee.photo', 'user.employee.rank', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis', 'nextKpis', 'trainings'])
             ->latest('submitted_at');
 
         if ($search = trim((string) $request->input('search'))) {
@@ -398,6 +468,8 @@ class AssessmentAttemptController extends Controller
      */
     public function supervisorOverrideResponses(Request $request, AssessmentAttempt $attempt): JsonResponse
     {
+        $this->authorizeSupervisor($attempt);
+
         if ($attempt->status !== AssessmentAttempt::STATUS_PENDING_SUPERVISOR) {
             return response()->json(['message' => 'This attempt is not pending supervisor review.'], 422);
         }
@@ -474,6 +546,8 @@ class AssessmentAttemptController extends Controller
      */
     public function supervisorConfirm(Request $request, AssessmentAttempt $attempt): JsonResponse
     {
+        $this->authorizeSupervisor($attempt);
+
         $request->validate([
             'supervisor_comment' => ['nullable', 'string', 'max:2000'],
         ]);
@@ -516,6 +590,8 @@ class AssessmentAttemptController extends Controller
      */
     public function supervisorReturn(Request $request, AssessmentAttempt $attempt): JsonResponse
     {
+        $this->authorizeSupervisor($attempt);
+
         $request->validate([
             'supervisor_comment' => ['required', 'string', 'max:2000'],
         ]);
@@ -731,7 +807,7 @@ class AssessmentAttemptController extends Controller
             ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
             ->whereDoesntHave('user.roles', fn ($q) => $q->where('name', 'hr'))
-            ->with(['user', 'supervisor', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
+            ->with(['user', 'supervisor', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis', 'nextKpis', 'trainings'])
             ->latest('supervisor_confirmed_at');
 
         if ($search = trim((string) $request->input('search'))) {
@@ -837,6 +913,8 @@ class AssessmentAttemptController extends Controller
             'responses.question.questionCategory',
             'events.actor',
             'kpis',
+            'nextKpis',
+            'trainings',
         ]);
 
         // Build ordered responses using the window question snapshot
@@ -884,6 +962,8 @@ class AssessmentAttemptController extends Controller
             'attempt'      => $attempt,
             'responses'    => $responses,
             'kpis'         => $attempt->kpis,
+            'nextKpis'     => $attempt->nextKpis,
+            'trainings'    => $attempt->trainings,
             'events'       => $attempt->events,
             'company'      => $settings,
             'logoBase64'   => $logoBase64,
@@ -929,6 +1009,8 @@ class AssessmentAttemptController extends Controller
             'responses.question.questionCategory',
             'events.actor',
             'kpis',
+            'nextKpis',
+            'trainings',
         ]);
 
         $orderedQuestions = $attempt->window->questionUsages->sortBy('order')->values();
@@ -968,6 +1050,8 @@ class AssessmentAttemptController extends Controller
             'attempt'     => $attempt,
             'responses'   => $responses,
             'kpis'        => $attempt->kpis,
+            'nextKpis'    => $attempt->nextKpis,
+            'trainings'   => $attempt->trainings,
             'events'      => $attempt->events,
             'company'     => $settings,
             'logoBase64'  => $logoBase64,
@@ -1030,6 +1114,8 @@ class AssessmentAttemptController extends Controller
      */
     public function departmentKpis(AssessmentAttempt $attempt): JsonResponse
     {
+        $this->authorizeSupervisor($attempt);
+
         $attempt->load('user.employee');
         $departmentId = $attempt->user?->employee?->department_id;
 
@@ -1051,16 +1137,22 @@ class AssessmentAttemptController extends Controller
      */
     public function syncKpis(Request $request, AssessmentAttempt $attempt): JsonResponse
     {
+        $this->authorizeSupervisor($attempt);
+
         if ($attempt->status !== AssessmentAttempt::STATUS_PENDING_SUPERVISOR) {
             return response()->json(['message' => 'KPIs can only be edited while the appraisal is pending supervisor review.'], 422);
         }
 
         $request->validate([
+            'period'             => ['nullable', 'in:' . AppraisalKpi::PERIOD_CURRENT . ',' . AppraisalKpi::PERIOD_NEXT],
             'kpis'               => ['present', 'array'],
             'kpis.*.description' => ['required', 'string', 'max:1000'],
             'kpis.*.target'      => ['required', 'numeric', 'min:0'],
             'kpis.*.actual'      => ['nullable', 'numeric', 'min:0'],
         ]);
+
+        $period   = $request->input('period', AppraisalKpi::PERIOD_CURRENT);
+        $relation = $period === AppraisalKpi::PERIOD_NEXT ? 'nextKpis' : 'kpis';
 
         $descriptions = array_map(fn ($k) => strtolower(trim($k['description'])), $request->kpis);
         if (count($descriptions) !== count(array_unique($descriptions))) {
@@ -1070,15 +1162,17 @@ class AssessmentAttemptController extends Controller
         $attempt->load('user.employee');
         $departmentId = $attempt->user?->employee?->department_id;
 
-        DB::transaction(function () use ($request, $attempt, $departmentId) {
-            $attempt->kpis()->delete();
+        DB::transaction(function () use ($request, $attempt, $departmentId, $period, $relation) {
+            $attempt->{$relation}()->delete();
 
             foreach ($request->kpis as $index => $item) {
                 AppraisalKpi::create([
                     'assessment_attempt_id' => $attempt->id,
+                    'period'                => $period,
                     'description'           => $item['description'],
                     'target'                => $item['target'],
-                    'actual'                => $item['actual'] ?? null,
+                    // Next-period targets have no actual yet
+                    'actual'                => $period === AppraisalKpi::PERIOD_NEXT ? null : ($item['actual'] ?? null),
                     'order'                 => $index,
                 ]);
 
@@ -1089,10 +1183,10 @@ class AssessmentAttemptController extends Controller
             }
         });
 
-        $attempt->load('kpis');
+        $attempt->load($relation);
 
         return ApiResponse::success(
-            AppraisalKpiResource::collection($attempt->kpis),
+            AppraisalKpiResource::collection($attempt->{$relation}),
             'KPIs saved.'
         );
     }
@@ -1113,7 +1207,7 @@ class AssessmentAttemptController extends Controller
             ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
             ->whereHas('user.roles', fn ($q) => $q->where('name', 'hr'))
-            ->with(['user', 'supervisor', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis'])
+            ->with(['user', 'supervisor', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis', 'nextKpis', 'trainings'])
             ->latest('supervisor_confirmed_at');
 
         if ($search = trim((string) $request->input('search'))) {
@@ -1278,13 +1372,42 @@ class AssessmentAttemptController extends Controller
         }
     }
 
+    /**
+     * The user who reviews this appraisal — mirrors supervisorPending():
+     * staff are reviewed by their department's HOD; an HOD is reviewed by the HOD of
+     * the parent department. A top-level HOD (no parent) skips review and counts as
+     * their own supervisor for the signature step.
+     */
     private function findSupervisorUser(AssessmentAttempt $attempt): ?User
     {
-        $attempt->loadMissing('user.employee.department');
-        $hodEmployeeId = $attempt->user?->employee?->department?->hod;
+        $attempt->loadMissing('user.employee.department.parent');
+        $employee   = $attempt->user?->employee;
+        $department = $employee?->department;
+        if (!$department) return null;
+
+        $isHod = (int) $department->hod === (int) $employee->id;
+        $hodEmployeeId = ($isHod && $department->parent)
+            ? $department->parent->hod
+            : $department->hod;
+
         if (!$hodEmployeeId) return null;
 
         return User::whereHas('employee', fn ($q) => $q->where('id', $hodEmployeeId))->first();
+    }
+
+    /**
+     * Supervisor-stage actions: the appraisal's supervisor, or HR / super-admin.
+     */
+    private function authorizeSupervisor(AssessmentAttempt $attempt): void
+    {
+        if (auth()->user()->hasRole(['hr', 'super-admin'])) {
+            return;
+        }
+
+        $supervisor = $this->findSupervisorUser($attempt);
+        if (!$supervisor || $supervisor->id !== auth()->id()) {
+            abort(403, 'You are not the supervisor for this appraisal.');
+        }
     }
 
     private function validateRequiredQuestionsAnswered(AssessmentAttempt $attempt): void

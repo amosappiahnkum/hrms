@@ -21,6 +21,11 @@ class QuestionResource extends JsonResource
 
             'course_uuid' => $this->whenLoaded('course', fn () => $this->course?->uuid),
 
+            'course' => $this->whenLoaded('course', fn () => $this->course ? [
+                'uuid'  => $this->course->uuid,
+                'title' => $this->course->title,
+            ] : null),
+
             'type' => $this->type,
 
             'text' => $this->text,

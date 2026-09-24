@@ -15,6 +15,8 @@ class AppraisalTemplateResource extends JsonResource
             'type'        => $this->type,
             'description' => $this->description,
             'is_active'   => $this->is_active,
+            'include_training_section' => (bool) $this->include_training_section,
+            'include_next_period_targets' => (bool) $this->include_next_period_targets,
             'job_categories' => $this->whenLoaded('jobCategories', fn () =>
                 $this->jobCategories->map(fn ($c) => ['uuid' => $c->uuid, 'name' => $c->name])->values()
             ),

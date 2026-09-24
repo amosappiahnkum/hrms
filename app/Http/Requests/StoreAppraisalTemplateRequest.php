@@ -20,6 +20,8 @@ class StoreAppraisalTemplateRequest extends FormRequest
             'job_category_ids'    => ['nullable', 'array'],
             'job_category_ids.*'  => ['exists:job_categories,id'],
             'is_active'           => ['nullable', 'boolean'],
+            'include_training_section' => ['nullable', 'boolean'],
+            'include_next_period_targets' => ['nullable', 'boolean'],
         ];
     }
 }

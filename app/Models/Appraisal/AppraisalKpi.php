@@ -10,10 +10,14 @@ class AppraisalKpi extends ApplicationModel
 {
     use HasUuid;
 
+    const string PERIOD_CURRENT = 'current';
+    const string PERIOD_NEXT    = 'next';
+
     protected $table = 'appraisal_kpis';
 
     protected $fillable = [
         'assessment_attempt_id',
+        'period',
         'description',
         'target',
         'actual',

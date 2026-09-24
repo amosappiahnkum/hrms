@@ -19,6 +19,7 @@ class QuestionCategoryController extends Controller
     {
         $categories = QuestionCategory::query()
             ->with(['parent', 'subCategories'])
+            ->when($request->search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
             ->latest()
             ->paginate();
 

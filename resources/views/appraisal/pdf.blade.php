@@ -503,6 +503,78 @@
     </table>
     @endif
 
+    {{-- ── Next-period targets ───────────────────────────────────── --}}
+    @if($attempt->window?->assessment?->include_next_period_targets)
+    <div class="section-title">Job Targets for the Next Appraisal Period</div>
+    <table class="kpi-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Task / Responsibility</th>
+                <th style="text-align:right;">Target</th>
+            </tr>
+        </thead>
+        <tbody>
+        @forelse($nextKpis as $i => $kpi)
+            <tr>
+                <td>{{ $i + 1 }}</td>
+                <td>{{ $kpi->description }}</td>
+                <td style="text-align:right;">{{ number_format((float)$kpi->target, 2) }}</td>
+            </tr>
+        @empty
+            <tr>
+                <td colspan="3" style="text-align:center; color:#9ca3af;">None set</td>
+            </tr>
+        @endforelse
+        </tbody>
+    </table>
+    @endif
+
+    {{-- ── Training & Development ─────────────────────────────────── --}}
+    @if($attempt->window?->assessment?->include_training_section)
+    @php
+        [$periodFrom, $periodTo] = $attempt->window->appraisalPeriod();
+    @endphp
+    <div class="section-title">Training and Development</div>
+    <p style="font-size:9px; color:#6b7280; margin:0 0 6px;">
+        Seminars, workshops and courses attended during the appraisal period
+        ({{ $periodFrom->format('d M Y') }} – {{ $periodTo->format('d M Y') }})
+    </p>
+    <table class="kpi-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Subject Area of Workshop / Course</th>
+                <th>Type</th>
+                <th>Duration / Dates</th>
+            </tr>
+        </thead>
+        <tbody>
+        @forelse($trainings as $i => $training)
+            @php
+                $from = $training->start_date?->format('d M Y');
+                $to   = $training->end_date?->format('d M Y');
+                $dates = match (true) {
+                    $from && $to && $from !== $to => "{$from} – {$to}",
+                    (bool) ($from ?? $to)         => $from ?? $to,
+                    default                       => '—',
+                };
+            @endphp
+            <tr>
+                <td>{{ $i + 1 }}</td>
+                <td>{{ $training->subject }}</td>
+                <td>{{ ucfirst($training->type) }}</td>
+                <td>{{ $dates }}</td>
+            </tr>
+        @empty
+            <tr>
+                <td colspan="4" style="text-align:center; color:#9ca3af;">None recorded</td>
+            </tr>
+        @endforelse
+        </tbody>
+    </table>
+    @endif
+
     {{-- ── Timeline ───────────────────────────────────────────────── --}}
     @if($events->isNotEmpty())
     <div class="section-title">Activity Timeline</div>

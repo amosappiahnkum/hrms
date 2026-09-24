@@ -14,6 +14,7 @@ class AppraisalKpiResource extends JsonResource
 
         return [
             'uuid'             => $this->uuid,
+            'period'           => $this->period,
             'description'      => $this->description,
             'target'           => $target,
             'actual'           => $actual,

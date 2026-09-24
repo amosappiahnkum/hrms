@@ -48,6 +48,8 @@ class AppraisalTemplateController extends Controller
             'type'        => $request->type,
             'description' => $request->description,
             'is_active'   => $request->input('is_active', true),
+            'include_training_section' => $request->boolean('include_training_section'),
+            'include_next_period_targets' => $request->boolean('include_next_period_targets'),
         ]);
 
         $template->jobCategories()->sync($request->input('job_category_ids', []));
@@ -92,6 +94,7 @@ class AppraisalTemplateController extends Controller
         return ApiResponse::success([
             'name'      => $assessment->title,
             'type'      => $assessment->type,
+            'include_training_section' => (bool) $assessment->include_training_section,
             'questions' => $questions,
         ]);
     }
@@ -103,6 +106,8 @@ class AppraisalTemplateController extends Controller
             'type'        => $request->type,
             'description' => $request->description,
             'is_active'   => $request->input('is_active', $assessment->is_active),
+            'include_training_section' => $request->boolean('include_training_section', $assessment->include_training_section),
+            'include_next_period_targets' => $request->boolean('include_next_period_targets', $assessment->include_next_period_targets),
         ]);
 
         $assessment->jobCategories()->sync($request->input('job_category_ids', []));

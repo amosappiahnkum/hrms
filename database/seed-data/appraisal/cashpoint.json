@@ -1,0 +1,148 @@
+{
+    "organization": "cashpoint",
+    "source": [
+        "public/NON_MANAGERIAL_PERFORMANCE_APPRAISAL_FORM.pdf",
+        "public/PERFORMANCE_APPRAISAL_FORM_MANAGERIAL_STAFF.pdf"
+    ],
+    "rating_scale": [
+        { "option_text": "Poor", "option_value": "1", "order": 1 },
+        { "option_text": "Average", "option_value": "2", "order": 2 },
+        { "option_text": "Good", "option_value": "3", "order": 3 },
+        { "option_text": "Very Good", "option_value": "4", "order": 4 },
+        { "option_text": "Excellent", "option_value": "5", "order": 5 }
+    ],
+    "templates": [
+        {
+            "name": "Non-Managerial Performance Appraisal",
+            "description": "Annual performance appraisal for non-managerial staff.",
+            "job_categories": ["Officers", "Junior Officers"],
+            "include_training_section": true,
+            "category": {
+                "name": "Non-Managerial Performance",
+                "description": "Appraisal criteria for non-managerial staff"
+            },
+            "sections": [
+                {
+                    "name": "Job Knowledge & Quality of Work",
+                    "questions": [
+                        { "type": "rating", "text": "Demonstrates a thorough understanding of all aspects of the job and excellent technical competence." },
+                        { "type": "rating", "text": "Maintains a high work load, is able to keep pace with the work flow for the job and meet deadlines." },
+                        { "type": "rating", "text": "Follows appropriate procedure in executing work and executes work accurately, thoroughly and without errors." },
+                        { "type": "rating", "text": "Has met expected targets for the appraisal period." }
+                    ]
+                },
+                {
+                    "name": "Work Ethics & Attitude",
+                    "questions": [
+                        { "type": "rating", "text": "Attendance to work (Punctuality)." },
+                        { "type": "rating", "text": "Is enthusiastic about work and consistently looks for new opportunities and responsibilities." },
+                        { "type": "rating", "text": "Generates ideas and uses available resources efficiently (time, company resources, information, people etc.)." },
+                        { "type": "rating", "text": "Is able to complete tasks assigned with minimum supervision/direction." },
+                        { "type": "rating", "text": "Demonstrates willingness and ability to learn new things." }
+                    ]
+                },
+                {
+                    "name": "Initiative & Commitment",
+                    "questions": [
+                        { "type": "rating", "text": "Demonstrates thorough understanding of all aspects of the position and completes/finishes tasks, not giving up." },
+                        { "type": "rating", "text": "Maintains regular attendance at work and follows through on commitments." },
+                        { "type": "rating", "text": "Is conscientious and works to very high standards." },
+                        { "type": "rating", "text": "Demonstrates ability to adapt to changes in tasks and performance expectations." }
+                    ]
+                },
+                {
+                    "name": "Interpersonal Relations",
+                    "questions": [
+                        { "type": "rating", "text": "Builds excellent informal working relationships and cooperates with others – is a team player." },
+                        { "type": "rating", "text": "Readily accepts supervision and welcomes suggestions and constructive criticism." },
+                        { "type": "rating", "text": "Demonstrates courtesy and respect for clients, work colleagues and superiors." },
+                        { "type": "rating", "text": "Works well with others and demonstrates willingness to support and solicit the help of others to achieve company goals." }
+                    ]
+                },
+                {
+                    "name": "Accountability",
+                    "questions": [
+                        { "type": "rating", "text": "Provides colleagues with required information in a timely manner using the approved channels." },
+                        { "type": "rating", "text": "Is able to communicate effectively both orally and in writing." },
+                        { "type": "rating", "text": "Takes responsibility for all work activities and personal actions." },
+                        { "type": "rating", "text": "Maintains confidentiality with sensitive information." }
+                    ]
+                },
+                {
+                    "name": "Summary of Performance",
+                    "questions": [
+                        { "type": "open_text", "is_required": false, "text": "Significant Strengths / Accomplishments" },
+                        { "type": "open_text", "is_required": false, "text": "Areas for Improvement" },
+                        { "type": "open_text", "is_required": false, "text": "Recommended Training & Development" }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Managerial Performance Appraisal",
+            "description": "Annual performance appraisal for managerial staff.",
+            "job_categories": ["Senior Management"],
+            "include_training_section": true,
+            "include_next_period_targets": true,
+            "category": {
+                "name": "Managerial Performance",
+                "description": "Appraisal criteria for managerial staff"
+            },
+            "sections": [
+                {
+                    "name": "Leadership & Problem Solving",
+                    "questions": [
+                        { "type": "rating", "text": "Is able to promptly make sound and effective decisions based on relevant information." },
+                        { "type": "rating", "text": "Possesses exceptional analytical skills, anticipates and plans for potential problems and is able to generate creative approaches to addressing them." },
+                        { "type": "rating", "text": "Takes the lead, through actions and words, and influences people to perform at their best." },
+                        { "type": "rating", "text": "Follows through on commitments and quickly adapts to changes in tasks and performance expectations." }
+                    ]
+                },
+                {
+                    "name": "Job Knowledge & Quality of Work (Managerial)",
+                    "questions": [
+                        { "type": "rating", "text": "Demonstrates a thorough understanding of all aspects of the job and excellent technical competence." },
+                        { "type": "rating", "text": "Performs to agreed-upon work standards and achieves expected results." },
+                        { "type": "rating", "text": "Maintains a high work load and demonstrates the ability to organize work efficiently, meet deadlines and complete tasks assigned." },
+                        { "type": "rating", "text": "Very meticulous, accurate and thorough in executing tasks." }
+                    ]
+                },
+                {
+                    "name": "Managing Staff",
+                    "questions": [
+                        { "type": "rating", "text": "Sets clear goals and expectations for staff and monitors progress against goals." },
+                        { "type": "rating", "text": "Gives regular performance feedback to staff and provides on-the-job training and development." },
+                        { "type": "rating", "text": "Manages staff effectively by facilitating the participation and contribution of others and promoting team work." },
+                        { "type": "rating", "text": "Ensures constructive conflict resolution and has excellent negotiation skills." }
+                    ]
+                },
+                {
+                    "name": "Accountability & Resource Management",
+                    "questions": [
+                        { "type": "rating", "text": "Demonstrates ability to prioritize and effectively manage time and available resources." },
+                        { "type": "rating", "text": "Provides relevant information in a timely manner and maintains a high level of confidentiality with sensitive information." },
+                        { "type": "rating", "text": "Demonstrates responsible stewardship of the company's resources and consistently works to minimize the company's exposure to risks." },
+                        { "type": "rating", "text": "Takes responsibility (where appropriate) for work related and personal actions which affect delivery of results." }
+                    ]
+                },
+                {
+                    "name": "Interpersonal & Communication Skills",
+                    "questions": [
+                        { "type": "rating", "text": "Respects diverse viewpoints and demonstrates tact and courtesy towards clients, colleagues and subordinates." },
+                        { "type": "rating", "text": "Demonstrates emotional maturity and makes the effort to maintain effective work relations with others." },
+                        { "type": "rating", "text": "Consistently demonstrates passion, enthusiasm and excitement about work and people." },
+                        { "type": "rating", "text": "Demonstrates willingness to support others in their work and provide them with the needed cooperation to achieve company goals." }
+                    ]
+                },
+                {
+                    "name": "Summary of Performance (Managerial)",
+                    "questions": [
+                        { "type": "open_text", "is_required": false, "text": "Significant Strengths / Accomplishments" },
+                        { "type": "open_text", "is_required": false, "text": "Areas for Improvement" },
+                        { "type": "open_text", "is_required": false, "text": "Recommended Training & Development" }
+                    ]
+                }
+            ]
+        }
+    ]
+}

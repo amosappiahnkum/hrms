@@ -70,6 +70,12 @@ class AssessmentAttemptResource extends JsonResource
             'kpis'        => $this->whenLoaded('kpis', fn () =>
                 AppraisalKpiResource::collection($this->kpis)
             ),
+            'next_kpis'   => $this->whenLoaded('nextKpis', fn () =>
+                AppraisalKpiResource::collection($this->nextKpis)
+            ),
+            'trainings'   => $this->whenLoaded('trainings', fn () =>
+                AppraisalTrainingResource::collection($this->trainings)
+            ),
             'kpi_summary' => $this->whenLoaded('responses', fn () =>
                 $this->computeKpiSummary()
             ),

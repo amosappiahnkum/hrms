@@ -99,6 +99,8 @@ Route::middleware('feature:training.enabled')->group(function () {
     });
 
     Route::prefix('training/questions')->group(function () {
+        Route::get('/', [TrainingQuestionBankController::class, 'globalIndex']);
+        Route::post('/', [TrainingQuestionBankController::class, 'globalStore']);
         Route::put('/{question}', [TrainingQuestionBankController::class, 'update']);
         Route::delete('/{question}', [TrainingQuestionBankController::class, 'destroy']);
     });

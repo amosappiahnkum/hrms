@@ -24,11 +24,15 @@ class Assessment extends ApplicationModel
         'assignable_type',
         'assignable_id',
         'is_active',
+        'include_training_section',
+        'include_next_period_targets',
         'user_id',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'include_training_section' => 'boolean',
+        'include_next_period_targets' => 'boolean',
     ];
 
     public function assignable(): MorphTo

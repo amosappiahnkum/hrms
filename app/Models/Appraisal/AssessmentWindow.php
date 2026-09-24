@@ -5,6 +5,7 @@ namespace App\Models\Appraisal;
 use App\Models\ApplicationModel;
 use App\Models\QuestionBank\QuestionUsage;
 use App\Traits\HasUuid;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -18,6 +19,8 @@ class AssessmentWindow extends ApplicationModel
         'description',
         'start_date',
         'end_date',
+        'period_start',
+        'period_end',
         'status',
         'user_id',
     ];
@@ -25,6 +28,8 @@ class AssessmentWindow extends ApplicationModel
     protected $casts = [
         'start_date' => 'datetime',
         'end_date'   => 'datetime',
+        'period_start' => 'date',
+        'period_end'   => 'date',
     ];
 
     public function assessment(): BelongsTo
@@ -80,6 +85,22 @@ class AssessmentWindow extends ApplicationModel
                 'user_id'              => auth()->id() ?? $this->user_id,
             ]);
         }
+    }
+
+    /**
+     * The appraised period as [start, end] dates. Falls back to the 12 months
+     * before the window opens (or today) when no period is set.
+     *
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable}
+     */
+    public function appraisalPeriod(): array
+    {
+        $end   = CarbonImmutable::parse($this->period_end ?? $this->start_date ?? now())->endOfDay();
+        $start = $this->period_start
+            ? CarbonImmutable::parse($this->period_start)->startOfDay()
+            : $end->subYear()->addDay()->startOfDay();
+
+        return [$start, $end];
     }
 
     public function isOpen(): bool

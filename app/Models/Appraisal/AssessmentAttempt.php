@@ -3,6 +3,7 @@
 namespace App\Models\Appraisal;
 
 use App\Models\ApplicationModel;
+use App\Models\EmployeeCertification;
 use App\Models\QuestionResponse;
 use App\Models\Training\ChapterProgress;
 use App\Models\Training\CourseEnrollment;
@@ -90,10 +91,113 @@ class AssessmentAttempt extends ApplicationModel
             ->orderBy('created_at');
     }
 
+    /** Targets for the period under review — the only KPIs that are scored. */
     public function kpis(): HasMany
     {
         return $this->hasMany(AppraisalKpi::class, 'assessment_attempt_id')
+            ->where('period', AppraisalKpi::PERIOD_CURRENT)
             ->orderBy('order');
+    }
+
+    /** Targets agreed for the next appraisal period (target only, never scored). */
+    public function nextKpis(): HasMany
+    {
+        return $this->hasMany(AppraisalKpi::class, 'assessment_attempt_id')
+            ->where('period', AppraisalKpi::PERIOD_NEXT)
+            ->orderBy('order');
+    }
+
+    public function trainings(): HasMany
+    {
+        return $this->hasMany(AppraisalTraining::class, 'assessment_attempt_id')
+            ->orderBy('order');
+    }
+
+    /**
+     * Seed the Training & Development section with courses completed and
+     * certifications received during the appraised period. Runs once per attempt.
+     */
+    public function prefillTrainings(): void
+    {
+        $window = $this->window;
+
+        if (!$window?->assessment?->include_training_section || $this->trainings()->exists()) {
+            return;
+        }
+
+        [$from, $to] = $window->appraisalPeriod();
+        $rows = collect();
+
+        CourseEnrollment::with('course')
+            ->where('user_id', $this->user_id)
+            ->where('status', CourseEnrollment::STATUS_COMPLETED)
+            ->whereBetween('completed_at', [$from, $to])
+            ->get()
+            ->each(fn (CourseEnrollment $e) => $rows->push([
+                'subject'              => $e->course?->title ?? 'Course',
+                'type'                 => 'course',
+                'start_date'           => $e->enrolled_at?->toDateString(),
+                'end_date'             => $e->completed_at?->toDateString(),
+                'source'               => AppraisalTraining::SOURCE_INTERNAL,
+                'course_enrollment_id' => $e->id,
+            ]));
+
+        if ($employeeId = $this->user?->employee_id) {
+            EmployeeCertification::where('employee_id', $employeeId)
+                ->whereBetween('date_received', [$from->toDateString(), $to->toDateString()])
+                ->get()
+                ->each(fn (EmployeeCertification $c) => $rows->push([
+                    'subject'                   => $c->title,
+                    'type'                      => 'certification',
+                    'start_date'                => $c->date_received?->toDateString(),
+                    'end_date'                  => $c->date_received?->toDateString(),
+                    'source'                    => AppraisalTraining::SOURCE_CERTIFICATION,
+                    'employee_certification_id' => $c->id,
+                ]));
+        }
+
+        $rows->sortBy('start_date')->values()->each(
+            fn ($row, $i) => $this->trainings()->create([...$row, 'order' => $i])
+        );
+    }
+
+    /**
+     * Start this appraisal's KPIs from the targets set for "the next period" in the
+     * employee's most recent reviewed appraisal. Actuals start empty for the supervisor
+     * to record. Runs only while the attempt has no KPIs of its own.
+     */
+    public function carryOverNextPeriodTargets(): void
+    {
+        if ($this->kpis()->exists()) {
+            return;
+        }
+
+        $previous = self::query()
+            ->where('user_id', $this->user_id)
+            ->where('id', '!=', $this->id)
+            ->whereNotIn('status', [
+                self::STATUS_DRAFT,
+                self::STATUS_RETURNED,
+                self::STATUS_PENDING_SUPERVISOR,
+                self::STATUS_SUBMITTED,
+            ])
+            ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
+            ->whereHas('nextKpis')
+            ->with('nextKpis')
+            ->latest('submitted_at')
+            ->latest('id')
+            ->first();
+
+        foreach ($previous?->nextKpis ?? [] as $kpi) {
+            AppraisalKpi::create([
+                'assessment_attempt_id' => $this->id,
+                'period'                => AppraisalKpi::PERIOD_CURRENT,
+                'description'           => $kpi->description,
+                'target'                => $kpi->target,
+                'actual'                => null,
+                'order'                 => $kpi->order,
+            ]);
+        }
     }
 
     // ── Training quiz relations ───────────────────────────────────────────────

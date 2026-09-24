@@ -16,10 +16,14 @@ class AssessmentWindowResource extends JsonResource
             'status'          => $this->status,
             'start_date'      => $this->start_date?->toDateTimeString(),
             'end_date'        => $this->end_date?->toDateTimeString(),
+            'period_start'    => $this->period_start?->toDateString(),
+            'period_end'      => $this->period_end?->toDateString(),
             'assessment'      => $this->whenLoaded('assessment', fn () => [
                 'uuid'        => $this->assessment->uuid,
                 'name'        => $this->assessment->title,
                 'type'        => $this->assessment->type,
+                'include_training_section' => (bool) $this->assessment->include_training_section,
+                'include_next_period_targets' => (bool) $this->assessment->include_next_period_targets,
                 'job_categories' => $this->assessment->relationLoaded('jobCategories')
                     ? $this->assessment->jobCategories->map(fn ($c) => ['uuid' => $c->uuid, 'name' => $c->name])->values()
                     : [],
