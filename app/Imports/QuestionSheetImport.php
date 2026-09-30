@@ -7,6 +7,7 @@ use App\Models\QuestionBank\Question;
 use App\Models\QuestionBank\QuestionCategory;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -80,7 +81,9 @@ class QuestionSheetImport implements ToCollection, WithHeadingRow, SkipsEmptyRow
                     $this->parent->imported++;
                 });
             } catch (\Throwable $e) {
-                $this->parent->errors[] = "[{$this->type->label()} | Row {$rowNum}]: " . $e->getMessage();
+                // Database/internal errors stay in the log; the import report only says the row failed.
+                Log::warning("Question import failed on row {$rowNum}", ['exception' => $e]);
+                $this->parent->errors[] = "[{$this->type->label()} | Row {$rowNum}]: this row could not be saved. Check its values and try again.";
             }
         }
     }

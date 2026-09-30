@@ -37,7 +37,7 @@ class JobOpeningController extends Controller
             activity('recruitment')->performedOn($jobOpening)->log("Created job opening: {$jobOpening->title}");
             return new JobOpeningResource($jobOpening->load(['position', 'department']));
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -54,7 +54,7 @@ class JobOpeningController extends Controller
             activity('recruitment')->performedOn($jobOpening)->log("Updated job opening: {$jobOpening->title}");
             return new JobOpeningResource($jobOpening->refresh()->load(['position', 'department']));
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -66,7 +66,7 @@ class JobOpeningController extends Controller
             activity('recruitment')->log("Deleted job opening: {$title}");
             return response()->json(['message' => 'Job opening deleted']);
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models\PerformanceAppraisal;
 
+use App\Traits\RecordsActivity;
 use App\Models\QuestionBank\Question;
 use Database\Factories\PerformanceAppraisal\AppraisalFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 class Appraisal extends Model
 {
     /** @use HasFactory<AppraisalFactory> */
-    use HasFactory;
+    use HasFactory, RecordsActivity;
 
     protected $fillable = ['title', 'description', 'status'];
 

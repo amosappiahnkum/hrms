@@ -50,7 +50,7 @@ class CandidatePortalController extends Controller
             DB::commit();
         } catch (Exception $e) {
             DB::rollBack();
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
 
         Auth::guard($this->guard)->login($candidate);
@@ -109,7 +109,7 @@ class CandidatePortalController extends Controller
             $candidate->update($request->validated());
             return ApiResponse::success(new CandidateProfileResource($candidate->refresh()), 'Profile updated');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -176,7 +176,7 @@ class CandidatePortalController extends Controller
 
             return ApiResponse::success(new ApplicationResource($application), 'Application submitted', 201);
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 

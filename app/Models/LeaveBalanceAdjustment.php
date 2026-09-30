@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use App\Models\SelfService\Employee;
 use App\Models\Config\LeaveType;
 use App\Models\User;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LeaveBalanceAdjustment extends Model
 {
+    use RecordsActivity;
+
     protected $fillable = [
         'employee_id',
         'leave_type_id',

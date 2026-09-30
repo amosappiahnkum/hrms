@@ -75,7 +75,7 @@ class DependantController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 Dependant::create($validated);
             } else {
 
@@ -113,7 +113,7 @@ class DependantController extends Controller
 
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $dependant->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($dependant, $changes, Auth::id());
@@ -144,7 +144,7 @@ class DependantController extends Controller
         DB::beginTransaction();
         try {
 
-//            if ($this->isHrAdmin()) {
+//            if ($this->can('edit-employee')) {
 //                $dependant->delete();
 //            } else {
                 app(UpdateApprovalService::class)->delete($dependant, Auth::id());

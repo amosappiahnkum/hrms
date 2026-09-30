@@ -2,6 +2,7 @@
 
 namespace App\Models\Config;
 
+use App\Traits\RecordsActivity;
 use App\Models\JobCategory;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LeaveTypeLevelConfig extends Model
 {
-    use HasUuid;
+    use HasUuid, RecordsActivity;
 
     protected $fillable = [
         'uuid',

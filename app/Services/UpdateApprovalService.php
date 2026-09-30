@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Events\ApprovalApproved;
 use App\Events\ApprovalRejected;
 use App\Events\ApprovalRequested;
+use App\Exceptions\UserFacingException;
 use App\Models\InformationUpdate;
 use Exception;
 use Illuminate\Database\Eloquent\Model;
@@ -54,7 +55,7 @@ class UpdateApprovalService
     {
 
         if ($model->informationUpdates()->where('status', 'pending')->exists()) {
-            throw new Exception('Pending request already exists');
+            throw new UserFacingException('A change request for this record is already pending approval.', 409);
         }
 
         $changes = $this->getDifferences($model, $data);
@@ -88,7 +89,7 @@ class UpdateApprovalService
     {
 
         if ($model->informationUpdates()->where('status', 'pending')->exists()) {
-            throw new Exception('Pending request already exists');
+            throw new UserFacingException('A change request for this record is already pending approval.', 409);
         }
 
         $approval = InformationUpdate::create([
@@ -120,7 +121,7 @@ class UpdateApprovalService
         DB::transaction(function () use ($update, $reviewerId) {
 
             if ($update->status->value !== 'pending') {
-                throw new Exception('Already processed');
+                throw new UserFacingException('This request has already been processed.', 409);
             }
 
             $modelClass = Relation::getMorphedModel($update->information_type)
@@ -162,7 +163,7 @@ class UpdateApprovalService
     public function reject(InformationUpdate $update, int $reviewerId, string $reason): void
     {
         if ($update->status->value !== 'pending') {
-            throw new Exception('Already processed');
+            throw new UserFacingException('This request has already been processed.', 409);
         }
 
         $update->update([

@@ -55,7 +55,7 @@ class CandidateQualificationController extends Controller
                 'created_at'     => $qualification->created_at,
             ], 'Qualification added', 201);
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -102,7 +102,7 @@ class CandidateQualificationController extends Controller
                 'created_at'     => $qualification->created_at,
             ], 'Qualification updated');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -118,7 +118,7 @@ class CandidateQualificationController extends Controller
             $qualification->delete();
             return ApiResponse::success(null, 'Qualification deleted');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

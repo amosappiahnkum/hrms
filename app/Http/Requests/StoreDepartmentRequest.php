@@ -16,7 +16,7 @@ class StoreDepartmentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return Auth::user()->hasAnyRole(['admin', 'super-admin', 'hr']);
+        return (bool) Auth::user()?->can('add-department');
     }
 
     /**

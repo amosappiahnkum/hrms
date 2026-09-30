@@ -10,11 +10,7 @@ class TrackSuccessfulLogin
     {
         $user = $event->user;
 
+        // The sign-in itself is audited by RecordAuthenticationActivity.
         $user->update(['last_login_at' => now()]);
-
-        activity('auth')
-            ->performedOn($user)
-            ->causedBy($user)
-            ->log("{$user->name} logged in");
     }
 }

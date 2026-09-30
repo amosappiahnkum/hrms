@@ -65,7 +65,7 @@ class LeaveManagementController extends Controller
 
     public function getEmployeeLeaveBalances(Request $request): JsonResponse
     {
-        if (!$this->isHrAdmin()) {
+        if (!$this->can('manage-leave-balances')) {
             return response()->json(['message' => 'Insufficient permissions.'], 403);
         }
 
@@ -139,7 +139,7 @@ class LeaveManagementController extends Controller
 
     public function adjustEmployeeBalance(Request $request): JsonResponse
     {
-        if (!$this->isHrAdmin()) {
+        if (!$this->can('manage-leave-balances')) {
             return response()->json(['message' => 'Insufficient permissions.'], 403);
         }
 

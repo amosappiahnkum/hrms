@@ -37,6 +37,13 @@ class ImpersonationController extends Controller
         // Store the super-admin's ID so we can restore later
         $request->session()->put('impersonating_original_id', Auth::id());
 
+        activity('security')
+            ->causedBy(Auth::user())
+            ->performedOn($target)
+            ->event('impersonation_started')
+            ->withProperties(['ip' => $request->ip()])
+            ->log("Started impersonating {$target->email}");
+
         Auth::guard('web')->login($target);
         $request->session()->regenerate();
 
@@ -60,8 +67,17 @@ class ImpersonationController extends Controller
             return response()->json(['message' => 'Original user not found'], 404);
         }
 
+        $impersonated = Auth::user();
+
         Auth::guard('web')->login($original);
         $request->session()->forget('impersonating_original_id');
+
+        activity('security')
+            ->causedBy($original)
+            ->performedOn($impersonated)
+            ->event('impersonation_ended')
+            ->withProperties(['ip' => $request->ip()])
+            ->log('Stopped impersonating ' . ($impersonated?->email ?? 'unknown user'));
         $request->session()->regenerate();
 
         return response()->json([

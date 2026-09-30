@@ -73,7 +73,10 @@ class UserManagementController extends Controller
         $request->validate(['roles' => 'array', 'roles.*' => 'string|exists:roles,name']);
 
         $user = User::withTrashed()->where('uuid', $uuid)->firstOrFail();
+        $before = $user->getRoleNames()->values()->all();
         $user->syncRoles($request->roles);
+
+        $this->recordAccessChange($user, 'roles_changed', 'Changed roles', 'roles', $before, $user->getRoleNames()->values()->all());
 
         return response()->json(new UserManagementResource($user->load('roles')));
     }
@@ -84,7 +87,10 @@ class UserManagementController extends Controller
         $request->validate(['permissions' => 'array', 'permissions.*' => 'string|exists:permissions,name']);
 
         $user = User::withTrashed()->where('uuid', $uuid)->firstOrFail();
+        $before = $user->getDirectPermissions()->pluck('name')->values()->all();
         $user->syncPermissions($request->permissions);
+
+        $this->recordAccessChange($user, 'permissions_changed', 'Changed direct permissions', 'permissions', $before, $user->getDirectPermissions()->pluck('name')->values()->all());
 
         return response()->json(new UserManagementResource($user->load('roles')));
     }
@@ -101,6 +107,9 @@ class UserManagementController extends Controller
 
         $user->delete();
 
+        activity('security')->causedBy(auth()->user())->performedOn($user)->event('account_suspended')
+            ->log("Suspended account {$user->email}");
+
         return response()->json(new UserManagementResource($user->load('roles')));
     }
 
@@ -110,6 +119,9 @@ class UserManagementController extends Controller
 
         $user = User::withTrashed()->where('uuid', $uuid)->firstOrFail();
         $user->restore();
+
+        activity('security')->causedBy(auth()->user())->performedOn($user)->event('account_restored')
+            ->log("Restored account {$user->email}");
 
         return response()->json(new UserManagementResource($user->load('roles')));
     }
@@ -126,5 +138,21 @@ class UserManagementController extends Controller
         $this->authorizeAdmin();
 
         return response()->json(Permission::orderBy('name')->get(['id', 'name']));
+    }
+
+    /** Role/permission syncs go through pivot tables and fire no model events, so record them here. */
+    private function recordAccessChange(User $user, string $event, string $description, string $key, array $before, array $after): void
+    {
+        activity('security')
+            ->causedBy(auth()->user())
+            ->performedOn($user)
+            ->event($event)
+            ->withProperties([
+                'old'     => [$key => $before],
+                'new'     => [$key => $after],
+                'added'   => array_values(array_diff($after, $before)),
+                'removed' => array_values(array_diff($before, $after)),
+            ])
+            ->log("{$description} for {$user->email}");
     }
 }

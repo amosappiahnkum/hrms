@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\StoreDepartmentRequest;
 use App\Http\Requests\UpdateDepartmentRequest;
 use App\Http\Resources\DepartmentResource;
@@ -124,10 +125,7 @@ class DepartmentController extends Controller
 
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -211,10 +209,7 @@ class DepartmentController extends Controller
         } catch (Exception $exception) {
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 

@@ -16,97 +16,101 @@ use App\Http\Controllers\Training\TrainingReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('feature:training.enabled')->group(function () {
-    Route::middleware('feature:training.previous_ranks')
+    Route::middleware(['feature:training.previous_ranks', 'owns.employee'])
         ->apiResource('/previous-ranks', PreviousRankController::class);
 
-    Route::middleware('feature:training.previous_positions')
+    Route::middleware(['feature:training.previous_positions', 'owns.employee'])
         ->apiResource('/previous-positions', PreviousPositionController::class);
 
     // ── Course categories ─────────────────────────────────────────────────────
-    Route::prefix('training/categories')->group(function () {
-        Route::get('/', [CourseCategoryController::class, 'index']);
-        Route::post('/', [CourseCategoryController::class, 'store']);
-        Route::put('/{courseCategory}', [CourseCategoryController::class, 'update']);
-        Route::delete('/{courseCategory}', [CourseCategoryController::class, 'destroy']);
-    });
+    Route::get('training/categories', [CourseCategoryController::class, 'index']);
 
-    // ── Admin / Training Officer: course management ───────────────────────────
-    Route::prefix('training/courses')->group(function () {
-        Route::get('/', [CourseController::class, 'index']);
-        Route::post('/', [CourseController::class, 'store']);
-        Route::get('/{course}', [CourseController::class, 'show']);
-        Route::put('/{course}', [CourseController::class, 'update']);
-        Route::delete('/{course}', [CourseController::class, 'destroy']);
-        Route::post('/{course}/banner', [CourseController::class, 'uploadBanner']);
-        Route::post('/{course}/publish', [CourseController::class, 'publish']);
-        Route::post('/{course}/unpublish', [CourseController::class, 'unpublish']);
-        Route::post('/{course}/assign', [CourseController::class, 'assign']);
-        Route::get('/{course}/enrollments', [CourseController::class, 'enrollments']);
-        Route::get('/{course}/quiz-results/{assessment}', [CourseController::class, 'quizResults']);
+    Route::middleware('permission:manage-training')->group(function () {
+        Route::prefix('training/categories')->group(function () {
+            Route::post('/', [CourseCategoryController::class, 'store']);
+            Route::put('/{courseCategory}', [CourseCategoryController::class, 'update']);
+            Route::delete('/{courseCategory}', [CourseCategoryController::class, 'destroy']);
+        });
 
-        // Admin enrollment management
-        Route::post('/{course}/enrollments', [CourseEnrollmentController::class, 'store']);
+        // ── Admin / Training Officer: course management ───────────────────────────
+        Route::prefix('training/courses')->group(function () {
+            Route::get('/', [CourseController::class, 'index']);
+            Route::post('/', [CourseController::class, 'store']);
+            Route::get('/{course}', [CourseController::class, 'show']);
+            Route::put('/{course}', [CourseController::class, 'update']);
+            Route::delete('/{course}', [CourseController::class, 'destroy']);
+            Route::post('/{course}/banner', [CourseController::class, 'uploadBanner']);
+            Route::post('/{course}/publish', [CourseController::class, 'publish']);
+            Route::post('/{course}/unpublish', [CourseController::class, 'unpublish']);
+            Route::post('/{course}/assign', [CourseController::class, 'assign']);
+            Route::get('/{course}/enrollments', [CourseController::class, 'enrollments']);
+            Route::get('/{course}/quiz-results/{assessment}', [CourseController::class, 'quizResults']);
 
-        // Chapters
-        Route::post('/{course}/chapters', [CourseChapterController::class, 'store']);
-        Route::post('/{course}/chapters/reorder', [CourseChapterController::class, 'reorder']);
-    });
+            // Admin enrollment management
+            Route::post('/{course}/enrollments', [CourseEnrollmentController::class, 'store']);
 
-    Route::prefix('training/chapters')->group(function () {
-        Route::put('/{courseChapter}', [CourseChapterController::class, 'update']);
-        Route::delete('/{courseChapter}', [CourseChapterController::class, 'destroy']);
+            // Chapters
+            Route::post('/{course}/chapters', [CourseChapterController::class, 'store']);
+            Route::post('/{course}/chapters/reorder', [CourseChapterController::class, 'reorder']);
+        });
 
-        // Materials
-        Route::post('/{courseChapter}/materials', [CourseMaterialController::class, 'store']);
-        Route::post('/{courseChapter}/materials/reorder', [CourseMaterialController::class, 'reorder']);
-    });
+        Route::prefix('training/chapters')->group(function () {
+            Route::put('/{courseChapter}', [CourseChapterController::class, 'update']);
+            Route::delete('/{courseChapter}', [CourseChapterController::class, 'destroy']);
 
-    Route::prefix('training/materials')->group(function () {
-        Route::put('/{courseMaterial}', [CourseMaterialController::class, 'update']);
-        Route::delete('/{courseMaterial}', [CourseMaterialController::class, 'destroy']);
-    });
+            // Materials
+            Route::post('/{courseChapter}/materials', [CourseMaterialController::class, 'store']);
+            Route::post('/{courseChapter}/materials/reorder', [CourseMaterialController::class, 'reorder']);
+        });
 
-    // Admin: enrollment management
-    Route::prefix('training/enrollments')->group(function () {
-        Route::get('/', [CourseEnrollmentController::class, 'index']);
-        Route::get('/{courseEnrollment}/quiz-results', [CourseEnrollmentController::class, 'quizResults']);
-        Route::get('/{courseEnrollment}/quiz-results/{assessment}', [CourseEnrollmentController::class, 'attemptResponses']);
-        Route::delete('/{courseEnrollment}', [CourseEnrollmentController::class, 'destroy']);
-    });
+        Route::prefix('training/materials')->group(function () {
+            Route::put('/{courseMaterial}', [CourseMaterialController::class, 'update']);
+            Route::delete('/{courseMaterial}', [CourseMaterialController::class, 'destroy']);
+        });
 
-    // ── Chapter quiz — create + attach in one shot ────────────────────────────
-    Route::post('training/chapters/{courseChapter}/quiz', [CourseQuizController::class, 'createForChapter']);
+        // Admin: enrollment management
+        Route::prefix('training/enrollments')->group(function () {
+            Route::get('/', [CourseEnrollmentController::class, 'index']);
+            Route::get('/{courseEnrollment}/quiz-results', [CourseEnrollmentController::class, 'quizResults']);
+            Route::get('/{courseEnrollment}/quiz-results/{assessment}', [CourseEnrollmentController::class, 'attemptResponses']);
+            Route::delete('/{courseEnrollment}', [CourseEnrollmentController::class, 'destroy']);
+        });
 
-    // ── Course quiz bank (admin) ──────────────────────────────────────────────
-    Route::prefix('training/courses/{course}/quizzes')->group(function () {
-        Route::get('/', [CourseQuizController::class, 'index']);
-        Route::post('/', [CourseQuizController::class, 'store']);
-    });
+        // ── Chapter quiz — create + attach in one shot ────────────────────────────
+        Route::post('training/chapters/{courseChapter}/quiz', [CourseQuizController::class, 'createForChapter']);
 
-    Route::prefix('training/quizzes')->group(function () {
-        Route::get('/{assessment}', [CourseQuizController::class, 'show']);
-        Route::put('/{assessment}', [CourseQuizController::class, 'update']);
-        Route::delete('/{assessment}', [CourseQuizController::class, 'destroy']);
-        Route::post('/{assessment}/questions/sync', [CourseQuizController::class, 'syncQuestions']);
-    });
+        // ── Course quiz bank (admin) ──────────────────────────────────────────────
+        Route::prefix('training/courses/{course}/quizzes')->group(function () {
+            Route::get('/', [CourseQuizController::class, 'index']);
+            Route::post('/', [CourseQuizController::class, 'store']);
+        });
 
-    // ── Course question bank (admin) ──────────────────────────────────────────
-    Route::prefix('training/courses/{course}/questions')->group(function () {
-        Route::get('/template', [TrainingQuestionBankController::class, 'templateDownload']);
-        Route::post('/import', [TrainingQuestionBankController::class, 'import']);
-        Route::get('/', [TrainingQuestionBankController::class, 'index']);
-        Route::post('/', [TrainingQuestionBankController::class, 'store']);
-    });
+        Route::prefix('training/quizzes')->group(function () {
+            Route::get('/{assessment}', [CourseQuizController::class, 'show']);
+            Route::put('/{assessment}', [CourseQuizController::class, 'update']);
+            Route::delete('/{assessment}', [CourseQuizController::class, 'destroy']);
+            Route::post('/{assessment}/questions/sync', [CourseQuizController::class, 'syncQuestions']);
+        });
 
-    Route::prefix('training/questions')->group(function () {
-        Route::get('/', [TrainingQuestionBankController::class, 'globalIndex']);
-        Route::post('/', [TrainingQuestionBankController::class, 'globalStore']);
-        Route::put('/{question}', [TrainingQuestionBankController::class, 'update']);
-        Route::delete('/{question}', [TrainingQuestionBankController::class, 'destroy']);
+        // ── Course question bank (admin) ──────────────────────────────────────────
+        Route::prefix('training/courses/{course}/questions')->group(function () {
+            Route::get('/template', [TrainingQuestionBankController::class, 'templateDownload']);
+            Route::post('/import', [TrainingQuestionBankController::class, 'import']);
+            Route::get('/', [TrainingQuestionBankController::class, 'index']);
+            Route::post('/', [TrainingQuestionBankController::class, 'store']);
+        });
+
+        Route::prefix('training/questions')->group(function () {
+            Route::get('/', [TrainingQuestionBankController::class, 'globalIndex']);
+            Route::post('/', [TrainingQuestionBankController::class, 'globalStore']);
+            Route::put('/{question}', [TrainingQuestionBankController::class, 'update']);
+            Route::delete('/{question}', [TrainingQuestionBankController::class, 'destroy']);
+        });
+
     });
 
     // ── Reports ───────────────────────────────────────────────────────────────
-    Route::prefix('training/reports')->group(function () {
+    Route::prefix('training/reports')->middleware('permission:view-training-reports')->group(function () {
         Route::get('/overview', [TrainingReportController::class, 'overview']);
         Route::get('/courses', [TrainingReportController::class, 'courseStats']);
         Route::get('/recent-enrollments', [TrainingReportController::class, 'recentEnrollments']);

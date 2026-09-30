@@ -88,7 +88,7 @@ class InterviewController extends Controller
 
             return new InterviewResource($interview->load('interviewers'));
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -113,7 +113,7 @@ class InterviewController extends Controller
 
             return new InterviewResource($interview->refresh()->load('interviewers'));
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -124,7 +124,7 @@ class InterviewController extends Controller
             activity('recruitment')->log("Deleted interview #{$interview->id}");
             return response()->json(['message' => 'Interview deleted']);
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

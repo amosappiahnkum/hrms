@@ -20,6 +20,8 @@ class EmployeeCertificationController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
+        abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
+
         $query = EmployeeCertification::with(['provider', 'employee', 'uploader'])
             ->when($request->employee_id, fn($q, $v) => $q->whereHas(
                 'employee', fn($eq) => $eq->where('uuid', $v)
@@ -40,6 +42,8 @@ class EmployeeCertificationController extends Controller
     /** Counts for the status summary strip — respects the same filters as index() except status itself. */
     public function stats(Request $request): JsonResponse
     {
+        abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
+
         $base = EmployeeCertification::query()
             ->when($request->employee_id, fn($q, $v) => $q->whereHas(
                 'employee', fn($eq) => $eq->where('uuid', $v)
@@ -64,7 +68,7 @@ class EmployeeCertificationController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        abort_unless($this->isHrAdmin(), 403, 'Unauthorized.');
+        abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
         $data = $request->validate([
             'employee_uuid'            => ['required', 'string', 'exists:employees,uuid'],
@@ -111,7 +115,7 @@ class EmployeeCertificationController extends Controller
 
     public function show(EmployeeCertification $employeeCertification): JsonResponse
     {
-        abort_unless($this->isHrAdmin(), 403, 'Unauthorized.');
+        abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
         return ApiResponse::success(
             EmployeeCertificationResource::make($employeeCertification->load(['provider', 'employee', 'uploader']))
@@ -120,7 +124,7 @@ class EmployeeCertificationController extends Controller
 
     public function update(Request $request, EmployeeCertification $employeeCertification): JsonResponse
     {
-        abort_unless($this->isHrAdmin(), 403, 'Unauthorized.');
+        abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
         $request->validate([
             'title'                    => ['sometimes', 'string', 'max:255'],
@@ -159,7 +163,7 @@ class EmployeeCertificationController extends Controller
 
     public function destroy(EmployeeCertification $employeeCertification): JsonResponse
     {
-        abort_unless($this->isHrAdmin(), 403, 'Unauthorized.');
+        abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
         $employeeCertification->loadMissing(['provider', 'employee.userAccount']);
 
@@ -178,7 +182,7 @@ class EmployeeCertificationController extends Controller
     /** Returns a short-lived signed URL so HR can download the file directly. */
     public function download(EmployeeCertification $employeeCertification): JsonResponse
     {
-        abort_unless($this->isHrAdmin(), 403, 'Unauthorized.');
+        abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
         $url = Storage::disk('s3')->temporaryUrl(
             $employeeCertification->file_path,

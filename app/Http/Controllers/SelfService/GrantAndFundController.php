@@ -65,7 +65,7 @@ class GrantAndFundController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 GrantAndFund::create($validated);
             } else {
                 app(UpdateApprovalService::class)->create(new GrantAndFund(), $validated, Auth::id());
@@ -84,7 +84,7 @@ class GrantAndFundController extends Controller
         try {
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $grant->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($grant, $changes, Auth::id());
@@ -107,7 +107,7 @@ class GrantAndFundController extends Controller
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $grant->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($grant, Auth::id());

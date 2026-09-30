@@ -55,7 +55,7 @@ class CandidateExperienceController extends Controller
                 'created_at'   => $experience->created_at,
             ], 'Experience added', 201);
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -102,7 +102,7 @@ class CandidateExperienceController extends Controller
                 'created_at'   => $experience->created_at,
             ], 'Experience updated');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -118,7 +118,7 @@ class CandidateExperienceController extends Controller
             $experience->delete();
             return ApiResponse::success(null, 'Experience deleted');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

@@ -6,7 +6,7 @@ use App\Http\Controllers\Recruitment\PublicJobController;
 use App\Http\Controllers\SettingController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('scan/{token}', [AuthController::class, 'qrCodeScan']);
+Route::middleware('throttle:20,1')->get('scan/{token}', [AuthController::class, 'qrCodeScan']);
 
 Route::prefix('v1')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
@@ -16,11 +16,13 @@ Route::prefix('v1')->group(function () {
         require $file;
     }
 
-    Route::prefix('public')->group(function () {
+    Route::prefix('public')->middleware('throttle:30,1')->group(function () {
         Route::get('jobs', [PublicJobController::class, 'index']);
         Route::get('jobs/{jobOpening}', [PublicJobController::class, 'show']);
-        Route::post('candidate/register', [CandidatePortalController::class, 'register']);
-        Route::post('candidate/login', [CandidatePortalController::class, 'login']);
+        Route::middleware('throttle:5,1')->group(function () {
+            Route::post('candidate/register', [CandidatePortalController::class, 'register']);
+            Route::post('candidate/login', [CandidatePortalController::class, 'login']);
+        });
     });
 });
 

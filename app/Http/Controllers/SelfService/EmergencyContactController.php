@@ -74,7 +74,7 @@ class EmergencyContactController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 EmergencyContact::create($validated);
             } else {
                 app(UpdateApprovalService::class)->create(
@@ -111,7 +111,7 @@ class EmergencyContactController extends Controller
 
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $emergencyContact->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($emergencyContact, $changes, Auth::id());
@@ -142,7 +142,7 @@ class EmergencyContactController extends Controller
         DB::beginTransaction();
         try {
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $emergencyContact->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($emergencyContact, Auth::id());

@@ -73,7 +73,7 @@ class ExperienceController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 Experience::create($validated);
             } else {
 
@@ -122,7 +122,7 @@ class ExperienceController extends Controller
 
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $experience->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($experience, $changes, Auth::id());
@@ -149,7 +149,7 @@ class ExperienceController extends Controller
         DB::beginTransaction();
         try {
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $experience->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($experience, Auth::id());

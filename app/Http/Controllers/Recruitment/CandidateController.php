@@ -35,7 +35,7 @@ class CandidateController extends Controller
             $candidate = Candidate::create($request->validated());
             return new CandidateResource($candidate);
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -138,7 +138,7 @@ class CandidateController extends Controller
             $candidate->update($request->validated());
             return new CandidateResource($candidate->refresh());
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -148,7 +148,7 @@ class CandidateController extends Controller
             $candidate->delete();
             return response()->json(['message' => 'Candidate deleted']);
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

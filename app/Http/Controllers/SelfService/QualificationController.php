@@ -79,7 +79,7 @@ class QualificationController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 Education::create($validated);
             } else {
 
@@ -117,7 +117,7 @@ class QualificationController extends Controller
 
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $qualification->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($qualification, $changes, Auth::id());
@@ -149,7 +149,7 @@ class QualificationController extends Controller
         DB::beginTransaction();
         try {
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $qualification->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($qualification, Auth::id());

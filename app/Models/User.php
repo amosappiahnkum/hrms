@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use App\Models\SelfService\Employee;
 use App\Models\SelfService\GrantAndFund;
 use App\Models\Training\CourseEnrollment;
@@ -18,7 +19,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, HasApiTokens, Notifiable, SoftDeletes, HasRoles, HasActivityLogs, HasUuid;
+    use HasFactory, HasApiTokens, Notifiable, SoftDeletes, HasRoles, HasActivityLogs, HasUuid, RecordsActivity;
 
     /**
      * The attributes that are mass assignable.

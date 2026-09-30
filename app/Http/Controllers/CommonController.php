@@ -60,7 +60,22 @@ class CommonController extends Controller
 
             $currentPermissions = $userAccount->getPermissionsViaRoles()->pluck('name');
 
+            $before = $userAccount->getDirectPermissions()->pluck('name')->values()->all();
             $userAccount->syncPermissions($selectedPermissions->diff($currentPermissions));
+            $after = $userAccount->getDirectPermissions()->pluck('name')->values()->all();
+
+            activity('security')
+                ->causedBy(Auth::user())
+                ->performedOn($userAccount)
+                ->event('permissions_changed')
+                ->withProperties([
+                    'old'     => ['permissions' => $before],
+                    'new'     => ['permissions' => $after],
+                    'added'   => array_values(array_diff($after, $before)),
+                    'removed' => array_values(array_diff($before, $after)),
+                ])
+                ->log("Changed direct permissions for {$userAccount->email}");
+
             DB::commit();
 
             return response()->json([

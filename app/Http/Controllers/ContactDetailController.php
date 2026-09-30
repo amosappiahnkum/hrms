@@ -60,7 +60,7 @@ class ContactDetailController extends Controller
 
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $contact->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($contact, $changes, Auth::id());

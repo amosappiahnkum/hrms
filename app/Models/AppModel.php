@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
@@ -9,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 
 class AppModel extends Model
 {
-    use HasUuid;
+    use HasUuid, RecordsActivity;
 
     protected $fillable = [
         'photo',

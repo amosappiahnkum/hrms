@@ -64,7 +64,7 @@ class AwardController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 Award::create($validated);
             } else {
                 app(UpdateApprovalService::class)->create(new Award(), $validated, Auth::id());
@@ -83,7 +83,7 @@ class AwardController extends Controller
         try {
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $award->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($award, $changes, Auth::id());
@@ -106,7 +106,7 @@ class AwardController extends Controller
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $award->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($award, Auth::id());

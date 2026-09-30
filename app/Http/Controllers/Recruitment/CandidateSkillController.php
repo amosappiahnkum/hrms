@@ -47,7 +47,7 @@ class CandidateSkillController extends Controller
                 'created_at' => $skill->created_at,
             ], 'Skill added', 201);
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -86,7 +86,7 @@ class CandidateSkillController extends Controller
                 'created_at' => $skill->created_at,
             ], 'Skill updated');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -102,7 +102,7 @@ class CandidateSkillController extends Controller
             $skill->delete();
             return ApiResponse::success(null, 'Skill deleted');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

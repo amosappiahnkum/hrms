@@ -71,7 +71,7 @@ class CandidateDocumentController extends Controller
                 'created_at'   => $document->created_at,
             ], 'Document uploaded', 201);
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -108,7 +108,7 @@ class CandidateDocumentController extends Controller
 
             return ApiResponse::success(null, 'Document deleted');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

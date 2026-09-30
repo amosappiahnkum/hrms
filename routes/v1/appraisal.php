@@ -39,7 +39,7 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
     });
 
     // ── HR: finalise confirmed appraisals ─────────────────────────────────────
-    Route::prefix('appraisal/hr')->middleware('role:hr|super-admin')->group(function () {
+    Route::prefix('appraisal/hr')->middleware('permission:finalize-appraisals')->group(function () {
         Route::get('/pending', [AssessmentAttemptController::class, 'hrPending']);
         Route::get('/export', [AssessmentAttemptController::class, 'hrExport']);
         Route::get('/attempts/{attempt}/pdf', [AssessmentAttemptController::class, 'hrPrintPdf']);
@@ -47,13 +47,15 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
     });
 
     // ── Appraisal Officer: finalise HR employees' appraisals ──────────────────
-    Route::prefix('appraisal/appraisal-officer')->middleware('role:appraisal_officer|super-admin')->group(function () {
-        Route::get('/pending', [AssessmentAttemptController::class, 'appraisalOfficerPending']);
-        Route::post('/attempts/{attempt}/complete', [AssessmentAttemptController::class, 'appraisalOfficerComplete']);
+    Route::prefix('appraisal/appraisal-officer')->group(function () {
+        Route::middleware('permission:view-hr-appraisals')
+            ->get('/pending', [AssessmentAttemptController::class, 'appraisalOfficerPending']);
+        Route::middleware('permission:finalize-hr-appraisals')
+            ->post('/attempts/{attempt}/complete', [AssessmentAttemptController::class, 'appraisalOfficerComplete']);
     });
 
     // ── Admin: assessment templates ───────────────────────────────────────────
-    Route::prefix('appraisal/templates')->group(function () {
+    Route::prefix('appraisal/templates')->middleware('permission:manage-appraisal-templates')->group(function () {
         Route::get('/', [AppraisalTemplateController::class, 'index']);
         Route::post('/', [AppraisalTemplateController::class, 'store']);
         Route::get('/{assessment}', [AppraisalTemplateController::class, 'show']);
@@ -66,7 +68,7 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
     });
 
     // ── Admin: assessment sessions (windows) ──────────────────────────────────
-    Route::prefix('appraisal/windows')->group(function () {
+    Route::prefix('appraisal/windows')->middleware('permission:manage-appraisal-windows')->group(function () {
         Route::get('/', [AssessmentWindowController::class, 'index']);
         Route::post('/', [AssessmentWindowController::class, 'store']);
         Route::get('/{assessmentWindow}', [AssessmentWindowController::class, 'show']);

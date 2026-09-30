@@ -62,7 +62,7 @@ class PublicationController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 Publication::create($validated);
             } else {
                 app(UpdateApprovalService::class)->create(new Publication(), $validated, Auth::id());
@@ -86,7 +86,7 @@ class PublicationController extends Controller
         try {
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $publication->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($publication, $changes, Auth::id());
@@ -104,7 +104,7 @@ class PublicationController extends Controller
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $publication->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($publication, Auth::id());

@@ -31,6 +31,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -61,6 +62,8 @@ class EmployeeController extends Controller
             ->search($request->search);
 
         if ($request->boolean('export')) {
+            abort_unless($request->user()->can('export-employee'), 403, 'You are not allowed to export employee data.');
+
             return $this->export($query);
         }
 
@@ -147,9 +150,7 @@ class EmployeeController extends Controller
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
             DB::rollBack();
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -275,6 +276,11 @@ class EmployeeController extends Controller
             return MiniEmployeeResource::collection($employees->paginate(10));
         }
 
+        // Staff use this to pick colleagues (e.g. a leave reliever): directory fields only.
+        if (!$this->can('view-employee')) {
+            return \App\Http\Resources\StaffDirectory\EmployeeResource::collection($employees->paginate(10));
+        }
+
         return EmployeeResource::collection($employees->paginate(10));
     }
 
@@ -282,7 +288,7 @@ class EmployeeController extends Controller
     {
         $employeesQuery = Employee::query();
 
-        if (!$this->getRoles()?->contains('super-admin')) {
+        if (!$this->can('view-employee')) {
             $employeesQuery->where('department_id', Auth::user()->employee->department_id);
         }
 
@@ -348,7 +354,7 @@ class EmployeeController extends Controller
 
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $employee->update($changes);
                 activity('employees')->performedOn($employee)->log("Updated employee record: {$employee->name}");
             } else {
@@ -363,7 +369,7 @@ class EmployeeController extends Controller
             return new EmployeeResource($employee);
         } catch (Exception $exception) {
             Log::error('Update Employee Error', ['error' => $exception]);
-            return response()->json(['message' => $exception->getMessage()], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -468,10 +474,26 @@ class EmployeeController extends Controller
 
     public function onboardEmployee(Request $request)
     {
+        $employee = Employee::where('uuid', $request->employee_id)->firstOrFail();
+
+        // Onboarding lets staff pick their (possibly new) department and confirm their staff ID,
+        // so it may only run once; later changes go through HR or the approval flow.
+        if ($employee->onboarding) {
+            return response()->json(['message' => 'Onboarding has already been completed.'], 422);
+        }
+
+        $request->validate([
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+            'staff_id'      => [
+                'nullable', 'string', 'max:50',
+                Rule::unique('employees', 'staff_id')->ignore($employee->id)->whereNull('deleted_at'),
+            ],
+        ], [
+            'staff_id.unique' => 'This staff ID is already assigned to another employee.',
+        ]);
+
         DB::beginTransaction();
         try {
-            $employee = Employee::where('uuid', $request->employee_id)->firstOrFail();
-
             $employee->fill([
                 "title" => $request->title,
                 "first_name" => $request->first_name,

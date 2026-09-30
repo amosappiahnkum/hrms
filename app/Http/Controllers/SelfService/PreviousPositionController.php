@@ -71,7 +71,7 @@ class PreviousPositionController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 PreviousPosition::create($validated);
             } else {
                 app(UpdateApprovalService::class)->create(new PreviousPosition(), $validated, Auth::id());
@@ -98,7 +98,7 @@ class PreviousPositionController extends Controller
         try {
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $previousPosition->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($previousPosition, $changes, Auth::id());
@@ -128,7 +128,7 @@ class PreviousPositionController extends Controller
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $previousPosition->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($previousPosition, Auth::id());

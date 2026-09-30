@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LeaveApproval extends Model
 {
+    use RecordsActivity;
+
     protected $fillable = [
         'leave_request_id',
         'approved_by',

@@ -132,7 +132,7 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // Features::registration(), // accounts are provisioned by HR, not self-registered
         Features::resetPasswords(),
         // Features::emailVerification(),
         Features::updateProfileInformation(),

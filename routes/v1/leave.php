@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('feature:leave.enabled')->group(function () {
     Route::get('holidays', [LeaveRequestController::class, 'getHolidays']);
     Route::get('/who-is-out', [HomeController::class, 'getWhoIsOut']);
-    Route::get('/supervisor/{employee}/pending-actions', [HomeController::class, 'getPendingApprovals']);
+    Route::middleware('owns.employee')->get('/supervisor/{employee}/pending-actions', [HomeController::class, 'getPendingApprovals']);
     Route::get('/my-team', [HomeController::class, 'getMyTeam']);
 
     Route::middleware('feature:leave.self_service')->group(function () {
@@ -41,20 +41,35 @@ Route::middleware('feature:leave.enabled')->group(function () {
     Route::middleware('feature:leave.team_visibility')
         ->get('team-request', [LeaveRequestController::class, 'getTeamLeaveRequest']);
 
-    Route::middleware('feature:leave.hr_approval')
+    Route::middleware(['feature:leave.hr_approval', 'permission:finalize-leave'])
         ->post('hr-change-leave-status', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
 
     Route::middleware('feature:leave.types_management')->group(function () {
-        Route::patch('/leave-types/config/{id}', [LeaveTypeController::class, 'updateLeaveTypeConfig']);
-        Route::apiResource('/leave-types', LeaveTypeController::class);
+        Route::apiResource('/leave-types', LeaveTypeController::class)->only(['index', 'show']);
+
+        Route::middleware('permission:edit-leave-types')
+            ->patch('/leave-types/config/{id}', [LeaveTypeController::class, 'updateLeaveTypeConfig']);
+        Route::apiResource('/leave-types', LeaveTypeController::class)
+            ->only(['store', 'update', 'destroy'])
+            ->middlewareFor('store', 'permission:add-leave-types')
+            ->middlewareFor('update', 'permission:edit-leave-types')
+            ->middlewareFor('destroy', 'permission:delete-leave-types');
     });
 
+    // HODs use these too; getLeaveRequests() scopes results to the caller's role.
     Route::middleware('feature:leave.hr_approval')->prefix('leave-management')->group(function () {
         Route::get('/filter-params', [LeaveManagementController::class, 'getFilterParams']);
         Route::get('/leave-requests', [LeaveManagementController::class, 'getLeaveRequests']);
-        Route::post('/leave-requests/status/hr/change', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
-        Route::get('/analytics', [LeaveAnalyticsController::class, 'index']);
-        Route::get('/employee-balances', [LeaveManagementController::class, 'getEmployeeLeaveBalances']);
-        Route::post('/employee-balances/adjust', [LeaveManagementController::class, 'adjustEmployeeBalance']);
+    });
+
+    Route::middleware('feature:leave.hr_approval')->prefix('leave-management')->group(function () {
+        Route::middleware('permission:finalize-leave')
+            ->post('/leave-requests/status/hr/change', [LeaveRequestController::class, 'hrChangeLeaveStatus']);
+        Route::middleware('permission:view-leave-analytics')
+            ->get('/analytics', [LeaveAnalyticsController::class, 'index']);
+        Route::middleware('permission:manage-leave-balances')->group(function () {
+            Route::get('/employee-balances', [LeaveManagementController::class, 'getEmployeeLeaveBalances']);
+            Route::post('/employee-balances/adjust', [LeaveManagementController::class, 'adjustEmployeeBalance']);
+        });
     });
 });

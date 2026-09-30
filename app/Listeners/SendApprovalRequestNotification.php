@@ -26,7 +26,12 @@ class SendApprovalRequestNotification implements ShouldQueue
     {
         $approval = $event->approval;
 
-        $approvers = User::role('hr')->get();
+        $approvers = User::permission('approve-employee-update')->get();
+
+        // Nobody to notify; sending would throw and fail the user's request.
+        if ($approvers->isEmpty()) {
+            return;
+        }
 
         Mail::to($approvers)
             ->queue(

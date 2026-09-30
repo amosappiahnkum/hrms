@@ -984,7 +984,7 @@ class AssessmentAttemptController extends Controller
         // Authorization: own attempt, supervisor, or HR/admin
         $userId = auth()->id();
         $isEmployee  = $attempt->user_id === $userId;
-        $isHrOrAdmin = auth()->user()->hasRole(['hr', 'super-admin', 'appraisal_officer']);
+        $isHrOrAdmin = auth()->user()->canAny(['finalize-appraisals', 'view-hr-appraisals']);
 
         if (!$isEmployee && !$isHrOrAdmin) {
             $supervisorUser = $this->findSupervisorUser($attempt);
@@ -1400,7 +1400,7 @@ class AssessmentAttemptController extends Controller
      */
     private function authorizeSupervisor(AssessmentAttempt $attempt): void
     {
-        if (auth()->user()->hasRole(['hr', 'super-admin'])) {
+        if (auth()->user()->can('finalize-appraisals')) {
             return;
         }
 

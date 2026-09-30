@@ -4,12 +4,12 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserManagementController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('user')->group(function () {
-    Route::get('/{id}/roles/active', [UserController::class, 'getActiveRoles']);
-    Route::get('/{id}/roles', [UserController::class, 'getUserRoles']);
-});
+Route::get('user/{id}/roles/active', [UserController::class, 'getActiveRoles']);
 
-Route::apiResource('/users', UserController::class);
+Route::middleware('role:super-admin')->group(function () {
+    Route::get('user/{id}/roles', [UserController::class, 'getUserRoles']);
+    Route::apiResource('/users', UserController::class);
+});
 
 Route::prefix('user-management')->group(function () {
     Route::get('/', [UserManagementController::class, 'index']);

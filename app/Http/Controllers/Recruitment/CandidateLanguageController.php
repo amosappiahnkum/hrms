@@ -47,7 +47,7 @@ class CandidateLanguageController extends Controller
                 'created_at'  => $language->created_at,
             ], 'Language added', 201);
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -86,7 +86,7 @@ class CandidateLanguageController extends Controller
                 'created_at'  => $language->created_at,
             ], 'Language updated');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -102,7 +102,7 @@ class CandidateLanguageController extends Controller
             $language->delete();
             return ApiResponse::success(null, 'Language deleted');
         } catch (Exception $e) {
-            return ApiResponse::error($e->getMessage(), null, 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

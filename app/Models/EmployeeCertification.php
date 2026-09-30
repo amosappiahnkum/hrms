@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use App\Models\SelfService\Employee;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class EmployeeCertification extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, RecordsActivity;
 
     protected $fillable = [
         'employee_id',

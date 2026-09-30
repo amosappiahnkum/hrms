@@ -69,6 +69,12 @@ class InformationUpdateController extends Controller
      */
     public function show(InformationUpdate $informationUpdate)
     {
+        abort_unless(
+            $this->can('approve-employee-update') || (int) $informationUpdate->requested_by === (int) Auth::id(),
+            403,
+            'You can only view your own update requests.'
+        );
+
         $informationUpdate->load([
             'requestedBy:id,employee_id',
             'requestedBy.employee:id,first_name,last_name',
@@ -140,7 +146,7 @@ class InformationUpdateController extends Controller
                 'error' => $e
             ]);
 
-            return ApiResponse::error('Unable to approve request');
+            return ApiResponse::fromException($e, 'Unable to approve request');
         }
     }
 
@@ -177,7 +183,7 @@ class InformationUpdateController extends Controller
                 'error' => $e
             ]);
 
-            return ApiResponse::error('Unable to reject request');
+            return ApiResponse::fromException($e, 'Unable to reject request');
         }
     }
 

@@ -115,6 +115,11 @@ class AuthController extends Controller
         try {
             $student = Employee::where('uuid', $token)->firstOrFail();
 
+            // Names are user-editable, so escape them before putting them into HTML.
+            $name = e(trim(implode(' ', array_filter([
+                $student->title, $student->first_name, $student->middle_name, $student->last_name,
+            ]))));
+
             return response()->make("
             <!DOCTYPE html>
             <html>
@@ -148,7 +153,7 @@ class AuthController extends Controller
             <body>
                 <div class='card'>
                     <div class='success'>
-                        Welcome {$student->title} {$student->first_name} {$student->middle_name} {$student->last_name}
+                        Welcome {$name}
                     </div>
                 </div>
             </body>

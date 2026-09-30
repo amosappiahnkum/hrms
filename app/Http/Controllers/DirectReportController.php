@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Http\Requests\StoreDirectReportRequest;
 use App\Http\Requests\UpdateDirectReportRequest;
 use App\Http\Resources\DirectReportResource;
@@ -25,6 +26,12 @@ class DirectReportController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
+        abort_unless(
+            $this->can('view-employee') || (int) $request->supervisorId === (int) Auth::user()?->employee?->id,
+            403,
+            'You can only view your own direct reports.'
+        );
+
         $dependants = EmployeeSupervisor::where('supervisor_id', $request->supervisorId)->paginate(10);
 
         return DirectReportResource::collection($dependants);
@@ -47,9 +54,7 @@ class DirectReportController extends Controller
 
             return new DirectReportResource($dependant);
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -71,9 +76,7 @@ class DirectReportController extends Controller
 
             return new DirectReportResource($dependant);
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -95,9 +98,7 @@ class DirectReportController extends Controller
                 'message' =>'Emergency Contact Deleted'
             ]);
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 }

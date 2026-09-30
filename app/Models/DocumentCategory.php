@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 
 class DocumentCategory extends Model
 {
-    use HasUuid;
+    use HasUuid, RecordsActivity;
 
     protected $fillable = ['name', 'description', 'parent_id'];
 

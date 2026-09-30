@@ -13,6 +13,7 @@ use App\Models\SubUnit;
 use App\Models\TerminationReason;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
@@ -34,7 +35,8 @@ class Controller extends BaseController
             ], 422);
         }
 
-        $isStaff = $loggedInUser->getRoleNames()->contains('staff') || $loggedInUser->getRoleNames()->contains('admin');
+        // Without organisation-wide access, celebrations are limited to the user's department.
+        $isStaff = !$loggedInUser->can('view-employee');
         $educationalLevels = EducationLevel::all();
         $terminationReasons = TerminationReason::query()->select(['uuid', 'reason'])->orderBy('reason')->get();
         $positions = Position::all();
@@ -104,11 +106,6 @@ class Controller extends BaseController
         return Carbon::parse($date)->format($format);
     }
 
-    public function getRoles()
-    {
-        return Auth::user()?->getRoleNames();
-    }
-
     public function can($permission)
     {
         return Auth::user()?->can($permission);
@@ -122,7 +119,7 @@ class Controller extends BaseController
 
     public function isSupervisor(): bool
     {
-        return $this->hasRole('hod') || $this->can('approve-leave-request') || $this->can('decline-leave-request');
+        return $this->can('approve-leave-request') || $this->can('decline-leave-request');
     }
 
     /**
@@ -134,9 +131,20 @@ class Controller extends BaseController
         return Department::where('hod', Auth::user()->employee->id)->pluck('id');
     }
 
-    public function isHrAdmin(): bool
+    /**
+     * Abort unless the record belongs to the logged-in employee or the user holds edit-employee.
+     */
+    protected function authorizeEmployeeRecord(Model $record): void
     {
-        return $this->hasRole('super-admin') || $this->hasRole('hr');
+        if ($this->can('edit-employee')) {
+            return;
+        }
+
+        abort_unless(
+            (int) $record->employee_id === (int) Auth::user()?->employee?->id,
+            403,
+            'You can only access your own records.'
+        );
     }
 
     public function hasRole(string $role): bool

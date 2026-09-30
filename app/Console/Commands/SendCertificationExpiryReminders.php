@@ -41,8 +41,10 @@ class SendCertificationExpiryReminders extends Command
             return;
         }
 
-        // Fetch HR users once — they receive all reminders
-        $hrUsers = User::role(['hr', 'super-admin'])->get();
+        // Fetch certification managers (plus super-admins) once — they receive all reminders
+        $hrUsers = User::permission('manage-certifications')->get()
+            ->merge(User::role('super-admin')->get())
+            ->unique('id');
 
         $sent = 0;
 

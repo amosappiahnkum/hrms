@@ -49,7 +49,7 @@ class NextOfKinController extends Controller
 
             $changes = $request->validated();
 
-//            if ($this->isHrAdmin()) {
+//            if ($this->can('edit-employee')) {
 //                $nextOfKin->update($changes);
 //            } else {
             app(UpdateApprovalService::class)->update($nextOfKin, $changes, Auth::id());

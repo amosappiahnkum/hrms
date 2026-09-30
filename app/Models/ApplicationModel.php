@@ -2,15 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
-use Spatie\Activitylog\LogOptions;
-use Spatie\Activitylog\Traits\LogsActivity;
 
 class ApplicationModel extends Model
 {
-    use LogsActivity;
+    use RecordsActivity;
 
     protected static function booted()
     {
@@ -24,13 +23,5 @@ class ApplicationModel extends Model
     public function getRouteKeyName(): string
     {
         return 'uuid';
-    }
-
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logAll()
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
     }
 }

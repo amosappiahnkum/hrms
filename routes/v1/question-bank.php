@@ -5,7 +5,7 @@ use App\Http\Controllers\QuestionBank\QuestionController;
 use App\Http\Controllers\QuestionBank\QuestionOptionController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('feature:question_bank.enabled')->group(function () {
+Route::middleware(['feature:question_bank.enabled', 'permission:manage-question-bank'])->group(function () {
     Route::apiResource('question-categories', QuestionCategoryController::class);
     Route::get('questions/template', [QuestionController::class, 'templateDownload']);
     Route::post('questions/import', [QuestionController::class, 'import']);

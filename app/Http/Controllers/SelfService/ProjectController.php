@@ -64,7 +64,7 @@ class ProjectController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 Project::create($validated);
             } else {
                 app(UpdateApprovalService::class)->create(new Project(), $validated, Auth::id());
@@ -83,7 +83,7 @@ class ProjectController extends Controller
         try {
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $project->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($project, $changes, Auth::id());
@@ -106,7 +106,7 @@ class ProjectController extends Controller
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $project->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($project, Auth::id());

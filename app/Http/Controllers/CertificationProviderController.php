@@ -23,7 +23,7 @@ class CertificationProviderController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        abort_unless($this->isHrAdmin(), 403, 'Unauthorized.');
+        abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
         $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:certification_providers,name'],

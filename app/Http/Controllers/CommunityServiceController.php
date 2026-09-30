@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
 use App\Helpers\Helper;
 use App\Http\Requests\StoreCommunityServiceRequest;
 use App\Http\Requests\UpdateCommunityServiceRequest;
@@ -49,9 +50,7 @@ class CommunityServiceController extends Controller
 
             return new CommunityServiceResource($communityServices);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -65,18 +64,18 @@ class CommunityServiceController extends Controller
      */
     public function update(UpdateCommunityServiceRequest $request, $id): JsonResponse|CommunityServiceResource
     {
+        $communityServices = CommunityService::findOrFail($id);
+        $this->authorizeEmployeeRecord($communityServices);
+
         DB::beginTransaction();
         try {
             $request['dob'] = $request->dob !== 'null' ? Carbon::parse($request->dob)->format('Y-m-d') : null;
-            $communityServices = CommunityService::findOrFail($id);
             $communityServices->update($request->all());
             DB::commit();
 
             return new CommunityServiceResource($communityServices);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -89,9 +88,11 @@ class CommunityServiceController extends Controller
      */
     public function destroy($id): ?JsonResponse
     {
+        $communityServices = CommunityService::findOrFail($id);
+        $this->authorizeEmployeeRecord($communityServices);
+
         DB::beginTransaction();
         try {
-            $communityServices = CommunityService::findOrFail($id);
             $communityServices->delete();
 
             DB::commit();
@@ -100,9 +101,7 @@ class CommunityServiceController extends Controller
                 'message' => 'Emergency Contact Deleted'
             ]);
         } catch (Exception $exception) {
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 }

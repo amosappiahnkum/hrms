@@ -2,6 +2,7 @@
 
 namespace App\Models\Training;
 
+use App\Traits\RecordsActivity;
 use App\Models\SelfService\Employee;
 use App\Models\SelfService\Rank;
 use App\Traits\HasUuid;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PreviousRank extends Model
 {
-    use HasFactory, SoftDeletes, HasUuid;
+    use HasFactory, SoftDeletes, HasUuid, RecordsActivity;
 
     protected $fillable = [
         'employee_id',

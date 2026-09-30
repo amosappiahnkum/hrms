@@ -59,7 +59,8 @@ class AuthResponseResource extends JsonResource
             'email' => $this->email,
             'password_changed' => $this->password_changed == 1,
             'roles' => $this->getRoleNames(),
-            'permissions' => $this->getPermissionsViaRoles()->pluck('name')->merge($this->getDirectPermissions()->pluck('name')),
+            // super-admin passes every check via Gate::before; clients treat user_type super_admin as all-access.
+            'permissions' => $this->getAllPermissions()->pluck('name')->unique()->values(),
             'user_type' => $this->hasRole('super-admin') ? 'super_admin' : 'employee',
             'settings' => self::loadSettings(),
         ];

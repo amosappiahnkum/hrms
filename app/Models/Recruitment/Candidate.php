@@ -2,18 +2,17 @@
 
 namespace App\Models\Recruitment;
 
+use App\Traits\RecordsActivity;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Spatie\Activitylog\LogOptions;
-use Spatie\Activitylog\Traits\LogsActivity;
 
 class Candidate extends Authenticatable
 {
-    use HasFactory, SoftDeletes, HasUuid, Notifiable, LogsActivity;
+    use HasFactory, SoftDeletes, HasUuid, Notifiable, RecordsActivity;
 
     protected $appends = ['name'];
 
@@ -52,13 +51,6 @@ class Candidate extends Authenticatable
         return 'uuid';
     }
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logAll()
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
-    }
 
     public function getNameAttribute(): string
     {

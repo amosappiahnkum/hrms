@@ -14,7 +14,7 @@ class LeaveHelper
 
     public function notifyAllHrs($data): void
     {
-        $users = User::role('hr')->get();
+        $users = User::permission('finalize-leave')->get();
 
         foreach ($users as $item) {
             if (!empty($item)) {

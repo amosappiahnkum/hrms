@@ -25,9 +25,12 @@ use App\Models\Training\PreviousPosition;
 use App\Models\Training\PreviousRank;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Fortify\Fortify;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -53,8 +56,14 @@ class AppServiceProvider extends ServiceProvider
 //        }
 
         JsonResource::withoutWrapping();
-        RateLimiter::for("login", static function () {
-            Limit::perMinute(5);
+
+        // super-admin passes every permission check, including permissions added later.
+        Gate::before(static function ($user) {
+            return method_exists($user, 'hasRole') && $user->hasRole('super-admin') ? true : null;
+        });
+
+        RateLimiter::for("login", static function (Request $request) {
+            return Limit::perMinute(5)->by($request->input(Fortify::username()) . '|' . $request->ip());
         });
 
         Relation::morphMap([

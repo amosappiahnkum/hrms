@@ -117,5 +117,138 @@
             "view-hr-appraisals",
             "finalize-hr-appraisals"
         ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Employee",
+        "permissions": [
+            "export-employee",
+            "terminate-employee",
+            "manage-employee-accounts"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Positions",
+        "permissions": [
+            "manage-positions"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Leave Management",
+        "permissions": [
+            "finalize-leave",
+            "view-leave-analytics",
+            "manage-leave-balances"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Appraisal",
+        "permissions": [
+            "manage-appraisal-templates",
+            "finalize-appraisals"
+        ]
+    },
+    {
+        "roles": [
+            "hr",
+            "appraisal_officer"
+        ],
+        "group": "Appraisal",
+        "permissions": [
+            "manage-appraisal-windows"
+        ]
+    },
+    {
+        "roles": [
+            "hr",
+            "training_officer"
+        ],
+        "group": "Training",
+        "permissions": [
+            "manage-training",
+            "view-training-reports"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Question Bank",
+        "permissions": [
+            "manage-question-bank"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Policy Documents",
+        "permissions": [
+            "manage-policy-documents"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Dynamic Forms",
+        "permissions": [
+            "manage-dynamic-forms"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Communication",
+        "permissions": [
+            "send-quick-email"
+        ]
+    },
+    {
+        "roles": [],
+        "group": "Communication",
+        "permissions": [
+            "resolve-support-tickets"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Leave Management",
+        "permissions": [
+            "view-all-leave"
+        ]
+    },
+    {
+        "roles": [
+            "hod"
+        ],
+        "group": "Leave Request",
+        "permissions": [
+            "approve-leave-request",
+            "decline-leave-request"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Certifications",
+        "permissions": [
+            "manage-certifications"
+        ]
     }
 ]

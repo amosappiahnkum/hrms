@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UserNotificationPreference extends Model
 {
+    use RecordsActivity;
+
     protected $fillable = [
         'user_id',
         'notification_type',

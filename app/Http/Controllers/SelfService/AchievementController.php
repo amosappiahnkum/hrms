@@ -64,7 +64,7 @@ class AchievementController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 Achievement::create($validated);
             } else {
                 app(UpdateApprovalService::class)->create(new Achievement(), $validated, Auth::id());
@@ -83,7 +83,7 @@ class AchievementController extends Controller
         try {
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $achievement->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($achievement, $changes, Auth::id());
@@ -106,7 +106,7 @@ class AchievementController extends Controller
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $achievement->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($achievement, Auth::id());

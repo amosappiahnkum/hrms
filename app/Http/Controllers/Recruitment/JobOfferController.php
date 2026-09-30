@@ -34,7 +34,7 @@ class JobOfferController extends Controller
 
             return new JobOfferResource($offer);
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -59,7 +59,7 @@ class JobOfferController extends Controller
 
             return new JobOfferResource($offer->refresh());
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -70,7 +70,7 @@ class JobOfferController extends Controller
             activity('recruitment')->log("Deleted job offer #{$offer->id}");
             return response()->json(['message' => 'Offer deleted']);
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

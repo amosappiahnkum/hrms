@@ -14,7 +14,7 @@ class TerminateEmployeeRequest extends FormRequest
     {
         $user = auth()->user();
 
-        return $user->hasRole('super-admin') || $user->hasRole('hr');
+        return (bool) $user?->can('terminate-employee');
     }
 
     /**

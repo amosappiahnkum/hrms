@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 
 use App\Http\Resources\UserResource;
-use App\Imports\VoterImport;
 use App\Models\User;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -13,6 +12,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -65,18 +65,28 @@ class UserController extends Controller
      */
     public function store(Request $request): Response
     {
-        $username = $request->first_name . '.' . $request->last_name;
+        $validated = $request->validate([
+            'first_name'   => ['required', 'string', 'max:255'],
+            'last_name'    => ['required', 'string', 'max:255'],
+            'email'        => ['required', 'email', 'max:255', 'unique:users,email'],
+            'phone_number' => ['nullable', 'string', 'max:30'],
+        ]);
+
+        $username = $validated['first_name'] . '.' . $validated['last_name'];
         $checkUsername = User::where('username', $username)->count();
 
         if ($checkUsername >= 1) {
             $username = $username . '_' . random_int(10, 150);
         }
         DB::beginTransaction();
-        $request['username'] = strtolower($username);
-        $request['password'] = Hash::make(strtolower($username));
         try {
-            $user = User::create($request->all());
-            $role = Role::where('name', 'Admin')->first();
+            $user = User::create([
+                'name'         => $validated['first_name'] . ' ' . $validated['last_name'],
+                'username'     => strtolower($username),
+                'email'        => $validated['email'],
+                'phone_number' => $validated['phone_number'] ?? null,
+                'password'     => Hash::make(Str::random(32)),
+            ]);
             DB::commit();
 
             return \response(new UserResource($user));
@@ -98,9 +108,15 @@ class UserController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $validated = $request->validate([
+            'name'         => ['sometimes', 'string', 'max:255'],
+            'email'        => ['sometimes', 'email', 'max:255', 'unique:users,email,' . $id],
+            'phone_number' => ['sometimes', 'nullable', 'string', 'max:30'],
+        ]);
+
         DB::beginTransaction();
         try {
-            User::find($id)->update($request->all());
+            User::findOrFail($id)->update($validated);
             DB::commit();
 
             $user = User::find($id);

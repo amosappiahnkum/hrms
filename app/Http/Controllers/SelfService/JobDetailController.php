@@ -53,7 +53,7 @@ class JobDetailController extends Controller
 
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $jobDetail->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($jobDetail, $changes, Auth::id());

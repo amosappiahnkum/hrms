@@ -64,7 +64,7 @@ class AffiliationController extends Controller
         try {
             $validated = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 Affiliation::create($validated);
             } else {
                 app(UpdateApprovalService::class)->create(new Affiliation(), $validated, Auth::id());
@@ -83,7 +83,7 @@ class AffiliationController extends Controller
         try {
             $changes = $request->validated();
 
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $affiliation->update($changes);
             } else {
                 app(UpdateApprovalService::class)->update($affiliation, $changes, Auth::id());
@@ -106,7 +106,7 @@ class AffiliationController extends Controller
     {
         DB::beginTransaction();
         try {
-            if ($this->isHrAdmin()) {
+            if ($this->can('edit-employee')) {
                 $affiliation->delete();
             } else {
                 app(UpdateApprovalService::class)->delete($affiliation, Auth::id());

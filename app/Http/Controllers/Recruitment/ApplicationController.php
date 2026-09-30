@@ -42,7 +42,7 @@ class ApplicationController extends Controller
             activity('recruitment')->performedOn($application)->log("New application submitted");
             return new ApplicationResource($application->load(['candidate', 'jobOpening']));
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -58,7 +58,7 @@ class ApplicationController extends Controller
             $application->update($request->validated());
             return new ApplicationResource($application->refresh()->load(['candidate', 'jobOpening']));
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -69,7 +69,7 @@ class ApplicationController extends Controller
             activity('recruitment')->log("Deleted application #{$application->id}");
             return response()->json(['message' => 'Application deleted']);
         } catch (Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -180,7 +180,7 @@ class ApplicationController extends Controller
             return ApiResponse::success(new EmployeeResource($employee), 'Candidate hired successfully');
         } catch (Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 400);
+            return ApiResponse::fromException($e);
         }
     }
 }

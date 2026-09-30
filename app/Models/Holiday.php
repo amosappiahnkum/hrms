@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Holiday extends Model
 {
-    use HasFactory, HasUuid;
+    use HasFactory, HasUuid, RecordsActivity;
 
     protected $fillable = [
         'description',

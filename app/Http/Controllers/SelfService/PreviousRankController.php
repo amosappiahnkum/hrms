@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\SelfService;
 
+use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreviousRankRequest;
 use App\Http\Requests\UpdatePreviousRankRequest;
@@ -46,9 +47,7 @@ class PreviousRankController extends Controller
 
             return new PreviousRankResource($previousRank);
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -61,17 +60,17 @@ class PreviousRankController extends Controller
      */
     public function update(UpdatePreviousRankRequest $request, $id)
     {
+        $previousRank = PreviousRank::findOrFail($id);
+        $this->authorizeEmployeeRecord($previousRank);
+
         DB::beginTransaction();
         try {
-            $previousRank = PreviousRank::findOrFail($id);
             $previousRank->update($request->all());
 
             DB::commit();
             return new PreviousRankResource($previousRank);
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -83,18 +82,18 @@ class PreviousRankController extends Controller
      */
     public function destroy($id): ?JsonResponse
     {
+        $previousRank = PreviousRank::findOrFail($id);
+        $this->authorizeEmployeeRecord($previousRank);
+
         DB::beginTransaction();
         try {
-            $previousRank = PreviousRank::findOrFail($id);
             $previousRank->delete();
             DB::commit();
             return response()->json([
                 'message' =>'Emergency Contact Deleted'
             ]);
         }catch (Exception $exception){
-            return response()->json([
-                'message' => $exception->getMessage()
-            ], 400);
+            return ApiResponse::fromException($exception);
         }
     }
 }

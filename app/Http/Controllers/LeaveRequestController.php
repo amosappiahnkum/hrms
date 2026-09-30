@@ -54,7 +54,7 @@ class LeaveRequestController extends Controller
      */
     public function index(Request $request)
     {
-        if (!$this->isHrAdmin()) {
+        if (!$this->can('view-all-leave')) {
             return response()->json([
                 'message' => 'You do not have permission to view leave requests.'
             ], 403);
@@ -431,7 +431,7 @@ class LeaveRequestController extends Controller
                 ];
             }
 
-            $mailData['cc'] = User::role('hr')->get()->pluck('email');
+            $mailData['cc'] = User::permission('finalize-leave')->get()->pluck('email');
 
             $employeeUserAccount->notify(new LeaveStatusNotification($mailData));
 
@@ -464,7 +464,7 @@ class LeaveRequestController extends Controller
 
         $cancellableStatuses = ['pending', 'hod_approved'];
 
-        if ($this->isHrAdmin()) {
+        if ($this->can('finalize-leave')) {
             // HR can cancel any status
         } elseif ($this->isSupervisor() && $leaveRequest->department_id === $employee->department_id) {
             if (!in_array($leaveRequest->status->value, $cancellableStatuses)) {
@@ -549,6 +549,18 @@ class LeaveRequestController extends Controller
     public function show(string $id): JsonResponse
     {
         $leaveRequest = LeaveRequest::where('uuid', $id)->firstOrFail();
+
+        $employeeId = Auth::user()->employee?->id;
+
+        $canView = $this->can('view-all-leave')
+            || ($employeeId !== null && in_array($employeeId, array_map('intval', [
+                $leaveRequest->employee_id,
+                $leaveRequest->supervisor_id,
+                $leaveRequest->reliever_id,
+            ]), true))
+            || ($employeeId !== null && $this->getManagedDepartmentIds()->contains($leaveRequest->department_id));
+
+        abort_unless($canView, 403, 'You do not have access to this leave request.');
 
         return response()->json(new LeaveRequestResource($leaveRequest));
     }

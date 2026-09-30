@@ -175,8 +175,8 @@ class LeaveResumptionController extends Controller
             ],
         ]));
 
-        // Notify HR — one email to the first HR user, rest in CC
-        $hrUsers = User::role('hr')->get();
+        // Notify HR — one email to the first leave officer, rest in CC
+        $hrUsers = User::permission('finalize-leave')->get();
         $primaryHr = $hrUsers->first();
 
         if ($primaryHr) {

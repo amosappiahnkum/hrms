@@ -7,7 +7,7 @@ use App\Http\Controllers\SelfService\ExperienceController;
 use App\Http\Controllers\SelfService\QualificationController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('feature:self_service.enabled')->group(function () {
+Route::middleware(['feature:self_service.enabled', 'owns.employee'])->group(function () {
     Route::middleware('feature:self_service.qualifications')
         ->apiResource('/qualifications', QualificationController::class);
 

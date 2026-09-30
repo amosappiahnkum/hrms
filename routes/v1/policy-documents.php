@@ -5,7 +5,7 @@ use App\Http\Controllers\PolicyDocumentController;
 use Illuminate\Support\Facades\Route;
 
 // ── Document categories ───────────────────────────────────────────────────────
-Route::prefix('document-categories')->group(function () {
+Route::prefix('document-categories')->middleware('permission:manage-policy-documents')->group(function () {
     Route::get('/', [DocumentCategoryController::class, 'index']);
     Route::post('/', [DocumentCategoryController::class, 'store']);
     Route::put('/{documentCategory}', [DocumentCategoryController::class, 'update']);
@@ -13,7 +13,7 @@ Route::prefix('document-categories')->group(function () {
 });
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
-Route::prefix('policy-documents')->group(function () {
+Route::prefix('policy-documents')->middleware('permission:manage-policy-documents')->group(function () {
     Route::get('/', [PolicyDocumentController::class, 'index']);
     Route::post('/', [PolicyDocumentController::class, 'store']);
     Route::put('/{policyDocument}', [PolicyDocumentController::class, 'update']);

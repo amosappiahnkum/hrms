@@ -2,6 +2,7 @@
 
 namespace App\Models\Training;
 
+use App\Traits\RecordsActivity;
 use App\Models\QuestionBank\Question;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 class Quiz extends Model
 {
     /** @use HasFactory<\Database\Factories\Training\QuizFactory> */
-    use HasFactory;
+    use HasFactory, RecordsActivity;
 
     protected $fillable = ['title', 'description', 'time_limit'];
 
