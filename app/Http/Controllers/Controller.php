@@ -122,13 +122,32 @@ class Controller extends BaseController
         return $this->can('approve-leave-request') || $this->can('decline-leave-request');
     }
 
-    /**
-     * All department IDs the authenticated employee has supervisory authority over —
-     * either as a direct department HOD or as the HOD of a section within a department.
-     */
+    /** The departments the signed-in employee heads directly. */
     protected function getManagedDepartmentIds(): \Illuminate\Support\Collection
     {
         return Department::where('hod', Auth::user()->employee->id)->pluck('id');
+    }
+
+    /**
+     * Leave requests the signed-in HOD acts on: those sent to them (including requests escalated
+     * from a department below), and those from departments they head — never their own.
+     */
+    protected function leaveIApprove(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        $me = Auth::user()?->employee?->id;
+
+        return $query->where('employee_id', '!=', $me ?? 0)
+            ->where(fn ($q) => $q->where('supervisor_id', $me ?? 0)
+                ->orWhereIn('department_id', $me ? $this->getManagedDepartmentIds() : []));
+    }
+
+    protected function approvesLeave(\App\Models\LeaveRequest $leaveRequest): bool
+    {
+        $me = Auth::user()?->employee?->id;
+
+        return $me !== null
+            && (int) $leaveRequest->employee_id !== (int) $me
+            && ((int) $leaveRequest->supervisor_id === (int) $me || $this->getManagedDepartmentIds()->contains($leaveRequest->department_id));
     }
 
     /**

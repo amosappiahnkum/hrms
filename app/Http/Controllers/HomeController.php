@@ -46,8 +46,9 @@ class HomeController extends Controller
         $isHr = $this->can('move-leave') || $this->can('approve-leave') ||
             $this->can('disapprove-leave');
 
+        // HR also sees requests waiting for them (approved by the HOD).
         $leaveRequest->when($isHr, function ($q) {
-            $q->orWhere('hr_status', 'pending')->where('status', 'approved');
+            $q->orWhere('status', 'hod_approved');
         });
 
         return response()->json([
@@ -68,10 +69,12 @@ class HomeController extends Controller
         $weekStartDate = $now->startOfWeek()->format('Y-m-d');
         $weekEndDate = $now->endOfWeek()->format('Y-m-d');
 
+        // Approved leave that overlaps this week.
         $leaveRequest = LeaveRequest::query()
-            ->whereDate('start_date', '<=', $weekStartDate)
-            ->orWhereDate('end_date', '>=', $weekEndDate)
-            ->where('status', 'approved')->get();
+            ->where('status', 'hr_approved')
+            ->whereDate('start_date', '<=', $weekEndDate)
+            ->whereDate('end_date', '>=', $weekStartDate)
+            ->get();
 
         return response()->json(LeaveRequestResource::collection($leaveRequest));
     }

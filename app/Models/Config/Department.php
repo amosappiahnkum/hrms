@@ -37,6 +37,20 @@ class Department extends ApplicationModel
         return $this->hasMany(Department::class, 'parent_department_id');
     }
 
+    /** Parents up to the top level, top level first. Stops at a loop in bad data. */
+    public function ancestors(): \Illuminate\Support\Collection
+    {
+        $path = collect();
+        $current = $this->parent;
+
+        while ($current && !$path->contains('id', $current->id) && $current->id !== $this->id) {
+            $path->prepend($current);
+            $current = $current->parent;
+        }
+
+        return $path;
+    }
+
     public function employees(): HasMany
     {
         return $this->hasMany(Employee::class);

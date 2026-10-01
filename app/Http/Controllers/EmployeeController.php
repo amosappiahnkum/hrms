@@ -61,6 +61,12 @@ class EmployeeController extends Controller
             ->jobCategory($request->job_category_id)
             ->search($request->search);
 
+        // Everything the list shows at a glance, loaded up front (no query per row).
+        $query->with([
+            'department', 'rank', 'gtecPlacement', 'contactDetail', 'userAccount', 'informationUpdate',
+            'jobDetail.position', 'jobDetail.jobCategory', 'employeeSupervisor.supervisor', 'currentLeave.leaveType',
+        ]);
+
         if ($request->boolean('export')) {
             abort_unless($request->user()->can('export-employee'), 403, 'You are not allowed to export employee data.');
 

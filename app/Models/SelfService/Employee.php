@@ -215,6 +215,25 @@ class Employee extends AppModel
     /**
      * @return HasOne
      */
+    /**
+     * The user who heads this employee's department; for an HOD, the head of the parent department
+     * (same rule appraisals use). Null when there is none.
+     */
+    public function hodUser(): ?User
+    {
+        $this->loadMissing('department.parent');
+        $department = $this->department;
+
+        if (!$department) {
+            return null;
+        }
+
+        $isHod = (int) $department->hod === (int) $this->id;
+        $hodEmployeeId = ($isHod && $department->parent) ? $department->parent->hod : $department->hod;
+
+        return $hodEmployeeId ? User::where('employee_id', $hodEmployeeId)->first() : null;
+    }
+
     public function userAccount(): HasOne
     {
         return $this->hasOne(User::class);
@@ -223,6 +242,17 @@ class Employee extends AppModel
     /**
      * @return HasMany
      */
+    /** The approved leave the employee is on today, if any. */
+    public function currentLeave(): HasOne
+    {
+        // Fully approved leave ends HR's step as hr_approved.
+        return $this->hasOne(LeaveRequest::class)
+            ->where('status', 'hr_approved')
+            ->whereDate('start_date', '<=', today())
+            ->whereDate('end_date', '>=', today())
+            ->latest('start_date');
+    }
+
     public function leaveRequests(): HasMany
     {
         return $this->hasMany(LeaveRequest::class);

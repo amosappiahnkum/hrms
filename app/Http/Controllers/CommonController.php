@@ -101,15 +101,17 @@ class CommonController extends Controller
     public function getNotificationNavs(): array
     {
 //        Log::info(Auth::user()?->can('approve-employee-update'));
+        // Leave moves pending → hod_approved/hod_rejected (HOD) → hr_approved/hr_rejected (HR).
         if ($this->isSupervisor() && $this->isHr()) {
-            $approved = LeaveRequest::where('hr_status', 'approved')->orWhere('status', 'approved')->count();
-            $pending = LeaveRequest::where('hr_status', 'pending')->orWhere('status', 'pending')->count();
+            $approved = LeaveRequest::where('status', 'hr_approved')->count();
+            $pending = LeaveRequest::whereIn('status', ['pending', 'hod_approved'])->count();
 
             return $this->notificationData($approved, $pending);
         }
 
         if ($this->isSupervisor()) {
-            $approved = LeaveRequest::where('status', 'approved')
+            // Approved at their step, whatever HR decided after.
+            $approved = LeaveRequest::whereIn('status', ['hod_approved', 'hr_approved', 'hr_rejected'])
                 ->where('supervisor_id', Auth::user()->employee->id)->count();
             $pending = LeaveRequest::query()->where('status', 'pending')
                 ->where('supervisor_id', Auth::user()->employee->id)->count();
@@ -120,7 +122,8 @@ class CommonController extends Controller
         if ($this->isHr()) {
             $approved = LeaveRequest::where('hr_status', 'approved')->count();
             $rejected = LeaveRequest::where('hr_status', 'rejected')->count();
-            $pending = LeaveRequest::where('hr_status', 'pending')->where('status', 'approved')->count();
+            // Waiting for HR: approved by the HOD, not yet decided by HR.
+            $pending = LeaveRequest::where('status', 'hod_approved')->count();
 
 
             return $this->notificationData($approved, $pending, $rejected);
@@ -170,7 +173,7 @@ class CommonController extends Controller
         $positions  = Position::query()->count();
 
         $onLeave = LeaveRequest::query()
-            ->where('status', 'approved')
+            ->where('status', 'hr_approved')
             ->whereDate('start_date', '<=', $today)
             ->whereDate('end_date', '>=', $today)
             ->count();

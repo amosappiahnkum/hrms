@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Leave\LeaveApprover;
+
 use App\Exports\LeaveRequestExport;
 use App\Helpers\LeaveHelper;
 use App\Http\Requests\HrChangeLeaveStatusRequest;
@@ -89,11 +91,13 @@ class LeaveRequestController extends Controller
         try {
             $employee = Auth::user()->employee;
 
-            $hod = $employee->department->headOfDepartment;
+            // The nearest head above them; a department head with no one above goes straight to HR.
+            $approvers = app(LeaveApprover::class);
+            $hod = $approvers->for($employee) ?? ($approvers->headsOwnChain($employee) ? $employee : null);
 
             if (empty($hod)) {
                 return response()->json([
-                    'message' => 'No HOD assigned to your department.'
+                    'message' => 'No head is assigned to your department or any department above it. Please contact HR.'
                 ], 400);
             }
 
@@ -254,9 +258,9 @@ class LeaveRequestController extends Controller
         try {
             $leaveRequest = LeaveRequest::where('uuid', $request->id)->first();
 
-            if (!$this->getManagedDepartmentIds()->contains($leaveRequest->department_id)) {
+            if (!$this->approvesLeave($leaveRequest)) {
                 return response()->json([
-                    'message' => 'You can only approve leave requests for employees in your department.',
+                    'message' => 'You can only approve leave requests sent to you or from departments you head.',
                 ], 403);
             }
 
@@ -448,7 +452,7 @@ class LeaveRequestController extends Controller
 
     /**
      * Cancel a leave request. Employees may cancel pending/hod_approved;
-     * HODs may cancel pending/hod_approved in their department;
+     * HODs may cancel pending/hod_approved requests they approve (sent to them, or from departments they head);
      * HR may cancel any leave regardless of status.
      */
     public function cancelLeave(string $uuid): JsonResponse
@@ -466,7 +470,7 @@ class LeaveRequestController extends Controller
 
         if ($this->can('finalize-leave')) {
             // HR can cancel any status
-        } elseif ($this->isSupervisor() && $leaveRequest->department_id === $employee->department_id) {
+        } elseif ($this->isSupervisor() && $this->approvesLeave($leaveRequest)) {
             if (!in_array($leaveRequest->status->value, $cancellableStatuses)) {
                 return response()->json(['message' => 'Only pending or HOD-approved leaves can be cancelled.'], 422);
             }
@@ -558,9 +562,11 @@ class LeaveRequestController extends Controller
                 $leaveRequest->supervisor_id,
                 $leaveRequest->reliever_id,
             ]), true))
-            || ($employeeId !== null && $this->getManagedDepartmentIds()->contains($leaveRequest->department_id));
+            || ($employeeId !== null && $this->approvesLeave($leaveRequest));
 
         abort_unless($canView, 403, 'You do not have access to this leave request.');
+
+        $leaveRequest->load(['approvals.approver', 'approver']);
 
         return response()->json(new LeaveRequestResource($leaveRequest));
     }
@@ -678,13 +684,11 @@ class LeaveRequestController extends Controller
             ], 403);
         }
 
-        $departmentIds = $this->getManagedDepartmentIds();
-
-        $upcomingLeaves = LeaveRequest::query()->with([
+        $upcomingLeaves = $this->leaveIApprove(LeaveRequest::query())->with([
             'employee:id,uuid,first_name,middle_name,last_name,department_id,title,staff_id',
             'leaveType:id,name',
             'resumption',
-        ])->whereIn('department_id', $departmentIds)
+        ])
             ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
             ->when($request->filled('resumption_status'), fn($q) => $q->whereHas('resumption', fn($r) => $r->where('status', $request->resumption_status)))
             ->when($request->filled('search'), fn($q) => $q->searchEmployee($request->search))

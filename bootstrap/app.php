@@ -24,5 +24,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Messages written for users, thrown anywhere, become a clean JSON error with their status.
+        $exceptions->render(fn (\App\Exceptions\UserFacingException $e) => \App\Helpers\ApiResponse::fromException($e));
     })->create();

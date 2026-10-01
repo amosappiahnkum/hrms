@@ -250,5 +250,27 @@
         "permissions": [
             "manage-certifications"
         ]
+    },
+    {
+        "roles": [
+            "hr",
+            "training_officer"
+        ],
+        "group": "Training Plan",
+        "permissions": [
+            "view-training-plan",
+            "prepare-training-plan"
+        ]
+    },
+    {
+        "roles": [
+            "hr"
+        ],
+        "group": "Competency",
+        "permissions": [
+            "view-competencies",
+            "assess-competencies",
+            "manage-competencies"
+        ]
     }
 ]

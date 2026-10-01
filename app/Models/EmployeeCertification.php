@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Traits\RecordsActivity;
 use App\Models\SelfService\Employee;
+use App\Models\TrainingPlan\TrainingPlanItem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -15,6 +16,7 @@ class EmployeeCertification extends Model
 
     protected $fillable = [
         'employee_id',
+        'training_plan_item_id',
         'certification_provider_id',
         'title',
         'description',
@@ -37,6 +39,11 @@ class EmployeeCertification extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function trainingPlanItem(): BelongsTo
+    {
+        return $this->belongsTo(TrainingPlanItem::class);
     }
 
     public function provider(): BelongsTo

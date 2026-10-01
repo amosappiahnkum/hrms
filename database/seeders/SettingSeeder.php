@@ -47,19 +47,23 @@ class SettingSeeder extends Seeder
         $service->setDefault('features.training.quiz', true, 'training');
         $service->setDefault('features.training.previous_ranks', true, 'training');
         $service->setDefault('features.training.previous_positions', true, 'training');
+        $service->setDefault('features.training_plan.enabled', true, 'training');
+        $service->setDefault('features.training_plan.require_different_approvers', true, 'training');
+
+        // === COMPETENCY MATRIX ===
+        $service->setDefault('features.competency.enabled', true, 'competency');
+        // Months until an employee is due for reassessment (procedure: periodic review).
+        $service->setDefault('competency.review_interval_months', 12, 'competency');
 
         // === ANNOUNCEMENTS ===
         $service->setDefault('features.announcements.enabled', true, 'announcements');
-        $service->setDefault('features.recruitment.enabled', true, 'recruitment');
 
-        // === TALENT ACQUISITION ===
-        $service->setDefault('features.talent_acquisition.enabled', true, 'talent_acquisition');
-        $service->setDefault('features.talent_acquisition.job_postings', true, 'talent_acquisition');
-        $service->setDefault('features.talent_acquisition.candidates', true, 'talent_acquisition');
-        $service->setDefault('features.talent_acquisition.interviews', true, 'talent_acquisition');
-        $service->setDefault('features.talent_acquisition.public_portal', true, 'talent_acquisition');
-        $service->setDefault('features.talent_acquisition.feedback', true, 'talent_acquisition');
-        $service->setDefault('features.talent_acquisition.evaluation', true, 'talent_acquisition');
+        // === RECRUITMENT (shown as "Talent Acquisition" in the app) ===
+        $service->setDefault('features.recruitment.enabled', true, 'recruitment');
+        $service->setDefault('features.recruitment.public_portal', true, 'recruitment');
+        $service->setDefault('features.recruitment.job_postings', true, 'recruitment');
+        $service->setDefault('features.recruitment.candidates', true, 'recruitment');
+        $service->setDefault('features.recruitment.interviews', true, 'recruitment');
 
         // === SELF-SERVICE ===
         $service->setDefault('features.self_service.enabled', true, 'self_service');

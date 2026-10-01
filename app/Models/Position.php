@@ -12,6 +12,12 @@ class Position extends ApplicationModel
 
     protected $fillable = ['name'];
 
+    /** The competency levels this position requires. */
+    public function competencyRequirements(): HasMany
+    {
+        return $this->hasMany(\App\Models\Competency\PositionCompetency::class);
+    }
+
     public function jobDetails(): HasMany
     {
         return $this->hasMany(JobDetail::class);

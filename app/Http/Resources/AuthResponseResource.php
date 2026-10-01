@@ -38,6 +38,7 @@ class AuthResponseResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'uuid' => $this->uuid,
             'info' => [
                 "id" => $this->employee?->uuid,
                 "title" => $this->employee?->title,

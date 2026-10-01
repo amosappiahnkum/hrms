@@ -25,9 +25,10 @@ class LeaveManagementController extends Controller
         if ($this->isHr() || $this->isSupervisor()) {
             if ($this->isHr() && $this->isSupervisor()) {
                 $leaveRequestQuery = LeaveRequest::query();
+                // Grouped, so the filter can't widen the list beyond their own team.
                 $leaveRequestQuery->when($request->has('hr_status'), function ($q) use ($request) {
-                    return $q->where('hr_status', strtolower($request->hr_status))
-                        ->orWhere('status', strtolower($request->hr_status));
+                    return $q->where(fn ($w) => $w->where('hr_status', strtolower($request->hr_status))
+                        ->orWhereIn('status', $this->statusesFor(strtolower($request->hr_status))));
                 });
 
                 $leaveRequestQuery->where('supervisor_id', Auth::user()->employee->id);
@@ -41,14 +42,15 @@ class LeaveManagementController extends Controller
                     return $q->where('hr_status', strtolower($request->hr_status));
                 });
 
-                $leaveRequestQuery->where('status', 'approved');
+                // Requests that have reached HR: approved by the HOD, or already decided by HR.
+                $leaveRequestQuery->whereIn('status', ['hod_approved', 'hr_approved', 'hr_rejected']);
                 return LeaveRequestResource::collection($leaveRequestQuery->paginate(10));
             }
 
             if ($this->isSupervisor()) {
                 $leaveRequestQuery = LeaveRequest::query();
                 $leaveRequestQuery->when($request->has('hr_status'), function ($q) use ($request) {
-                    return $q->where('status', strtolower($request->hr_status));
+                    return $q->whereIn('status', $this->statusesFor(strtolower($request->hr_status)));
                 });
 
                 $leaveRequestQuery->where('supervisor_id', Auth::user()->employee->id);
@@ -61,6 +63,17 @@ class LeaveManagementController extends Controller
             'status' => 'error',
             'message' => 'Not enough permissions'
         ], 400);
+    }
+
+    /** The workflow statuses behind a simple pending/approved/rejected filter, from the HOD's point of view. */
+    private function statusesFor(string $filter): array
+    {
+        return match ($filter) {
+            'pending'  => ['pending'],
+            'approved' => ['hod_approved', 'hr_approved', 'hr_rejected'],
+            'rejected' => ['hod_rejected'],
+            default    => [$filter],
+        };
     }
 
     public function getEmployeeLeaveBalances(Request $request): JsonResponse

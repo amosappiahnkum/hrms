@@ -177,7 +177,8 @@ class CourseController extends Controller
     public function assign(Request $request, Course $course): JsonResponse
     {
         $request->validate([
-            'assignments' => ['required', 'array', 'min:1'],
+            // Empty means the course isn't assigned to anyone (yet).
+            'assignments' => ['present', 'array'],
             'assignments.*.scope_type' => ['required', 'in:all,department,job_category,role,employee'],
             'assignments.*.scope_ids' => ['nullable', 'array'],
             'assignments.*.due_date' => ['nullable', 'date'],

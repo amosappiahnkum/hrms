@@ -28,7 +28,7 @@ class UpdateDepartmentRequest extends FormRequest
         $department = Department::where('uuid', $this->route('department'))->first();
 
         return [
-            'name' => ['nullable', 'string', Rule::unique('departments')->ignore($department)],
+            'name' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('departments')->ignore($department)->whereNull('deleted_at')],
             'hod' => ['nullable', 'string', 'exists:employees,uuid'],
             'parent_department_id' => ['nullable', 'string', 'exists:departments,uuid'],
         ];

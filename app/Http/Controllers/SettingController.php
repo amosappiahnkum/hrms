@@ -60,10 +60,17 @@ class SettingController extends Controller
                 return [$key => $value];
             });
 
+        // Lets the public careers pages show "applications closed" instead of failing requests.
+        $portal = Setting::query()
+            ->whereIn('key', ['features.recruitment.enabled', 'features.recruitment.public_portal'])
+            ->pluck('value', 'key');
+
         return response()->json([
             'data' => [
                 ...$grouped->toArray(),
                 'company' => $company->toArray(),
+                'recruitment_portal_open' => (bool) ($portal['features.recruitment.enabled'] ?? false)
+                    && (bool) ($portal['features.recruitment.public_portal'] ?? false),
             ],
         ]);
     }
@@ -98,24 +105,46 @@ class SettingController extends Controller
     }
 
     // Feature flags
+    /** Every feature flag with its module, for the super-admin feature toggle screen. */
     public function indexFeatures(): JsonResponse
     {
-        return response()->json([
-            'data' => $this->settings->features(),
-        ]);
+        $flags = Setting::query()
+            ->where('key', 'like', 'features.%')
+            ->orderBy('key')
+            ->get()
+            ->map(function (Setting $setting) {
+                $key = substr($setting->key, strlen('features.'));
+                [$module, $name] = array_pad(explode('.', $key, 2), 2, 'enabled');
+
+                return [
+                    'key'         => $key,
+                    'module'      => $module,
+                    'name'        => $name,
+                    'enabled'     => (bool) $setting->value,
+                    'description' => $setting->description,
+                ];
+            })
+            ->values();
+
+        return response()->json(['data' => $flags]);
     }
 
     public function updateFeature(Request $request, string $key): JsonResponse
     {
-        if (!$this->hasRole('super-admin')) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
         $validated = $request->validate([
             'enabled' => ['required', 'boolean'],
         ]);
 
+        // Only existing flags can be switched; a typo must not create a new one.
+        abort_unless(Setting::where('key', "features.{$key}")->exists(), 404, 'Unknown feature.');
+
         $this->settings->set("features.{$key}", $validated['enabled']);
+
+        activity('security')
+            ->causedBy($request->user())
+            ->event('feature_toggled')
+            ->withProperties(['feature' => $key, 'enabled' => $validated['enabled']])
+            ->log(($validated['enabled'] ? 'Enabled' : 'Disabled') . " feature {$key}");
 
         return response()->json([
             'data' => [

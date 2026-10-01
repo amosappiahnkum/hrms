@@ -11,17 +11,18 @@ Route::middleware('feature:recruitment.enabled')->prefix('recruitment')->group(f
 
     // Job Openings
     Route::apiResource('job-openings', JobOpeningController::class)
+        ->middleware('feature:recruitment.job_postings')
         ->middlewareFor(['index', 'show'], 'permission:view-job-opening')
         ->middlewareFor('store', 'permission:add-job-opening')
         ->middlewareFor('update', 'permission:edit-job-opening')
         ->middlewareFor('destroy', 'permission:delete-job-opening');
-    Route::middleware('permission:edit-job-opening')->group(function () {
+    Route::middleware(['feature:recruitment.job_postings', 'permission:edit-job-opening'])->group(function () {
         Route::post('job-openings/{jobOpening}/publish', [JobOpeningController::class, 'publish']);
         Route::post('job-openings/{jobOpening}/close', [JobOpeningController::class, 'close']);
     });
 
     // Candidates
-    Route::middleware('permission:manage-candidates')->group(function () {
+    Route::middleware(['feature:recruitment.candidates', 'permission:manage-candidates'])->group(function () {
         Route::apiResource('candidates', CandidateController::class);
         Route::get('candidates/{candidate}/experiences', [CandidateController::class, 'experiences']);
         Route::get('candidates/{candidate}/qualifications', [CandidateController::class, 'qualifications']);
@@ -41,7 +42,7 @@ Route::middleware('feature:recruitment.enabled')->prefix('recruitment')->group(f
         ->post('applications/{application}/hire', [ApplicationController::class, 'hire']);
 
     // Interviews (nested under application for create/list, standalone for detail)
-    Route::middleware('permission:schedule-interview')->group(function () {
+    Route::middleware(['feature:recruitment.interviews', 'permission:schedule-interview'])->group(function () {
         Route::get('interviews', [InterviewController::class, 'all']);
         Route::get('applications/{application}/interviews', [InterviewController::class, 'index']);
         Route::post('applications/{application}/interviews', [InterviewController::class, 'store']);

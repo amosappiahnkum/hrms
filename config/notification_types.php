@@ -121,4 +121,24 @@ return [
             ],
         ],
     ],
+
+    'training_plan' => [
+        'label'       => 'Training Plan',
+        'description' => 'Training plan approvals and upcoming planned trainings.',
+        'icon'        => 'training',
+        'types'       => [
+            'training_plan_approval' => [
+                'label'          => 'Training Plan Approvals',
+                'description'    => 'When a training plan or training needs your validation or approval, or when yours is approved or rejected.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'training_plan_reminder' => [
+                'label'          => 'Upcoming Training Reminder',
+                'description'    => 'Reminders before a planned training starts, and when a past training still needs its status updated.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+        ],
+    ],
 ];

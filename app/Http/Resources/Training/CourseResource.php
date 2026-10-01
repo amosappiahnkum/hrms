@@ -36,6 +36,7 @@ class CourseResource extends JsonResource
                     'id' => $a->id,
                     'scope_type' => $a->scope_type,
                     'scope_ids' => $a->scope_ids,
+                    'targets' => $a->targets(),
                     'due_date' => $a->due_date?->toDateTimeString(),
                 ])->values()
             ),

@@ -21,3 +21,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('leave:send-resumption-reminders')->dailyAt('08:00');
 Schedule::command('certifications:send-expiry-reminders')->dailyAt('08:00');
+Schedule::command('training-plan:send-reminders')->dailyAt('08:00');

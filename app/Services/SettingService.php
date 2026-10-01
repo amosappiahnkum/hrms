@@ -33,28 +33,25 @@ class SettingService
             ?->value ?? $default;
     }
 
+    /**
+     * Set a setting's value. Group, description and visibility are only changed when passed,
+     * so toggling a value never wipes them.
+     */
     public function set(
         string  $key,
         mixed   $value,
         ?string $group = null,
         ?string $description = null,
-        bool    $isPublic = false
+        ?bool   $isPublic = null
     ): Setting
     {
+        $attributes = array_filter([
+            'group'       => $group,
+            'description' => $description,
+            'is_public'   => $isPublic,
+        ], fn ($v) => $v !== null);
 
-        $setting = Setting::updateOrCreate(
-            ['key' => $key],
-            [
-
-                'value' => $value,
-
-                'group' => $group,
-
-                'description' => $description,
-
-                'is_public' => $isPublic,
-            ]
-        );
+        $setting = Setting::updateOrCreate(['key' => $key], ['value' => $value] + $attributes);
 
         $this->refreshCache();
 

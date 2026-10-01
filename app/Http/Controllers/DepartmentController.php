@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\UserFacingException;
 use App\Helpers\ApiResponse;
 use App\Http\Requests\StoreDepartmentRequest;
 use App\Http\Requests\UpdateDepartmentRequest;
@@ -27,21 +28,29 @@ class DepartmentController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $departments = Department::withCount('children');
+        $departments = Department::query()
+            ->with(['headOfDepartment', 'parent'])
+            ->withCount(['children', 'employees'])
+            ->when($request->filled('search'), fn ($q) => $q->where('name', 'LIKE', "%{$request->query('search')}%"))
+            ->when($request->filled('parent_id'), fn ($q) => $request->parent_id === 'root'
+                ? $q->whereNull('parent_department_id')
+                : $q->whereHas('parent', fn ($p) => $p->where('uuid', $request->parent_id)))
+            ->orderBy('name');
 
-        if ($request->filled('search')) {
-            $departments->where('name', 'LIKE', "%{$request->query('search')}%");
-        }
+        return DepartmentResource::collection($departments->paginate($request->integer('per_page', 10)));
+    }
 
-        if ($request->filled('parent_id')) {
-            if ($request->parent_id === 'root') {
-                $departments->whereNull('parent_department_id');
-            } else {
-                $departments->whereHas('parent', fn($q) => $q->where('uuid', $request->parent_id));
-            }
-        }
+    /** One department, with its ancestors (`path`, top level first) for breadcrumbs. */
+    public function show(string $uuid): DepartmentResource
+    {
+        $department = Department::with(['headOfDepartment', 'parent'])
+            ->withCount(['children', 'employees'])
+            ->where('uuid', $uuid)
+            ->firstOrFail();
 
-        return DepartmentResource::collection($departments->paginate($request->per_page ?? 10));
+        return (new DepartmentResource($department))->additional(['path' => $department->ancestors()
+            ->map(fn (Department $d) => ['uuid' => $d->uuid, 'name' => $d->name])
+            ->values()]);
     }
 
     public function searchDepartments(Request $request): AnonymousResourceCollection
@@ -119,7 +128,7 @@ class DepartmentController extends Controller
 
             DB::commit();
 
-            return new DepartmentResource($department->fresh()->loadCount('children'));
+            return new DepartmentResource($department->fresh(['headOfDepartment', 'parent'])->loadCount(['children', 'employees']));
 
         } catch (Exception $exception) {
 
@@ -148,14 +157,17 @@ class DepartmentController extends Controller
 
             $data = $request->validated();
 
-            // Resolve parent department UUID → ID
-            if (!empty($data['parent_department_id'])) {
-                $parent = Department::where('uuid', $data['parent_department_id'])
-                    ->where('id', '!=', $department->id)
-                    ->firstOrFail();
-                $data['parent_department_id'] = $parent->id;
-            } else {
-                $data['parent_department_id'] = null;
+            // The parent changes only when it is sent: editing the name must not move a sub-department.
+            if ($request->exists('parent_department_id')) {
+                $parent = !empty($data['parent_department_id'])
+                    ? Department::where('uuid', $data['parent_department_id'])->firstOrFail()
+                    : null;
+
+                if ($parent && ($parent->id === $department->id || $parent->ancestors()->contains('id', $department->id))) {
+                    throw new UserFacingException("{$department->name} can't be placed under itself or one of its sub-departments.");
+                }
+
+                $data['parent_department_id'] = $parent?->id;
             }
 
             // Only process HOD if provided in request
@@ -204,7 +216,7 @@ class DepartmentController extends Controller
 
             DB::commit();
 
-            return new DepartmentResource($department->fresh()->loadCount('children'));
+            return new DepartmentResource($department->fresh(['headOfDepartment', 'parent'])->loadCount(['children', 'employees']));
 
         } catch (Exception $exception) {
             DB::rollBack();
@@ -219,20 +231,19 @@ class DepartmentController extends Controller
      * @param Department $department
      * @return JsonResponse
      */
-    public function destroy(Department $department)
+    public function destroy(string $uuid): JsonResponse
     {
-        $totalEmployees = $department->employees()->count();
+        $department = Department::withCount(['children', 'employees'])->where('uuid', $uuid)->firstOrFail();
 
-        if ($totalEmployees > 0) {
-            return response()->json([
-                'success' => false,
-                'message' => "You can't delete this department because it has employees."
-            ], 400);
+        if ($department->employees_count > 0) {
+            throw new UserFacingException("You can't delete {$department->name} because it has employees.");
         }
 
-        $uuid = $department->uuid;
-        $name = $department->name;
+        if ($department->children_count > 0) {
+            throw new UserFacingException("You can't delete {$department->name} because it has sub-departments. Move or delete them first.");
+        }
 
+        $name = $department->name;
         $department->delete();
 
         activity('departments')->log("Deleted department: {$name}");
