@@ -4,6 +4,7 @@ namespace App\Models\TrainingPlan;
 
 use App\Enums\TrainingPlan\TrainingNature;
 use App\Models\AppModel;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -15,7 +16,7 @@ class TrainingCatalogueItem extends AppModel
     protected $fillable = [
         'title',
         'nature',
-        'domain',
+        'training_domain_id',
         'default_days',
         'estimated_cost',
         'trainer',
@@ -27,6 +28,11 @@ class TrainingCatalogueItem extends AppModel
         'default_days'   => 'decimal:1',
         'estimated_cost' => 'decimal:2',
     ];
+
+    public function domain(): BelongsTo
+    {
+        return $this->belongsTo(TrainingDomain::class, 'training_domain_id');
+    }
 
     public function planItems(): HasMany
     {

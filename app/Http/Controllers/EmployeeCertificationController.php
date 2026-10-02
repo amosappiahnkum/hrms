@@ -261,6 +261,12 @@ class EmployeeCertificationController extends Controller
             return null;
         }
 
+        if (!feature('training_plan.enabled')) {
+            throw ValidationException::withMessages([
+                'training_plan_item_uuid' => 'Training plans are switched off, so a certificate can\'t be linked to one.',
+            ]);
+        }
+
         $training = TrainingPlanItem::where('uuid', $uuid)->with('plan')->first();
 
         if (!$training || (int) $training->employee_id !== (int) $employee->id) {

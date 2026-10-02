@@ -98,6 +98,10 @@ class DevelopmentActionController extends Controller
             return null;
         }
 
+        if (!feature('training_plan.enabled')) {
+            throw new UserFacingException('Training plans are switched off, so this action can\'t be linked to a planned training.');
+        }
+
         $item = TrainingPlanItem::where('uuid', $uuid)->first();
         if (!$item || $item->employee_id !== $employeeId) {
             throw new UserFacingException('That training is not planned for this employee.');

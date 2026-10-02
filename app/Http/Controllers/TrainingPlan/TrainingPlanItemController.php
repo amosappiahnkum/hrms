@@ -15,8 +15,11 @@ use App\Http\Resources\TrainingPlan\MyTrainingPlanItemResource;
 use App\Http\Resources\TrainingPlan\TrainingPlanItemResource;
 use App\Models\SelfService\Employee;
 use App\Models\TrainingPlan\TrainingCatalogueItem;
+use App\Models\TrainingPlan\TrainingDomain;
 use App\Models\TrainingPlan\TrainingPlan;
 use App\Models\TrainingPlan\TrainingPlanItem;
+use App\Services\TrainingPlan\TrainingPlanAccess;
+use Illuminate\Support\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -28,9 +31,11 @@ use Illuminate\Validation\Rule;
 class TrainingPlanItemController extends Controller
 {
     private const RELATIONS = [
-        'employee.department', 'catalogueItem', 'certifications', 'plan',
-        'preparer', 'validator', 'approver', 'rejecter',
+        'employee.department', 'catalogueItem', 'domain', 'certifications', 'plan',
+        'preparer', 'approver', 'rejecter', 'creator.employee',
     ];
+
+    public function __construct(private readonly TrainingPlanAccess $access) {}
 
     /** The plan's lines, one per trainee. `training` narrows them to one training (see trainings()). */
     public function index(Request $request, TrainingPlan $trainingPlan): AnonymousResourceCollection
@@ -53,7 +58,7 @@ class TrainingPlanItemController extends Controller
             ->selectRaw("
                 training_catalogue_item_id,
                 CASE WHEN training_catalogue_item_id IS NULL THEN title END AS custom_title,
-                MIN(title) AS title, MIN(nature) AS nature, MIN(domain) AS domain,
+                MIN(title) AS title, MIN(nature) AS nature, MIN(training_domain_id) AS training_domain_id,
                 COUNT(*) AS trainees,
                 SUM(status = 'completed') AS completed,
                 SUM(status IN ('cancelled', 'failed')) AS dropped,
@@ -73,8 +78,11 @@ class TrainingPlanItemController extends Controller
         $catalogue = TrainingCatalogueItem::withTrashed()
             ->whereIn('id', collect($groups->items())->pluck('training_catalogue_item_id')->filter())
             ->pluck('uuid', 'id');
+        $domains = TrainingDomain::withTrashed()
+            ->whereIn('id', collect($groups->items())->pluck('training_domain_id')->filter())
+            ->pluck('name', 'id');
 
-        $groups->through(function ($g) use ($catalogue) {
+        $groups->through(function ($g) use ($catalogue, $domains) {
             $catalogueUuid = $g->training_catalogue_item_id ? $catalogue[$g->training_catalogue_item_id] ?? null : null;
             $option = fn (?\BackedEnum $e) => $e ? ['value' => $e->value, 'label' => $e->label()] : null;
 
@@ -83,7 +91,7 @@ class TrainingPlanItemController extends Controller
                 'catalogue_item_uuid' => $catalogueUuid,
                 'title'               => $g->title,
                 'nature'              => $option(TrainingNature::tryFrom((string) $g->nature)),
-                'domain'              => $g->domain,
+                'domain'              => $g->training_domain_id ? $domains[$g->training_domain_id] ?? null : null,
                 'quarters'            => array_values(array_filter(explode(',', (string) $g->quarters))),
                 'starts'              => $g->starts ? Carbon::parse($g->starts)->toDateString() : null,
                 'ends'                => $g->ends ? Carbon::parse($g->ends)->toDateString() : null,
@@ -115,14 +123,15 @@ class TrainingPlanItemController extends Controller
      */
     public function addTrainees(Request $request, TrainingPlan $trainingPlan): JsonResponse
     {
-        $this->ensurePlanning($trainingPlan, 'add trainees');
-
         $request->validate([
             'training'         => ['required', 'string'],
             'employee_uuids'   => ['required', 'array', 'min:1', 'max:500'],
             'employee_uuids.*' => ['distinct', 'string', Rule::exists('employees', 'uuid')->whereNull('deleted_at')],
             'category'         => ['nullable', Rule::enum(PersonnelCategory::class)],
         ]);
+
+        $employees = Employee::whereIn('uuid', $request->employee_uuids)->get(['id', 'uuid', 'first_name', 'middle_name', 'last_name']);
+        $this->authorizeChange($request, $trainingPlan, $employees->pluck('id'), 'add trainees');
 
         $template = $this->forTraining($trainingPlan->items(), $request->training)->oldest('id')->first();
         abort_unless($template, 404, 'That training is not in this plan.');
@@ -133,8 +142,6 @@ class TrainingPlanItemController extends Controller
             $data['category'] = $request->category;
         }
 
-        $employees = Employee::whereIn('uuid', $request->employee_uuids)->get(['id', 'uuid', 'first_name', 'middle_name', 'last_name']);
-
         return $this->createFor($trainingPlan, $data, $employees);
     }
 
@@ -144,7 +151,7 @@ class TrainingPlanItemController extends Controller
         $request->validate(['employee_uuid' => ['required', 'string', 'exists:employees,uuid']]);
 
         $items = TrainingPlanItem::query()
-            ->with(['plan', 'catalogueItem'])
+            ->with(['plan', 'catalogueItem', 'domain'])
             ->approved()
             ->whereHas('employee', fn ($q) => $q->where('uuid', $request->employee_uuid))
             ->orderByRaw("CASE WHEN status = 'completed' THEN 0 ELSE 1 END")
@@ -171,7 +178,7 @@ class TrainingPlanItemController extends Controller
         $years = TrainingPlan::whereHas('items', $mine)->orderByDesc('year')->pluck('year');
 
         $items = TrainingPlanItem::query()->tap($mine)->whereHas('plan')
-            ->with(['plan', 'certifications'])
+            ->with(['plan', 'domain', 'certifications'])
             ->when($request->year, fn ($q, $year) => $q->whereHas('plan', fn ($p) => $p->where('year', $year)))
             ->orderBy('quarter')
             ->orderByRaw('planned_start_date IS NULL, planned_start_date')
@@ -185,8 +192,7 @@ class TrainingPlanItemController extends Controller
 
     public function store(Request $request, TrainingPlan $trainingPlan): JsonResponse
     {
-        $this->ensurePlanning($trainingPlan, 'add trainings');
-
+        $this->ensureFromCatalogue($request, true);
         $data = $this->withCatalogueDefaults($this->validated($request)) + ['cost' => 0];
         $this->ensureDatesFit($data, $trainingPlan);
 
@@ -195,6 +201,7 @@ class TrainingPlanItemController extends Controller
             ->whereIn('uuid', $request->input('employee_uuids', array_filter([$request->input('employee_uuid')])))
             ->get(['id', 'uuid', 'first_name', 'middle_name', 'last_name']);
         unset($data['employee_id']);
+        $this->authorizeChange($request, $trainingPlan, $employees->pluck('id'), 'add trainings');
 
         return $this->createFor($trainingPlan, $data, $employees);
     }
@@ -237,6 +244,15 @@ class TrainingPlanItemController extends Controller
         $plan = $trainingPlanItem->plan;
         $data = $this->validated($request, $trainingPlanItem);
 
+        if (!$this->access->canPrepare($request->user())) {
+            // Heads of department change what is planned for their staff; progress is HR's.
+            if (array_intersect_key($data, array_flip(['status', 'completed_at']))) {
+                throw new UserFacingException('Only HR updates the status of a training.', 403);
+            }
+            $this->authorizeChange($request, $plan, collect([$trainingPlanItem->employee_id, $data['employee_id'] ?? null])->filter(), 'change trainings', $trainingPlanItem);
+            $this->ensureFromCatalogue($request, !$trainingPlanItem->training_catalogue_item_id);
+        }
+
         // Re-copy catalogue details only when switching to a different catalogue training.
         if (array_key_exists('training_catalogue_item_id', $data)
             && (int) $data['training_catalogue_item_id'] !== (int) $trainingPlanItem->training_catalogue_item_id) {
@@ -265,8 +281,6 @@ class TrainingPlanItemController extends Controller
                 'approval_status' => ApprovalStatus::DRAFT,
                 'approved_by'     => null,
                 'approved_at'     => null,
-                'validated_by'    => null,
-                'validated_at'    => null,
             ];
         }
 
@@ -278,9 +292,9 @@ class TrainingPlanItemController extends Controller
         );
     }
 
-    public function destroy(TrainingPlanItem $trainingPlanItem): JsonResponse
+    public function destroy(Request $request, TrainingPlanItem $trainingPlanItem): JsonResponse
     {
-        $this->ensurePlanning($trainingPlanItem->plan, 'remove trainings');
+        $this->authorizeChange($request, $trainingPlanItem->plan, collect([$trainingPlanItem->employee_id]), 'remove trainings', $trainingPlanItem);
 
         // Approved trainees can be removed during a revision, but a certificate ties the training
         // to the employee's record, so that one is kept (cancel it instead).
@@ -296,7 +310,7 @@ class TrainingPlanItemController extends Controller
     /** The list filters, shared by the lines and the grouped trainings. */
     private function filtered($query, Request $request)
     {
-        return $query
+        return $this->access->scopeItems($query, $request->user())
             ->when($request->training, fn ($q, $key) => $this->forTraining($q, $key))
             ->when($request->search, fn ($q, $v) => $q->where(fn ($q) => $q->where('title', 'like', "%{$v}%")
                 ->orWhereHas('employee', fn ($e) => $e->search($v))))
@@ -319,6 +333,73 @@ class TrainingPlanItemController extends Controller
             'title'     => $query->whereNull('training_catalogue_item_id')->where('title', $value),
             default     => $query->whereRaw('1 = 0'),
         };
+    }
+
+    /** A head of department's staff, to pick trainees from. */
+    public function teamEmployees(Request $request): JsonResponse
+    {
+        $request->validate(['search' => ['nullable', 'string', 'max:100']]);
+
+        $employees = $this->access->team($request->user())
+            ->with('department')
+            ->when($request->search, fn ($q, $v) => $q->search($v))
+            ->orderBy('first_name')
+            ->limit(50)
+            ->get();
+
+        return ApiResponse::success($employees->map(fn (Employee $e) => [
+            'uuid'       => $e->uuid,
+            'name'       => $e->name,
+            'department' => $e->department?->name,
+        ])->values());
+    }
+
+    /**
+     * HR adds, changes and removes trainings while the plan is being prepared. Heads of department
+     * do so only for their own staff, only while the plan is collecting, and not for trainings
+     * already approved (a revision is HR's).
+     */
+    private function authorizeChange(Request $request, TrainingPlan $plan, Collection $employeeIds, string $action, ?TrainingPlanItem $item = null): void
+    {
+        $user = $request->user();
+
+        if ($this->access->canPrepare($user)) {
+            $this->ensurePlanning($plan, $action);
+            return;
+        }
+
+        if (!$plan->isCollecting()) {
+            throw new UserFacingException("The plan is not open for training needs, so you can't {$action}. Ask HR to open it.", 403);
+        }
+
+        if ($item?->isApproved()) {
+            throw new UserFacingException('This training is already approved. Ask HR to change it.', 403);
+        }
+
+        if ($employeeIds->isEmpty() || !$this->access->leadsAll($user, $employeeIds)) {
+            throw new UserFacingException('You can only plan trainings for staff in the departments you head.', 403);
+        }
+    }
+
+    /**
+     * Only HR plans trainings that are not in the catalogue (and adds to the catalogue). Others pick
+     * a catalogue training, whose title, nature and domain come with it. `$required`: the request
+     * must name one (adding, or changing a line that has none).
+     */
+    private function ensureFromCatalogue(Request $request, bool $required): void
+    {
+        if ($this->access->canPrepare($request->user())) {
+            return;
+        }
+
+        $clearing = $request->exists('training_catalogue_item_uuid') && !$request->filled('training_catalogue_item_uuid');
+        $missing = $required && !$request->filled('training_catalogue_item_uuid');
+
+        if ($clearing || $missing || $request->hasAny(['title', 'nature', 'domain_uuid'])) {
+            throw ValidationException::withMessages([
+                'training_catalogue_item_uuid' => 'Pick a training from the catalogue. Ask HR to add one that is missing.',
+            ]);
+        }
     }
 
     /** Trainings are added, changed or removed only while the plan is a draft or returned for changes. */
@@ -374,7 +455,7 @@ class TrainingPlanItemController extends Controller
             'training_catalogue_item_uuid' => ['nullable', 'string', Rule::exists('training_catalogue_items', 'uuid')->whereNull('deleted_at')],
             'title'                        => [$item || $fromCatalogue ? 'sometimes' : 'required', 'string', 'max:255'],
             'nature'                       => [$item || $fromCatalogue ? 'sometimes' : 'required', Rule::enum(TrainingNature::class)],
-            'domain'                       => ['nullable', 'string', 'max:100'],
+            'domain_uuid'                  => ['nullable', 'string', Rule::exists('training_domains', 'uuid')->whereNull('deleted_at')],
             'category'                     => [$required, Rule::enum(PersonnelCategory::class)],
             'source_of_need'               => ['nullable', Rule::enum(TrainingNeedSource::class)],
             'supporting_record'            => ['nullable', 'string', 'max:100'],
@@ -406,7 +487,7 @@ class TrainingPlanItemController extends Controller
 
         unset($data['employee_uuid'], $data['employee_uuids'], $data['training_catalogue_item_uuid']);
 
-        return $data;
+        return TrainingDomain::resolveUuid($data);
     }
 
     /** Copy title, nature, domain, days, cost and trainer from the chosen catalogue entry when not given. */
@@ -421,12 +502,12 @@ class TrainingPlanItemController extends Controller
         }
 
         return $data + [
-            'title'   => $catalogue->title,
-            'nature'  => $catalogue->nature,
-            'domain'  => $catalogue->domain,
-            'days'    => $catalogue->default_days,
-            'cost'    => $catalogue->estimated_cost ?? 0,
-            'trainer' => $catalogue->trainer,
+            'title'              => $catalogue->title,
+            'nature'             => $catalogue->nature,
+            'training_domain_id' => $catalogue->training_domain_id,
+            'days'               => $catalogue->default_days,
+            'cost'               => $catalogue->estimated_cost ?? 0,
+            'trainer'            => $catalogue->trainer,
         ];
     }
 

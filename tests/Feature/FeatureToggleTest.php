@@ -62,4 +62,19 @@ class FeatureToggleTest extends TestCase
         $this->patchJson('/api/v1/features/does_not.exist', ['enabled' => true])->assertNotFound();
         $this->assertFalse(Setting::where('key', 'features.does_not.exist')->exists());
     }
+
+    public function test_training_plans_and_the_competency_matrix_are_off_until_switched_on(): void
+    {
+        // As a fresh install: the seeder creates both flags switched off.
+        Setting::whereIn('key', ['features.training_plan.enabled', 'features.competency.enabled'])->delete();
+        $this->seed(\Database\Seeders\SettingSeeder::class);
+        app(\App\Services\SettingService::class)->refreshCache();
+
+        $this->assertFalse(feature('training_plan.enabled'));
+        $this->assertFalse(feature('competency.enabled'));
+
+        Sanctum::actingAs($this->userWithRole('super-admin'));
+        $this->getJson('/api/v1/training-plan/plans')->assertForbidden();
+        $this->getJson('/api/v1/competency/competencies')->assertForbidden();
+    }
 }

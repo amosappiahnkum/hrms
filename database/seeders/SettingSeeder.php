@@ -47,11 +47,13 @@ class SettingSeeder extends Seeder
         $service->setDefault('features.training.quiz', true, 'training');
         $service->setDefault('features.training.previous_ranks', true, 'training');
         $service->setDefault('features.training.previous_positions', true, 'training');
-        $service->setDefault('features.training_plan.enabled', true, 'training');
+        // Opt-in: not every organisation plans training this way. Switch on under Feature toggles.
+        $service->setDefault('features.training_plan.enabled', false, 'training');
         $service->setDefault('features.training_plan.require_different_approvers', true, 'training');
 
         // === COMPETENCY MATRIX ===
-        $service->setDefault('features.competency.enabled', true, 'competency');
+        // Opt-in: not every organisation keeps a competency matrix. Switch on under Feature toggles.
+        $service->setDefault('features.competency.enabled', false, 'competency');
         // Months until an employee is due for reassessment (procedure: periodic review).
         $service->setDefault('competency.review_interval_months', 12, 'competency');
 

@@ -129,7 +129,13 @@ return [
         'types'       => [
             'training_plan_approval' => [
                 'label'          => 'Training Plan Approvals',
-                'description'    => 'When a training plan or training needs your validation or approval, or when yours is approved or rejected.',
+                'description'    => 'When a training plan reaches your approval level, or when one you prepared is approved or returned.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'training_plan_collection' => [
+                'label'          => 'Training Needs Requests',
+                'description'    => 'When HR opens the training plan for heads of department to add their staff\'s training needs.',
                 'default_email'  => true,
                 'default_in_app' => true,
             ],

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\TrainingPlan\TrainingNature;
 use App\Models\TrainingPlan\TrainingCatalogueItem;
+use App\Models\TrainingPlan\TrainingDomain;
 use Illuminate\Console\Command;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -86,13 +87,13 @@ class ImportTrainingCatalogue extends Command
             }
 
             TrainingCatalogueItem::create([
-                'title'          => $title,
-                'nature'         => $nature,
-                'domain'         => $value('domain') ?: null,
-                'default_days'   => is_numeric($value('default_days')) ? $value('default_days') : null,
-                'estimated_cost' => is_numeric($value('estimated_cost')) ? $value('estimated_cost') : null,
-                'trainer'        => $value('trainer') ?: null,
-                'location'       => $this->normaliseLocation($value('location')),
+                'title'              => $title,
+                'nature'             => $nature,
+                'training_domain_id' => $this->domainId($value('domain')),
+                'default_days'       => is_numeric($value('default_days')) ? $value('default_days') : null,
+                'estimated_cost'     => is_numeric($value('estimated_cost')) ? $value('estimated_cost') : null,
+                'trainer'            => $value('trainer') ?: null,
+                'location'           => $this->normaliseLocation($value('location')),
             ]);
 
             $existing->put(mb_strtolower($title), true);
@@ -105,6 +106,14 @@ class ImportTrainingCatalogue extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /** The domain with this name, added to the managed list when new. */
+    private function domainId(string $name): ?int
+    {
+        $name = preg_replace('/\s+/', ' ', $name);
+
+        return $name === '' ? null : TrainingDomain::firstOrCreate(['name' => $name])->id;
     }
 
     private function normaliseLocation(string $location): ?string

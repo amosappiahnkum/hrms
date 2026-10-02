@@ -13,7 +13,7 @@ return new class extends Migration
             $table->uuid('uuid')->unique();
             $table->string('title');
             $table->string('nature');
-            $table->string('domain')->nullable();
+            $table->foreignId('training_domain_id')->nullable()->constrained('training_domains')->nullOnDelete();
             $table->decimal('default_days', 5, 1)->nullable();
             $table->decimal('estimated_cost', 12, 2)->nullable();
             $table->string('trainer')->nullable();

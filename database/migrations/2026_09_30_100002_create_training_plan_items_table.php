@@ -18,7 +18,7 @@ return new class extends Migration
             // What is planned (copied from the catalogue, then editable) — changes need approval.
             $table->string('title');
             $table->string('nature');
-            $table->string('domain')->nullable();
+            $table->foreignId('training_domain_id')->nullable()->constrained('training_domains')->nullOnDelete();
             $table->string('category');
             $table->string('source_of_need')->nullable();
             $table->string('supporting_record')->nullable();
@@ -38,8 +38,6 @@ return new class extends Migration
             $table->string('approval_status')->default('draft');
             $table->foreignId('prepared_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('prepared_at')->nullable();
-            $table->foreignId('validated_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamp('validated_at')->nullable();
             $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('approved_at')->nullable();
             $table->foreignId('rejected_by')->nullable()->constrained('users')->nullOnDelete();

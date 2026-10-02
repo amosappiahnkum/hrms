@@ -6,6 +6,7 @@ use App\Models\Config\Department;
 use App\Models\Config\Setting;
 use App\Models\SelfService\Employee;
 use App\Models\User;
+use App\Services\SettingService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Database\Seeders\SettingSeeder;
 use Illuminate\Support\Str;
@@ -25,6 +26,7 @@ trait SetsUpAccess
         foreach ($features as $feature) {
             Setting::updateOrCreate(['key' => "features.{$feature}"], ['value' => true, 'group' => 'features']);
         }
+        app(SettingService::class)->refreshCache();
     }
 
     protected function userWithRole(string $role): User

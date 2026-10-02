@@ -3,14 +3,20 @@
 namespace Tests\Feature;
 
 use App\Models\CertificationProvider;
+use App\Models\Config\Setting;
 use App\Models\Config\Department;
 use App\Models\EmployeeCertification;
 use App\Models\TrainingPlan\TrainingCatalogueItem;
+use App\Models\TrainingPlan\TrainingDomain;
 use App\Models\TrainingPlan\TrainingPlan;
+use App\Models\TrainingPlan\TrainingPlanApprovalLevel;
 use App\Models\TrainingPlan\TrainingPlanItem;
+use App\Models\SelfService\Employee;
+use App\Notifications\TrainingPlanCollectionNotification;
 use App\Models\User;
 use App\Notifications\TrainingPlanApprovalNotification;
 use App\Notifications\TrainingPlanReminderNotification;
+use App\Services\SettingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -38,9 +44,11 @@ class TrainingPlanTest extends TestCase
 
         $this->hr = $this->userWithRole('hr');
         $this->validator = $this->userWithRole('staff');
-        $this->validator->givePermissionTo('validate-training-plan');
         $this->approver = $this->userWithRole('staff');
-        $this->approver->givePermissionTo('approve-training-plan');
+        $this->configureLevels([
+            ['name' => 'Validation', 'rule' => 'any', 'users' => [$this->validator]],
+            ['name' => 'Final approval', 'rule' => 'any', 'users' => [$this->approver]],
+        ]);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -49,7 +57,7 @@ class TrainingPlanTest extends TestCase
     {
         return TrainingCatalogueItem::create($overrides + [
             'title' => 'Magnetic Particle Testing Level II', 'nature' => 'technical_development',
-            'domain' => 'NDE', 'default_days' => 5, 'estimated_cost' => 2000, 'trainer' => 'Bultest & Co',
+            'training_domain_id' => TrainingDomain::firstOrCreate(['name' => 'NDE'])->id, 'default_days' => 5, 'estimated_cost' => 2000, 'trainer' => 'Bultest & Co',
         ]);
     }
 
@@ -76,14 +84,66 @@ class TrainingPlanTest extends TestCase
         return TrainingPlanItem::where('uuid', $uuid)->firstOrFail();
     }
 
+    /** Replace the approval levels, through the configuration API. */
+    private function configureLevels(array $levels): void
+    {
+        Sanctum::actingAs($this->hr);
+        foreach (TrainingPlanApprovalLevel::all() as $existing) {
+            $this->deleteJson("/api/v1/training-plan/approval-levels/{$existing->uuid}")->assertOk();
+        }
+        foreach ($levels as $level) {
+            $this->postJson('/api/v1/training-plan/approval-levels', [
+                'name' => $level['name'], 'rule' => $level['rule'],
+                'user_uuids' => collect($level['users'])->pluck('uuid')->all(),
+            ])->assertCreated();
+        }
+    }
+
+    private function signOff(TrainingPlan $plan, User $user)
+    {
+        Sanctum::actingAs($user);
+
+        return $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/sign-off");
+    }
+
     private function approvePlan(TrainingPlan $plan): void
     {
         Sanctum::actingAs($this->hr);
         $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/submit")->assertOk();
-        Sanctum::actingAs($this->validator);
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/validate")->assertOk();
-        Sanctum::actingAs($this->approver);
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/approve")->assertOk();
+        $this->signOff($plan, $this->validator)->assertOk();
+        $this->signOff($plan, $this->approver)->assertOk();
+    }
+
+    /** A head of the given department (a new one when none is given), with a member of staff in it. */
+    private function headOf(?Department $department = null): array
+    {
+        $head = $this->userWithRole('hod');
+        $department ??= Department::create(['name' => 'Dept ' . uniqid()]);
+        $department->update(['hod' => $head->employee_id]);
+        $head->employee->update(['department_id' => $department->id]);
+        $staff = $this->userWithRole('staff')->employee;
+        $staff->update(['department_id' => $department->id]);
+
+        return [$head, $staff->fresh(), $department];
+    }
+
+    private function openCollection(TrainingPlan $plan): void
+    {
+        Sanctum::actingAs($this->hr);
+        $this->putJson("/api/v1/training-plan/plans/{$plan->uuid}/collection", [
+            'starts_on' => today()->toDateString(), 'ends_on' => today()->addWeeks(2)->toDateString(),
+        ])->assertOk();
+    }
+
+    private function needFor(TrainingPlan $plan, Employee $employee, array $overrides = [])
+    {
+        return $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/items", $overrides + [
+            'employee_uuid'                => $employee->uuid,
+            'training_catalogue_item_uuid' => TrainingCatalogueItem::firstOrCreate(['title' => 'Working at height'], ['nature' => 'compulsory'])->uuid,
+            'category'                     => 'technician_technical',
+            'quarter'                      => 'Q2',
+            'delivery'                     => 'external',
+        ]);
     }
 
     // ── Workflow ──────────────────────────────────────────────────────────────
@@ -95,7 +155,7 @@ class TrainingPlanTest extends TestCase
         $item = $this->addItem($plan);
 
         $this->assertStringStartsWith('T ', $item->title, 'title copied from the catalogue');
-        $this->assertSame('NDE', $item->domain);
+        $this->assertSame('NDE', $item->domain->name, 'domain copied from the catalogue');
         $this->assertSame(2000.0, (float) $item->cost, 'cost copied from the catalogue');
         $this->assertSame('draft', $item->approval_status->value);
 
@@ -104,7 +164,8 @@ class TrainingPlanTest extends TestCase
         $plan->refresh();
         $item->refresh();
         $this->assertSame('approved', $plan->approval_status->value);
-        $this->assertSame([$this->hr->id, $this->validator->id, $this->approver->id], [$plan->prepared_by, $plan->validated_by, $plan->approved_by]);
+        $this->assertSame([$this->hr->id, $this->approver->id], [$plan->prepared_by, $plan->approved_by]);
+        $this->assertSame([$this->validator->id, $this->approver->id], $plan->signoffs()->orderBy('level')->pluck('user_id')->all());
         $this->assertSame('approved', $item->approval_status->value);
         $this->assertSame($this->approver->id, $item->approved_by);
 
@@ -115,24 +176,84 @@ class TrainingPlanTest extends TestCase
 
     public function test_each_step_must_be_taken_by_a_different_person(): void
     {
+        $this->configureLevels([
+            ['name' => 'Validation', 'rule' => 'any', 'users' => [$this->hr, $this->validator]],
+            ['name' => 'Final approval', 'rule' => 'any', 'users' => [$this->hr, $this->validator, $this->approver]],
+        ]);
         $plan = $this->createPlan();
         $this->addItem($plan);
-        $this->hr->givePermissionTo(['validate-training-plan', 'approve-training-plan']);
 
         Sanctum::actingAs($this->hr);
         $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/submit")->assertOk();
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/validate")->assertForbidden();
+        $this->signOff($plan, $this->hr)->assertForbidden();
 
-        $this->validator->givePermissionTo('approve-training-plan');
-        Sanctum::actingAs($this->validator);
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/validate")->assertOk();
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/approve")->assertForbidden();
+        $this->signOff($plan, $this->validator)->assertOk();
+        $this->signOff($plan, $this->validator)->assertForbidden();
+        $this->signOff($plan, $this->hr)->assertForbidden();
+
+        $this->signOff($plan, $this->approver)->assertOk();
+        $this->assertSame('approved', $plan->fresh()->approval_status->value);
+    }
+
+    public function test_levels_are_signed_in_order_with_all_or_any_of_their_people(): void
+    {
+        Notification::fake();
+        [$a, $b, $c, $d] = [$this->userWithRole('staff'), $this->userWithRole('staff'), $this->userWithRole('staff'), $this->userWithRole('staff')];
+        $this->configureLevels([
+            ['name' => 'HSE validation', 'rule' => 'all', 'users' => [$a, $b]],
+            ['name' => 'Ops validation', 'rule' => 'any', 'users' => [$c, $d]],
+            ['name' => 'MD approval', 'rule' => 'any', 'users' => [$this->approver]],
+        ]);
+        $plan = $this->createPlan();
+        $this->addItem($plan);
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/submit")->assertOk()
+            ->assertJsonPath('data.approval.status.value', 'pending_validation')
+            ->assertJsonPath('data.levels.0.status', 'current');
+        Notification::assertSentTo([$a, $b], TrainingPlanApprovalNotification::class);
+        Notification::assertNotSentTo($c, TrainingPlanApprovalNotification::class);
+
+        $this->signOff($plan, $c)->assertForbidden(); // not their level yet
+        $this->signOff($plan, $a)->assertOk()->assertJsonPath('data.levels.0.status', 'current');
+        $this->signOff($plan, $b)->assertOk()->assertJsonPath('data.levels.1.status', 'current');
+        Notification::assertSentTo([$c, $d], TrainingPlanApprovalNotification::class);
+
+        $ops = $this->signOff($plan, $d)->assertOk()
+            ->assertJsonPath('data.approval.status.value', 'pending_approval')
+            ->json('data.levels.1.people');
+        $this->assertSame('approved', collect($ops)->firstWhere('uuid', $d->uuid)['decision']);
+        $this->assertNull(collect($ops)->firstWhere('uuid', $c->uuid)['decision']);
+        $this->signOff($plan, $c)->assertForbidden(); // the level is done
+
+        $this->signOff($plan, $this->approver)->assertOk()->assertJsonPath('data.approval.status.value', 'approved');
+    }
+
+    public function test_a_plan_cannot_be_submitted_without_usable_approval_levels(): void
+    {
+        TrainingPlanApprovalLevel::query()->delete();
+        $plan = $this->createPlan();
+        $this->addItem($plan);
 
         Sanctum::actingAs($this->hr);
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/approve")->assertForbidden();
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/submit")->assertStatus(422)
+            ->assertJson(['message' => 'Set up the approval levels (who validates and approves training plans) before submitting.']);
 
-        Sanctum::actingAs($this->approver);
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/approve")->assertOk();
+        $this->configureLevels([['name' => 'HR check', 'rule' => 'any', 'users' => [$this->hr]]]);
+        Sanctum::actingAs($this->hr);
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/submit")->assertStatus(422);
+    }
+
+    public function test_a_submitted_plan_keeps_its_levels_when_the_configuration_changes(): void
+    {
+        $plan = $this->createPlan();
+        $this->addItem($plan);
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/submit")->assertOk();
+
+        $newcomer = $this->userWithRole('staff');
+        $this->configureLevels([['name' => 'Someone else', 'rule' => 'any', 'users' => [$newcomer]]]);
+
+        $this->signOff($plan, $newcomer)->assertForbidden();
+        $this->signOff($plan, $this->validator)->assertOk();
+        $this->signOff($plan, $this->approver)->assertOk();
     }
 
     public function test_an_empty_plan_cannot_be_submitted_and_a_submitted_plan_is_locked(): void
@@ -160,7 +281,9 @@ class TrainingPlanTest extends TestCase
 
         Sanctum::actingAs($this->validator);
         $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/reject")->assertStatus(422);
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/reject", ['comment' => 'Costs too high'])->assertOk();
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/reject", ['comment' => 'Costs too high'])->assertOk()
+            ->assertJsonPath('data.levels.0.status', 'returned')
+            ->assertJsonPath('data.levels.0.people.0.comment', 'Costs too high');
 
         $plan->refresh();
         $this->assertSame('rejected', $plan->approval_status->value);
@@ -172,7 +295,7 @@ class TrainingPlanTest extends TestCase
         $this->assertNull($plan->fresh()->rejection_comment);
     }
 
-    public function test_an_approver_cannot_reject_at_the_validation_stage(): void
+    public function test_only_the_current_levels_people_can_return_the_plan(): void
     {
         $plan = $this->createPlan();
         $this->addItem($plan);
@@ -309,6 +432,35 @@ class TrainingPlanTest extends TestCase
         $this->assertSame(0, EmployeeCertification::count());
     }
 
+    public function test_a_certificate_cannot_be_linked_to_a_training_while_training_plans_are_off(): void
+    {
+        $plan = $this->createPlan();
+        $item = $this->addItem($plan);
+        $this->approvePlan($plan);
+        Setting::where('key', 'features.training_plan.enabled')->update(['value' => false]);
+        app(SettingService::class)->refreshCache();
+
+        $this->uploadCertificate($item)->assertUnprocessable()->assertJsonValidationErrors('training_plan_item_uuid');
+        $this->uploadCertificate($item, ['training_plan_item_uuid' => null])->assertCreated();
+    }
+
+    public function test_reminders_are_not_sent_while_training_plans_are_off(): void
+    {
+        Carbon::setTestNow('2026-09-01 08:00:00');
+        $plan = $this->createPlan();
+        $item = $this->addItem($plan);
+        $this->approvePlan($plan);
+        $item->update(['planned_start_date' => '2026-09-08', 'status' => 'scheduled']);
+        Setting::where('key', 'features.training_plan.enabled')->update(['value' => false]);
+        app(SettingService::class)->refreshCache();
+
+        Notification::fake();
+        $this->artisan('training-plan:send-reminders')->assertSuccessful();
+        Notification::assertNothingSent();
+
+        Carbon::setTestNow();
+    }
+
     public function test_certification_managers_can_list_an_employees_trainings_to_link(): void
     {
         $plan = $this->createPlan();
@@ -365,7 +517,8 @@ class TrainingPlanTest extends TestCase
         $leadership = TrainingCatalogueItem::where('title', 'Advanced Leadership Course Certificate')->firstOrFail();
         $this->assertSame('professional_enhancement', $leadership->nature->value);
         $this->assertSame('Online', $leadership->location);
-        $this->assertSame('HSE', TrainingCatalogueItem::where('title', 'BOSIET')->value('domain'));
+        $this->assertSame('HSE', TrainingCatalogueItem::where('title', 'BOSIET')->first()->domain->name, 'new domain added, spaces trimmed');
+        $this->assertSame(1, TrainingDomain::where('name', 'NDE')->count(), 'existing domain reused');
 
         @unlink($path);
     }
@@ -472,16 +625,19 @@ class TrainingPlanTest extends TestCase
 
         $plan = $this->createPlan();
         $item = $this->addItem($plan);
-        $this->hr->givePermissionTo(['validate-training-plan', 'approve-training-plan']);
+        $this->configureLevels([
+            ['name' => 'Validation', 'rule' => 'any', 'users' => [$this->hr]],
+            ['name' => 'Final approval', 'rule' => 'any', 'users' => [$this->hr]],
+        ]);
 
         Sanctum::actingAs($this->hr);
         $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/submit")->assertOk();
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/validate")->assertOk();
-        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/approve")->assertOk();
+        $this->signOff($plan, $this->hr)->assertOk();
+        $this->signOff($plan, $this->hr)->assertOk();
 
         $plan->refresh();
         $this->assertSame('approved', $plan->approval_status->value);
-        $this->assertSame([$this->hr->id, $this->hr->id, $this->hr->id], [$plan->prepared_by, $plan->validated_by, $plan->approved_by]);
+        $this->assertSame([$this->hr->id, $this->hr->id], [$plan->prepared_by, $plan->approved_by]);
         $this->assertSame('approved', $item->fresh()->approval_status->value);
     }
 
@@ -694,6 +850,7 @@ class TrainingPlanTest extends TestCase
         $this->assertSame(2, $groups[0]['trainees']);
         $this->assertSame(['Q1'], $groups[0]['quarters']);
         $this->assertSame('Bultest & Co', $groups[0]['trainer']);
+        $this->assertSame('NDE', $groups[0]['domain']);
         $this->assertSame('title:Fire drill', $groups[1]['key']);
 
         // One training's trainees
@@ -745,5 +902,201 @@ class TrainingPlanTest extends TestCase
 
         $this->deleteJson("/api/v1/training-plan/items/{$certified->uuid}")->assertStatus(422);
         $this->assertNotSoftDeleted($certified);
+    }
+
+    // ── Domains ───────────────────────────────────────────────────────────────
+
+    public function test_domains_are_managed_and_a_renamed_domain_shows_everywhere(): void
+    {
+        Sanctum::actingAs($this->hr);
+        $uuid = $this->postJson('/api/v1/training-plan/domains', ['name' => '  Rigging '])
+            ->assertCreated()->assertJsonPath('data.name', 'Rigging')->json('data.uuid');
+        $this->postJson('/api/v1/training-plan/domains', ['name' => 'rigging'])->assertUnprocessable();
+
+        $training = $this->postJson('/api/v1/training-plan/catalogue', [
+            'title' => 'Banksman', 'nature' => 'technical_development', 'domain_uuid' => $uuid,
+        ])->assertCreated()->assertJsonPath('data.domain', 'Rigging')->json('data.uuid');
+
+        $this->putJson("/api/v1/training-plan/domains/{$uuid}", ['name' => 'Rigging & Lifting'])->assertOk();
+        $this->getJson("/api/v1/training-plan/catalogue?domain_uuid={$uuid}")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.domain', 'Rigging & Lifting');
+
+        $this->getJson('/api/v1/training-plan/domains')
+            ->assertOk()->assertJsonFragment(['name' => 'Rigging & Lifting', 'catalogue_items_count' => 1]);
+
+        $this->putJson("/api/v1/training-plan/catalogue/{$training}", ['domain_uuid' => null])
+            ->assertOk()->assertJsonPath('data.domain', null);
+    }
+
+    public function test_a_domain_in_use_cannot_be_removed_and_unknown_domains_are_rejected(): void
+    {
+        $item = $this->addItem($this->createPlan());
+
+        $this->deleteJson("/api/v1/training-plan/domains/{$item->domain->uuid}")->assertStatus(422);
+        $this->assertNotSoftDeleted($item->domain);
+
+        $unused = TrainingDomain::create(['name' => 'Unused']);
+        $this->deleteJson("/api/v1/training-plan/domains/{$unused->uuid}")->assertOk();
+        $this->assertSoftDeleted($unused);
+
+        $this->postJson('/api/v1/training-plan/catalogue', [
+            'title' => 'X', 'nature' => 'compulsory', 'domain_uuid' => $unused->uuid,
+        ])->assertUnprocessable()->assertJsonValidationErrors('domain_uuid');
+    }
+
+    public function test_only_preparers_manage_domains(): void
+    {
+        Sanctum::actingAs($this->validator);
+        $this->getJson('/api/v1/training-plan/domains')->assertOk();
+        $this->postJson('/api/v1/training-plan/domains', ['name' => 'HSE'])->assertForbidden();
+
+        Sanctum::actingAs($this->userWithRole('staff'));
+        $this->getJson('/api/v1/training-plan/domains')->assertForbidden();
+    }
+
+    // ── Heads of department ───────────────────────────────────────────────────
+
+    public function test_heads_of_department_add_their_staffs_training_needs_while_the_plan_is_collecting(): void
+    {
+        Notification::fake();
+        $plan = $this->createPlan();
+        [$head, $staff, $department] = $this->headOf();
+        [, $otherStaff] = $this->headOf();
+
+        Sanctum::actingAs($head);
+        $this->needFor($plan, $staff)->assertForbidden(); // not open yet
+
+        $this->openCollection($plan);
+        Notification::assertSentTo($head, TrainingPlanCollectionNotification::class);
+
+        Sanctum::actingAs($head);
+        $this->getJson('/api/v1/training-plan/access')->assertOk()
+            ->assertJsonPath('data.heads_departments', true)->assertJsonPath('data.sees_everything', false);
+        $this->getJson("/api/v1/training-plan/plans/{$plan->uuid}")->assertOk()
+            ->assertJsonPath('data.collection.open', true)->assertJsonPath('data.can.add_trainings', true);
+
+        $this->needFor($plan, $staff)->assertCreated();
+        $this->needFor($plan, $otherStaff)->assertForbidden();
+        $this->needFor($plan, $staff, ['employee_uuids' => [$staff->uuid, $otherStaff->uuid]])->assertForbidden();
+
+        // Sub-departments count as the head's.
+        $sub = Department::create(['name' => 'Sub ' . uniqid(), 'parent_department_id' => $department->id]);
+        $subStaff = $this->userWithRole('staff')->employee;
+        $subStaff->update(['department_id' => $sub->id]);
+        $this->needFor($plan, $subStaff->fresh())->assertCreated();
+
+        // Only HR plans trainings that are not in the catalogue.
+        $manual = ['training_catalogue_item_uuid' => null, 'title' => 'Something new', 'nature' => 'others'];
+        $this->needFor($plan, $staff, $manual)->assertUnprocessable()->assertJsonValidationErrors('training_catalogue_item_uuid');
+        $this->postJson('/api/v1/training-plan/catalogue', ['title' => 'Something new', 'nature' => 'others'])->assertForbidden();
+
+        $uuids = collect($this->getJson('/api/v1/training-plan/team/employees')->assertOk()->json('data'))->pluck('uuid');
+        $this->assertTrue($uuids->contains($staff->uuid) && $uuids->contains($subStaff->uuid));
+        $this->assertFalse($uuids->contains($otherStaff->uuid));
+
+        // HR sees every line, with who added it.
+        Sanctum::actingAs($this->hr);
+        $this->needFor($plan, $otherStaff)->assertCreated();
+        $lines = $this->getJson("/api/v1/training-plan/plans/{$plan->uuid}/items")->assertOk()->assertJsonCount(3, 'data')->json('data');
+        $this->assertSame($head->employee->name, collect($lines)->firstWhere('employee.uuid', $staff->uuid)['added_by']['name']);
+
+        // The head sees only their staff's lines, and not the plan's figures.
+        Sanctum::actingAs($head);
+        $this->getJson("/api/v1/training-plan/plans/{$plan->uuid}/items")->assertOk()->assertJsonCount(2, 'data');
+        $this->getJson("/api/v1/training-plan/plans/{$plan->uuid}/dashboard")->assertForbidden();
+    }
+
+    public function test_heads_of_department_change_their_lines_only_while_collecting_and_never_the_status(): void
+    {
+        $plan = $this->createPlan();
+        [$head, $staff] = $this->headOf();
+        $this->openCollection($plan);
+
+        Sanctum::actingAs($head);
+        $uuid = $this->needFor($plan, $staff)->assertCreated()->json('data.created.0.uuid');
+        $this->putJson("/api/v1/training-plan/items/{$uuid}", ['quarter' => 'Q3'])->assertOk();
+        $this->putJson("/api/v1/training-plan/items/{$uuid}", ['title' => 'Renamed'])->assertUnprocessable();
+        $this->putJson("/api/v1/training-plan/items/{$uuid}", ['training_catalogue_item_uuid' => null])->assertUnprocessable();
+        $this->putJson("/api/v1/training-plan/items/{$uuid}", ['status' => 'completed'])->assertForbidden();
+
+        $hrLine = $this->addItem($plan);
+        Sanctum::actingAs($head);
+        $this->putJson("/api/v1/training-plan/items/{$hrLine->uuid}", ['quarter' => 'Q3'])->assertForbidden();
+        $this->deleteJson("/api/v1/training-plan/items/{$hrLine->uuid}")->assertForbidden();
+
+        Sanctum::actingAs($this->hr);
+        $this->deleteJson("/api/v1/training-plan/plans/{$plan->uuid}/collection")->assertOk()->assertJsonPath('data.collection.open', false);
+
+        Sanctum::actingAs($head);
+        $this->putJson("/api/v1/training-plan/items/{$uuid}", ['quarter' => 'Q4'])->assertForbidden();
+        $this->deleteJson("/api/v1/training-plan/items/{$uuid}")->assertForbidden();
+
+        // HR reviews and changes what heads of department asked for.
+        Sanctum::actingAs($this->hr);
+        $this->putJson("/api/v1/training-plan/items/{$uuid}", ['cost' => 500])->assertOk();
+    }
+
+    public function test_heads_of_department_cannot_add_once_the_plan_is_sent_for_validation(): void
+    {
+        $plan = $this->createPlan();
+        [$head, $staff] = $this->headOf();
+        $this->openCollection($plan);
+        $this->addItem($plan);
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/submit")->assertOk();
+
+        Sanctum::actingAs($head);
+        $this->getJson("/api/v1/training-plan/plans/{$plan->uuid}")->assertOk()->assertJsonPath('data.collection.open', false);
+        $this->needFor($plan, $staff)->assertForbidden();
+        $this->signOff($plan, $head)->assertForbidden();
+    }
+
+    public function test_a_collection_window_needs_valid_dates_and_an_editable_plan(): void
+    {
+        $plan = $this->createPlan();
+        $this->putJson("/api/v1/training-plan/plans/{$plan->uuid}/collection", [
+            'starts_on' => today()->toDateString(), 'ends_on' => today()->subDay()->toDateString(),
+        ])->assertUnprocessable();
+
+        Sanctum::actingAs($this->validator);
+        $this->putJson("/api/v1/training-plan/plans/{$plan->uuid}/collection", [
+            'starts_on' => today()->toDateString(), 'ends_on' => today()->addDay()->toDateString(),
+        ])->assertForbidden();
+    }
+
+    // ── Approval levels configuration ─────────────────────────────────────────
+
+    public function test_approval_levels_are_configured_in_order_and_reviewers_follow_them(): void
+    {
+        $this->assertTrue($this->validator->fresh()->can('review-training-plan'), 'people in a level can open plans');
+
+        Sanctum::actingAs($this->hr);
+        $levels = $this->getJson('/api/v1/training-plan/approval-levels')->assertOk()->json('data');
+        $this->assertSame(['Validation', 'Final approval'], array_column($levels, 'name'));
+        $this->assertSame([false, true], array_column($levels, 'final'));
+
+        $this->putJson('/api/v1/training-plan/approval-levels/order', ['uuids' => array_reverse(array_column($levels, 'uuid'))])
+            ->assertOk()->assertJsonPath('data.0.name', 'Final approval');
+
+        $this->putJson("/api/v1/training-plan/approval-levels/{$levels[0]['uuid']}", [
+            'name' => 'Validation', 'rule' => 'all', 'user_uuids' => [$this->approver->uuid],
+        ])->assertOk();
+        $this->assertFalse($this->validator->fresh()->can('review-training-plan'), 'removed from every level');
+
+        $this->postJson('/api/v1/training-plan/approval-levels', ['name' => 'Empty', 'rule' => 'any', 'user_uuids' => []])
+            ->assertUnprocessable()->assertJsonValidationErrors('user_uuids');
+
+        $found = $this->getJson('/api/v1/training-plan/approval-levels/candidates?search=' . urlencode($this->validator->name))
+            ->assertOk()->json('data');
+        $this->assertContains($this->validator->uuid, array_column($found, 'uuid'));
+    }
+
+    public function test_only_people_allowed_to_configure_approvals_can_change_the_levels(): void
+    {
+        Sanctum::actingAs($this->validator);
+        $this->getJson('/api/v1/training-plan/approval-levels')->assertForbidden();
+
+        [$head] = $this->headOf();
+        Sanctum::actingAs($head);
+        $this->postJson('/api/v1/training-plan/approval-levels', ['name' => 'Me', 'rule' => 'any', 'user_uuids' => [$head->uuid]])->assertForbidden();
     }
 }

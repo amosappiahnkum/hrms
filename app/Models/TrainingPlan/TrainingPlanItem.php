@@ -24,7 +24,7 @@ class TrainingPlanItem extends AppModel
 
     /** Changing any of these on an approved item sends it back for validation and approval. */
     public const PLANNED_FIELDS = [
-        'employee_id', 'training_catalogue_item_id', 'title', 'nature', 'domain', 'category',
+        'employee_id', 'training_catalogue_item_id', 'title', 'nature', 'training_domain_id', 'category',
         'source_of_need', 'supporting_record', 'quarter', 'days', 'cost', 'trainer', 'delivery',
     ];
 
@@ -66,6 +66,11 @@ class TrainingPlanItem extends AppModel
     public function catalogueItem(): BelongsTo
     {
         return $this->belongsTo(TrainingCatalogueItem::class, 'training_catalogue_item_id');
+    }
+
+    public function domain(): BelongsTo
+    {
+        return $this->belongsTo(TrainingDomain::class, 'training_domain_id');
     }
 
     public function certifications(): HasMany

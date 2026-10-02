@@ -10,16 +10,17 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-/** A training plan or item moved through prepare → validate → approve (or was rejected). */
+/** A training plan reached an approval level, was approved, or was returned to HR. */
 class TrainingPlanApprovalNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
     public function __construct(
         private readonly TrainingPlan $plan,
-        private readonly string $event, // submitted | validated | approved | rejected
+        private readonly string $event, // validation | approval | approved | rejected
         private readonly User $actor,
         private readonly ?string $comment = null,
+        private readonly ?string $level = null,
     ) {}
 
     public function via($notifiable): array
@@ -49,6 +50,7 @@ class TrainingPlanApprovalNotification extends Notification implements ShouldQue
             'plan_uuid'   => $this->plan->uuid,
             'description' => $this->summary(),
             'actor'       => $this->actor->name,
+            'level'       => $this->level,
             'comment'     => $this->comment,
         ];
     }
@@ -56,10 +58,10 @@ class TrainingPlanApprovalNotification extends Notification implements ShouldQue
     private function subject(): string
     {
         return match ($this->event) {
-            'submitted' => "{$this->plan->year} training plan: validation required",
-            'validated' => "{$this->plan->year} training plan: approval required",
-            'approved'  => "{$this->plan->year} training plan approved",
-            'rejected'  => "{$this->plan->year} training plan returned",
+            'validation' => "{$this->plan->year} training plan: validation required",
+            'approval'   => "{$this->plan->year} training plan: approval required",
+            'approved'   => "{$this->plan->year} training plan approved",
+            'rejected'   => "{$this->plan->year} training plan returned",
         };
     }
 
@@ -68,10 +70,10 @@ class TrainingPlanApprovalNotification extends Notification implements ShouldQue
         $what = "the training plan \"{$this->plan->title}\"";
 
         return match ($this->event) {
-            'submitted' => "{$this->actor->name} submitted {$what} and it needs your validation.",
-            'validated' => "{$this->actor->name} validated {$what} and it needs your approval.",
-            'approved'  => "{$this->actor->name} approved {$what}.",
-            'rejected'  => "{$this->actor->name} returned {$what} with comments.",
+            'validation' => ucfirst("{$what} has reached {$this->level} and needs your validation."),
+            'approval'   => ucfirst("{$what} has reached {$this->level} and needs your final approval."),
+            'approved'   => "{$this->actor->name} gave final approval to {$what}.",
+            'rejected'   => "{$this->actor->name} returned {$what} with comments.",
         };
     }
 }

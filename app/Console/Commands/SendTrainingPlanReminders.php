@@ -27,6 +27,11 @@ class SendTrainingPlanReminders extends Command
 
     public function handle(): void
     {
+        if (!feature('training_plan.enabled')) {
+            $this->info('Training plans are switched off; no reminders sent.');
+            return;
+        }
+
         $today = Carbon::today();
         $hrUsers = User::permission('prepare-training-plan')->get();
         $sent = 0;

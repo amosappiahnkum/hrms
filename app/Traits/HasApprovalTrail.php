@@ -7,7 +7,8 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Prepared / validated / approved / rejected stamps shared by training plans and their items.
+ * Prepared / approved / rejected stamps shared by training plans and their items. A plan's
+ * validations are its sign-offs (TrainingPlanSignoff), one per person per approval level.
  * Transitions are enforced by App\Services\TrainingPlan\ApprovalService.
  */
 trait HasApprovalTrail
@@ -17,7 +18,6 @@ trait HasApprovalTrail
         $this->mergeFillable([
             'approval_status',
             'prepared_by', 'prepared_at',
-            'validated_by', 'validated_at',
             'approved_by', 'approved_at',
             'rejected_by', 'rejected_at', 'rejection_comment',
         ]);
@@ -25,7 +25,6 @@ trait HasApprovalTrail
         $this->mergeCasts([
             'approval_status' => ApprovalStatus::class,
             'prepared_at'     => 'datetime',
-            'validated_at'    => 'datetime',
             'approved_at'     => 'datetime',
             'rejected_at'     => 'datetime',
         ]);
@@ -34,11 +33,6 @@ trait HasApprovalTrail
     public function preparer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'prepared_by');
-    }
-
-    public function validator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'validated_by');
     }
 
     public function approver(): BelongsTo

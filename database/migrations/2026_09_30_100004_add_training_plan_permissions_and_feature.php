@@ -8,16 +8,17 @@ use Spatie\Permission\PermissionRegistrar;
 
 /**
  * Training Plan permissions. (Its feature flag comes from SettingSeeder, run on every deploy.)
- * Validators and approvers are named individuals, so validate/approve are not granted to any
- * role here — assign them to people through user management (super-admin passes regardless).
+ * Who validates and approves is set on the approval levels page, which also keeps
+ * review-training-plan in step with the people in the levels (it lets them open the plan).
+ * Heads of department need no permission: they add trainings for their own departments.
  */
 return new class extends Migration {
     /** permission => roles */
     private const PERMISSIONS = [
-        'view-training-plan'     => ['hr', 'training_officer'],
-        'prepare-training-plan'  => ['hr', 'training_officer'],
-        'validate-training-plan' => [],
-        'approve-training-plan'  => [],
+        'view-training-plan'                => ['hr', 'training_officer'],
+        'prepare-training-plan'             => ['hr', 'training_officer'],
+        'review-training-plan'              => [],
+        'configure-training-plan-approvals' => ['hr'],
     ];
 
     public function up(): void

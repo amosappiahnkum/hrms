@@ -15,7 +15,12 @@ use App\Http\Resources\TrainingPlan\TrainingPlanResource;
 use App\Models\TrainingPlan\TrainingCatalogueItem;
 use App\Models\TrainingPlan\TrainingPlan;
 use App\Models\TrainingPlan\TrainingPlanItem;
+use App\Models\Config\Department;
+use App\Models\User;
+use App\Notifications\TrainingPlanCollectionNotification;
 use App\Services\TrainingPlan\ApprovalService;
+use App\Services\TrainingPlan\TrainingPlanAccess;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -25,9 +30,25 @@ use Throwable;
 
 class TrainingPlanController extends Controller
 {
-    private const TRAIL = ['preparer', 'validator', 'approver', 'rejecter'];
+    private const TRAIL = ['preparer', 'approver', 'rejecter'];
 
-    public function __construct(private readonly ApprovalService $approvals) {}
+    public function __construct(
+        private readonly ApprovalService $approvals,
+        private readonly TrainingPlanAccess $access,
+    ) {}
+
+    /** What the signed-in user can do with training plans, for the menus and pages. */
+    public function access(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return ApiResponse::success([
+            'sees_everything'   => $this->access->seesEverything($user),
+            'can_prepare'       => $this->access->canPrepare($user),
+            'heads_departments' => $this->access->headsDepartments($user),
+            'can_configure'     => $user->can('configure-training-plan-approvals'),
+        ]);
+    }
 
     /** Dropdown values for plan and item forms. */
     public function options(): JsonResponse
@@ -47,7 +68,6 @@ class TrainingPlanController extends Controller
             'deliveries'      => $list(TrainingDelivery::class),
             'approval_statuses' => $list(ApprovalStatus::class),
             'quarters'        => TrainingPlanItem::QUARTERS,
-            'domains'         => $distinct('domain'),
             'trainers'        => $distinct('trainer'),
         ]);
     }
@@ -68,7 +88,7 @@ class TrainingPlanController extends Controller
 
     public function show(TrainingPlan $trainingPlan): JsonResponse
     {
-        return ApiResponse::success(TrainingPlanResource::make($trainingPlan->load(self::TRAIL)->loadCount(['items', 'items as approved_items_count' => fn ($q) => $q->where('approval_status', ApprovalStatus::APPROVED->value)])));
+        return ApiResponse::success(TrainingPlanResource::make($this->loaded($trainingPlan)));
     }
 
     public function store(Request $request): JsonResponse
@@ -99,19 +119,58 @@ class TrainingPlanController extends Controller
         return ApiResponse::success(null, 'Training plan deleted.');
     }
 
+    /**
+     * Open the plan for heads of department to add their staff's training needs between two dates.
+     * When the window is open today, heads of department are told by email.
+     */
+    public function openCollection(Request $request, TrainingPlan $trainingPlan): JsonResponse
+    {
+        $this->ensureEditable($trainingPlan);
+
+        $data = $request->validate([
+            'starts_on' => ['required', 'date'],
+            'ends_on'   => ['required', 'date', 'after_or_equal:starts_on', 'after_or_equal:today'],
+            'notify'    => ['sometimes', 'boolean'],
+        ]);
+
+        $wasCollecting = $trainingPlan->isCollecting();
+        $trainingPlan->update(['collection_starts_on' => $data['starts_on'], 'collection_ends_on' => $data['ends_on']]);
+
+        $notified = 0;
+        if ($trainingPlan->isCollecting() && !$wasCollecting && $request->boolean('notify', true)) {
+            $heads = User::whereIn('employee_id', Department::whereNotNull('hod')->pluck('hod'))->get();
+            Notification::send($heads, new TrainingPlanCollectionNotification($trainingPlan));
+            $notified = $heads->count();
+        }
+
+        return ApiResponse::success(
+            TrainingPlanResource::make($this->loaded($trainingPlan)),
+            $notified ? "Heads of department can add trainings until {$trainingPlan->collection_ends_on->format('j M Y')}. {$notified} notified." : 'Collection dates saved.'
+        );
+    }
+
+    /** Stop heads of department adding trainings (what they added stays in the plan). */
+    public function closeCollection(TrainingPlan $trainingPlan): JsonResponse
+    {
+        $yesterday = today()->subDay();
+        $trainingPlan->update([
+            'collection_starts_on' => $trainingPlan->collection_starts_on?->min($yesterday),
+            'collection_ends_on'   => $trainingPlan->collection_starts_on ? $yesterday : null,
+        ]);
+
+        return ApiResponse::success(TrainingPlanResource::make($this->loaded($trainingPlan)), 'Collection closed.');
+    }
+
     public function submit(TrainingPlan $trainingPlan): JsonResponse
     {
-        return $this->transition(fn () => $this->approvals->submit($trainingPlan, auth()->user()), $trainingPlan, 'Plan submitted for validation.');
+        return $this->transition(fn () => $this->approvals->submit($trainingPlan, auth()->user()), $trainingPlan, 'Plan sent for validation.');
     }
 
-    public function validatePlan(TrainingPlan $trainingPlan): JsonResponse
+    public function signOff(TrainingPlan $trainingPlan): JsonResponse
     {
-        return $this->transition(fn () => $this->approvals->validate($trainingPlan, auth()->user()), $trainingPlan, 'Plan validated.');
-    }
+        $wasFinal = $trainingPlan->isFinalLevel();
 
-    public function approve(TrainingPlan $trainingPlan): JsonResponse
-    {
-        return $this->transition(fn () => $this->approvals->approve($trainingPlan, auth()->user()), $trainingPlan, 'Plan approved.');
+        return $this->transition(fn () => $this->approvals->signOff($trainingPlan, auth()->user()), $trainingPlan, $wasFinal ? 'Signed.' : 'Validated.');
     }
 
     public function revise(TrainingPlan $trainingPlan): JsonResponse
@@ -130,8 +189,10 @@ class TrainingPlanController extends Controller
      * The plan's analysis (spreadsheet "Analysis" sheet). For an approved plan it counts approved items,
      * reporting items still awaiting sign-off under "pending"; a plan being prepared shows its draft figures.
      */
-    public function dashboard(TrainingPlan $trainingPlan): JsonResponse
+    public function dashboard(Request $request, TrainingPlan $trainingPlan): JsonResponse
     {
+        abort_unless($this->access->seesEverything($request->user()), 403, 'Only HR and the plan\'s reviewers see the whole plan.');
+
         $items = $trainingPlan->items()->get(['id', 'employee_id', 'nature', 'category', 'quarter', 'status', 'delivery', 'cost', 'approval_status']);
 
         // Until the plan is approved, show its draft figures (everything in it) rather than zeros.
@@ -196,7 +257,12 @@ class TrainingPlanController extends Controller
             return ApiResponse::fromException($e);
         }
 
-        return ApiResponse::success(TrainingPlanResource::make($plan->fresh()->load(self::TRAIL)->loadCount(['items', 'items as approved_items_count' => fn ($q) => $q->where('approval_status', ApprovalStatus::APPROVED->value)])), $message);
+        return ApiResponse::success(TrainingPlanResource::make($this->loaded($plan->fresh())), $message);
+    }
+
+    private function loaded(TrainingPlan $plan): TrainingPlan
+    {
+        return $plan->load(self::TRAIL)->loadCount(['items', 'items as approved_items_count' => fn ($q) => $q->where('approval_status', ApprovalStatus::APPROVED->value)]);
     }
 
     private function ensureEditable(TrainingPlan $plan): void

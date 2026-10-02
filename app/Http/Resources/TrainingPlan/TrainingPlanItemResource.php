@@ -28,7 +28,8 @@ class TrainingPlanItemResource extends JsonResource
             'catalogue_item_uuid' => $this->catalogueItem?->uuid,
             'title'              => $this->title,
             'nature'             => $this->option($this->nature),
-            'domain'             => $this->domain,
+            'domain'             => $this->domain?->name,
+            'domain_uuid'        => $this->domain?->uuid,
             'category'           => $this->option($this->category),
             'source_of_need'     => $this->option($this->source_of_need),
             'supporting_record'  => $this->supporting_record,
@@ -43,6 +44,11 @@ class TrainingPlanItemResource extends JsonResource
             'completed_at'       => $this->completed_at?->format('Y-m-d'),
             'comment'            => $this->comment,
             'approval'           => $this->approvalTrail(),
+            // A head of department's line shows who asked for it.
+            'added_by'           => $this->whenLoaded('creator', fn () => $this->creator ? [
+                'uuid' => $this->creator->uuid,
+                'name' => $this->creator->employee?->name ?? $this->creator->name,
+            ] : null),
             'certifications'     => $this->whenLoaded('certifications', fn () => $this->certifications->map(fn ($c) => [
                 'id'            => $c->id,
                 'title'         => $c->title,
