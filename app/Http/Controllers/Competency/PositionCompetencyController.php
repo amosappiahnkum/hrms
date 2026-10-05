@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Competency;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\Competency\Competency;
+use App\Models\Competency\CertificationType;
+use App\Models\Competency\PositionCertification;
 use App\Models\Competency\PositionCompetency;
 use App\Models\Position;
 use App\Services\Competency\CompetencyService;
@@ -52,7 +54,44 @@ class PositionCompetencyController extends Controller
                 'required_level' => $r->required_level,
             ])->values();
 
-        return ['position' => ['uuid' => $position->uuid, 'name' => $position->name], 'requirements' => $requirements];
+        $certifications = $position->certificationRequirements()->whereHas('type')->with('type')->get()
+            ->sortBy(fn ($r) => [$r->mandatory ? 0 : 1, $r->type->name])
+            ->map(fn (PositionCertification $r) => [
+                'type'      => ['uuid' => $r->type->uuid, 'name' => $r->type->name],
+                'mandatory' => $r->mandatory,
+            ])->values();
+
+        return ['position' => ['uuid' => $position->uuid, 'name' => $position->name], 'requirements' => $requirements, 'certifications' => $certifications];
+    }
+
+    /** Replace the certificates the position requires (mandatory) or recommends with the list given. */
+    public function syncCertifications(Request $request, Position $position): JsonResponse
+    {
+        $data = $request->validate([
+            'certifications'                           => ['present', 'array'],
+            'certifications.*.certification_type_uuid' => ['required', 'distinct', Rule::exists('certification_types', 'uuid')->whereNull('deleted_at')],
+            'certifications.*.mandatory'               => ['required', 'boolean'],
+        ]);
+
+        $ids = CertificationType::whereIn('uuid', collect($data['certifications'])->pluck('certification_type_uuid'))->pluck('id', 'uuid');
+
+        DB::transaction(function () use ($position, $data, $ids) {
+            $keep = [];
+            foreach ($data['certifications'] as $row) {
+                $requirement = PositionCertification::withTrashed()->firstOrNew([
+                    'position_id'           => $position->id,
+                    'certification_type_id' => $ids[$row['certification_type_uuid']],
+                ]);
+                $requirement->mandatory = filter_var($row['mandatory'], FILTER_VALIDATE_BOOLEAN);
+                $requirement->deleted_at = null;
+                $requirement->save();
+                $keep[] = $requirement->id;
+            }
+
+            $position->certificationRequirements()->whereNotIn('id', $keep)->delete();
+        });
+
+        return ApiResponse::success($this->payload($position), 'Required certifications saved.');
     }
 
     /** Replace the position's requirements with the list given. */

@@ -42,6 +42,15 @@ class TrainingPlanItemResource extends JsonResource
             'planned_end_date'   => $this->planned_end_date?->format('Y-m-d'),
             'status'             => $this->option($this->status),
             'completed_at'       => $this->completed_at?->format('Y-m-d'),
+            // The training record: what actually happened.
+            'actual_start_date'  => $this->actual_start_date?->format('Y-m-d'),
+            'actual_end_date'    => $this->actual_end_date?->format('Y-m-d'),
+            'hours'              => $this->hours,
+            'attended'           => $this->attended,
+            'actual_cost'        => $this->actual_cost,
+            'provider'           => $this->provider,
+            'score'              => $this->score,
+            'passed'             => $this->passed,
             'comment'            => $this->comment,
             'approval'           => $this->approvalTrail(),
             // A head of department's line shows who asked for it.
@@ -49,6 +58,17 @@ class TrainingPlanItemResource extends JsonResource
                 'uuid' => $this->creator->uuid,
                 'name' => $this->creator->employee?->name ?? $this->creator->name,
             ] : null),
+            // How the completed training was evaluated: feedback, and the supervisor's review.
+            'evaluations'        => $this->whenLoaded('evaluations', fn () => $this->evaluations->sortBy(fn ($e) => $e->type->value)->map(fn ($e) => [
+                'uuid'           => $e->uuid,
+                'type'           => $this->option($e->type),
+                'status'         => $e->status(),
+                'due_on'         => $e->due_on->format('Y-m-d'),
+                'evaluator'      => $e->evaluator?->name,
+                'rating'         => $e->rating,
+                'applied_on_job' => $e->applied_on_job,
+                'comment'        => $e->comment,
+            ])->values()),
             'certifications'     => $this->whenLoaded('certifications', fn () => $this->certifications->map(fn ($c) => [
                 'id'            => $c->id,
                 'title'         => $c->title,

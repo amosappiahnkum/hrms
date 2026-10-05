@@ -23,6 +23,14 @@ class TrainingCatalogueItemResource extends JsonResource
             'trainer'        => $this->trainer,
             'location'       => $this->location,
             'plan_items_count' => $this->whenCounted('planItems'),
+            'competencies'   => $this->whenLoaded('competencyLinks', fn () => $this->competencyLinks
+                ->filter(fn ($link) => $link->competency)
+                ->map(fn ($link) => [
+                    'uuid'         => $link->competency->uuid,
+                    'name'         => $link->competency->name,
+                    'group'        => $this->option($link->competency->group),
+                    'target_level' => $link->target_level,
+                ])->sortBy('name')->values()),
         ];
     }
 }

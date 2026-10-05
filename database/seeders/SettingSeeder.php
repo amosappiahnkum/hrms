@@ -50,6 +50,10 @@ class SettingSeeder extends Seeder
         // Opt-in: not every organisation plans training this way. Switch on under Feature toggles.
         $service->setDefault('features.training_plan.enabled', false, 'training');
         $service->setDefault('features.training_plan.require_different_approvers', true, 'training');
+        // Evaluating completed trainings: the trainee's feedback, then their supervisor's review (SOP 5.3.6).
+        $service->setDefault('features.training_plan.evaluations', true, 'training');
+        $service->setDefault('training_plan.feedback_due_days', 7, 'training');
+        $service->setDefault('training_plan.supervisor_review_after_days', 90, 'training');
 
         // === COMPETENCY MATRIX ===
         // Opt-in: not every organisation keeps a competency matrix. Switch on under Feature toggles.

@@ -21,4 +21,6 @@ Artisan::command('inspire', function () {
 
 Schedule::command('leave:send-resumption-reminders')->dailyAt('08:00');
 Schedule::command('certifications:send-expiry-reminders')->dailyAt('08:00');
+// After certificate reminders: certificates that lapsed overnight suspend the authorizations they support.
+Schedule::command('competency:check-authorizations')->dailyAt('08:15');
 Schedule::command('training-plan:send-reminders')->dailyAt('08:00');

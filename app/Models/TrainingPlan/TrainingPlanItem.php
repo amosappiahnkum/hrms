@@ -28,8 +28,11 @@ class TrainingPlanItem extends AppModel
         'source_of_need', 'supporting_record', 'quarter', 'days', 'cost', 'trainer', 'delivery',
     ];
 
+    /** The training record: what actually happened. Recorded by HR once the training is approved. */
+    public const ACTUAL_FIELDS = ['actual_start_date', 'actual_end_date', 'hours', 'attended', 'actual_cost', 'provider', 'score', 'passed'];
+
     /** Progress fields: editable at any time without re-approval. */
-    public const PROGRESS_FIELDS = ['planned_start_date', 'planned_end_date', 'status', 'completed_at', 'comment'];
+    public const PROGRESS_FIELDS = ['planned_start_date', 'planned_end_date', 'status', 'completed_at', 'comment', ...self::ACTUAL_FIELDS];
 
     public const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
@@ -51,6 +54,13 @@ class TrainingPlanItem extends AppModel
         'planned_start_date' => 'date',
         'planned_end_date'   => 'date',
         'completed_at'       => 'date',
+        'actual_start_date'  => 'date',
+        'actual_end_date'    => 'date',
+        'hours'              => 'decimal:1',
+        'attended'           => 'boolean',
+        'actual_cost'        => 'decimal:2',
+        'score'              => 'decimal:2',
+        'passed'             => 'boolean',
     ];
 
     public function plan(): BelongsTo
@@ -71,6 +81,36 @@ class TrainingPlanItem extends AppModel
     public function domain(): BelongsTo
     {
         return $this->belongsTo(TrainingDomain::class, 'training_domain_id');
+    }
+
+    public function evaluations(): HasMany
+    {
+        return $this->hasMany(TrainingEvaluation::class);
+    }
+
+    /**
+     * Completing a training asks for its evaluations; correcting it away from completed withdraws the
+     * ones nobody answered. Linked development actions follow the training's outcome. Here rather than in the controller, so single and bulk updates both do it.
+     */
+    protected static function booted(): void
+    {
+        parent::booted();
+
+        static::updated(function (TrainingPlanItem $item) {
+            if (!$item->wasChanged('status')) {
+                return;
+            }
+
+            $service = app(\App\Services\TrainingPlan\TrainingEvaluationService::class);
+            if ($item->status === TrainingStatus::COMPLETED) {
+                $service->schedule($item);
+            } elseif ($item->getOriginal('status') === TrainingStatus::COMPLETED) {
+                $service->withdraw($item);
+            }
+
+            // Development actions waiting on this training move on: to their effectiveness check, or back to planning.
+            app(\App\Services\Competency\EffectivenessService::class)->trainingEnded($item);
+        });
     }
 
     public function certifications(): HasMany

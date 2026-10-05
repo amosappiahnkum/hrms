@@ -20,4 +20,10 @@ class Competency extends AppModel
     {
         return $this->hasMany(PositionCompetency::class);
     }
+
+    /** Catalogue trainings that develop this competency. */
+    public function courseLinks(): HasMany
+    {
+        return $this->hasMany(\App\Models\TrainingPlan\TrainingCatalogueCompetency::class);
+    }
 }

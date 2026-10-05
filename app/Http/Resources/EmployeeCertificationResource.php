@@ -22,6 +22,7 @@ class EmployeeCertificationResource extends JsonResource
                 'file_size' => $this->file_size,
                 'mime_type' => $this->mime_type,
             ]),
+            'type'           => $this->whenLoaded('type', fn () => $this->type ? ['uuid' => $this->type->uuid, 'name' => $this->type->name] : null),
             'provider'       => $this->whenLoaded('provider', fn() => [
                 'id'   => $this->provider->id,
                 'name' => $this->provider->name,

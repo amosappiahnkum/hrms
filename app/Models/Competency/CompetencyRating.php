@@ -20,6 +20,12 @@ class CompetencyRating extends AppModel
         return $this->belongsTo(CompetencyAssessment::class, 'competency_assessment_id');
     }
 
+    /** Files evidencing competence. */
+    public function evidenceFiles(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(CompetencyEvidenceFile::class, 'evidenceable')->oldest('id');
+    }
+
     public function competency(): BelongsTo
     {
         return $this->belongsTo(Competency::class);

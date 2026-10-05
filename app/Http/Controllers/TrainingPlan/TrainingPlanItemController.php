@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\TrainingPlan;
 
+use App\Enums\Competency\DevelopmentStatus;
 use App\Enums\TrainingPlan\ApprovalStatus;
 use App\Enums\TrainingPlan\PersonnelCategory;
 use App\Enums\TrainingPlan\TrainingDelivery;
@@ -13,6 +14,7 @@ use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TrainingPlan\MyTrainingPlanItemResource;
 use App\Http\Resources\TrainingPlan\TrainingPlanItemResource;
+use App\Models\Competency\DevelopmentAction;
 use App\Models\SelfService\Employee;
 use App\Models\TrainingPlan\TrainingCatalogueItem;
 use App\Models\TrainingPlan\TrainingDomain;
@@ -31,7 +33,7 @@ use Illuminate\Validation\Rule;
 class TrainingPlanItemController extends Controller
 {
     private const RELATIONS = [
-        'employee.department', 'catalogueItem', 'domain', 'certifications', 'plan',
+        'employee.department', 'catalogueItem', 'domain', 'certifications', 'plan', 'evaluations.evaluator',
         'preparer', 'approver', 'rejecter', 'creator.employee',
     ];
 
@@ -206,24 +208,64 @@ class TrainingPlanItemController extends Controller
         return $this->createFor($trainingPlan, $data, $employees);
     }
 
-    /** One line per trainee, skipping trainees who already have this training in the plan. */
-    private function createFor(TrainingPlan $trainingPlan, array $data, \Illuminate\Support\Collection $employees): JsonResponse
+    /**
+     * Plan training needs from the competency matrix: one line per employee for the chosen training,
+     * each need linked to its employee's line (new, or the one they already had) and set in progress.
+     * The source of need is always "Competency Gap Analysis"; the supporting record names the assessment.
+     */
+    public function planNeeds(Request $request, TrainingPlan $trainingPlan): JsonResponse
     {
-        $already = $trainingPlan->items()
-            ->whereIn('employee_id', $employees->pluck('id'))
-            ->when(
-                $data['training_catalogue_item_id'] ?? null,
-                fn ($q, $catalogueId) => $q->where('training_catalogue_item_id', $catalogueId),
-                fn ($q) => $q->whereNull('training_catalogue_item_id')->where('title', $data['title']),
-            )
-            ->pluck('employee_id')->flip();
-        [$skipped, $toAdd] = $employees->partition(fn (Employee $e) => $already->has($e->id));
+        $request->validate([
+            'action_uuids'   => ['required', 'array', 'min:1', 'max:500'],
+            'action_uuids.*' => ['distinct', 'string'],
+        ]);
 
-        $created = DB::transaction(fn () => $toAdd->map(fn (Employee $employee) => $trainingPlan->items()->create($data + [
-            'employee_id'     => $employee->id,
-            'created_by'      => auth()->id(),
-            'approval_status' => ApprovalStatus::DRAFT,
-        ]))->values());
+        $actions = DevelopmentAction::awaitingTraining()->whereIn('uuid', $request->action_uuids)->with('employee')->get();
+        if ($actions->count() !== count($request->action_uuids)) {
+            throw new UserFacingException('Some of these needs were planned or closed in the meantime. Refresh the list and try again.', 409);
+        }
+
+        $employees = $actions->pluck('employee')->unique('id')->values();
+        $request->merge([
+            'employee_uuids'    => $employees->pluck('uuid')->all(),
+            'source_of_need'    => TrainingNeedSource::COMPETENCY_GAP_ANALYSIS->value,
+            'supporting_record' => TrainingNeedSource::COMPETENCY_GAP_ANALYSIS->supportingRecord(),
+        ]);
+        $data = $this->withCatalogueDefaults($this->validated($request)) + ['cost' => 0];
+        $this->ensureDatesFit($data, $trainingPlan);
+        $this->authorizeChange($request, $trainingPlan, $employees->pluck('id'), 'add trainings');
+
+        [$created, $skipped] = DB::transaction(function () use ($trainingPlan, $data, $employees, $actions) {
+            [$created, $skipped] = $this->createLines($trainingPlan, $data, $employees);
+
+            // Each employee's line for this training: just created, or already in the plan.
+            $lines = $this->sameTraining($trainingPlan->items(), $data)
+                ->whereIn('employee_id', $employees->pluck('id'))
+                ->get()->keyBy('employee_id');
+
+            foreach ($actions as $action) {
+                $action->update([
+                    'training_plan_item_id' => $lines[$action->employee_id]->id,
+                    'status'                => DevelopmentStatus::IN_PROGRESS,
+                ]);
+                $action->recordTrainingSource();
+            }
+
+            return [$created, $skipped];
+        });
+
+        $planned = $actions->count();
+        $message = $skipped->isEmpty()
+            ? "Planned {$planned} need(s)."
+            : "Planned {$planned} need(s); {$skipped->count()} employee(s) already had this training, so their needs were linked to it.";
+
+        return $this->linesResponse($created, $skipped, $message);
+    }
+
+    /** One line per trainee, skipping trainees who already have this training in the plan. */
+    private function createFor(TrainingPlan $trainingPlan, array $data, Collection $employees): JsonResponse
+    {
+        [$created, $skipped] = DB::transaction(fn () => $this->createLines($trainingPlan, $data, $employees));
 
         $message = match (true) {
             $created->isEmpty()    => 'Everyone selected already has this training in the plan.',
@@ -231,6 +273,39 @@ class TrainingPlanItemController extends Controller
             default                => $created->count() === 1 ? 'Training added to the plan.' : "Training added for {$created->count()} trainees.",
         };
 
+        return $this->linesResponse($created, $skipped, $message);
+    }
+
+    /** @return array{Collection, Collection} the lines created, and the employees who already had the training */
+    private function createLines(TrainingPlan $trainingPlan, array $data, Collection $employees): array
+    {
+        $already = $this->sameTraining($trainingPlan->items(), $data)
+            ->whereIn('employee_id', $employees->pluck('id'))
+            ->whereIn('employee_id', $employees->pluck('id'))
+            ->pluck('employee_id')->flip();
+        [$skipped, $toAdd] = $employees->partition(fn (Employee $e) => $already->has($e->id));
+
+        $created = $toAdd->map(fn (Employee $employee) => $trainingPlan->items()->create($data + [
+            'employee_id'     => $employee->id,
+            'created_by'      => auth()->id(),
+            'approval_status' => ApprovalStatus::DRAFT,
+        ]))->values();
+
+        return [$created, $skipped->values()];
+    }
+
+    /** Lines for the same training: the same catalogue entry, or the same title for trainings entered by hand. */
+    private function sameTraining($query, array $data)
+    {
+        return $query->when(
+            $data['training_catalogue_item_id'] ?? null,
+            fn ($q, $catalogueId) => $q->where('training_catalogue_item_id', $catalogueId),
+            fn ($q) => $q->whereNull('training_catalogue_item_id')->where('title', $data['title']),
+        );
+    }
+
+    private function linesResponse(Collection $created, Collection $skipped, string $message): JsonResponse
+    {
         return ApiResponse::success([
             'created' => TrainingPlanItemResource::collection(
                 TrainingPlanItem::with(self::RELATIONS)->whereIn('id', $created->pluck('id'))->get()
@@ -246,8 +321,8 @@ class TrainingPlanItemController extends Controller
 
         if (!$this->access->canPrepare($request->user())) {
             // Heads of department change what is planned for their staff; progress is HR's.
-            if (array_intersect_key($data, array_flip(['status', 'completed_at']))) {
-                throw new UserFacingException('Only HR updates the status of a training.', 403);
+            if (array_intersect_key($data, array_flip(['status', 'completed_at', ...TrainingPlanItem::ACTUAL_FIELDS]))) {
+                throw new UserFacingException('Only HR updates the status and record of a training.', 403);
             }
             $this->authorizeChange($request, $plan, collect([$trainingPlanItem->employee_id, $data['employee_id'] ?? null])->filter(), 'change trainings', $trainingPlanItem);
             $this->ensureFromCatalogue($request, !$trainingPlanItem->training_catalogue_item_id);
@@ -272,6 +347,7 @@ class TrainingPlanItemController extends Controller
         }
 
         $this->ensureDatesFit($data, $plan, $trainingPlanItem);
+        $data = $this->withRecordRules($trainingPlanItem, $data);
         $data = $this->withCompletionDate($data, $trainingPlanItem);
 
         // An approved training whose planned details change is approved again with the revised plan.
@@ -469,7 +545,22 @@ class TrainingPlanItemController extends Controller
             'status'                       => ['sometimes', Rule::enum(TrainingStatus::class)],
             'completed_at'                 => ['nullable', 'date'],
             'comment'                      => ['nullable', 'string', 'max:2000'],
+            // The training record.
+            'actual_start_date'            => ['nullable', 'date'],
+            'actual_end_date'              => ['nullable', 'date'],
+            'hours'                        => ['nullable', 'numeric', 'min:0', 'max:9999'],
+            'attended'                     => ['nullable', 'boolean'],
+            'actual_cost'                  => ['nullable', 'numeric', 'min:0'],
+            'provider'                     => ['nullable', 'string', 'max:255'],
+            'score'                        => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'passed'                       => ['nullable', 'boolean'],
         ]);
+
+        foreach (['attended', 'passed'] as $flag) {
+            if (isset($data[$flag])) {
+                $data[$flag] = filter_var($data[$flag], FILTER_VALIDATE_BOOLEAN);
+            }
+        }
 
         if (array_key_exists('employee_uuid', $data)) {
             $data['employee_id'] = Employee::where('uuid', $data['employee_uuid'])->value('id');
@@ -511,6 +602,92 @@ class TrainingPlanItemController extends Controller
         ];
     }
 
+    /**
+     * The training record's rules: recorded on approved trainings only; completing means the trainee
+     * attended (and takes the planned dates when no actual ones are given); failing needs a score or a
+     * comment; the actual dates are in order.
+     */
+    private function withRecordRules(TrainingPlanItem $item, array $data): array
+    {
+        $recording = collect(array_intersect_key($data, array_flip(TrainingPlanItem::ACTUAL_FIELDS)))
+            ->contains(fn ($value, $field) => $this->differs($item, $field, $value));
+        if ($recording && !$item->isApproved()) {
+            throw new UserFacingException('Attendance and results can only be recorded once the training is approved.');
+        }
+
+        $final = fn (string $field) => array_key_exists($field, $data) ? $data[$field] : $item->getAttribute($field);
+        $status = $final('status');
+        $status = $status instanceof TrainingStatus ? $status : TrainingStatus::tryFrom((string) $status);
+        $statusChanging = array_key_exists('status', $data) && $this->differs($item, 'status', $data['status']);
+
+        if ($status === TrainingStatus::COMPLETED) {
+            if ($final('attended') === false) {
+                throw new UserFacingException('A trainee who didn\'t attend can\'t have completed the training. Mark it Failed or Cancelled instead.');
+            }
+            $data['attended'] = true;
+            foreach (['start', 'end'] as $edge) {
+                if (!$final("actual_{$edge}_date") && $item->{"planned_{$edge}_date"}) {
+                    $data["actual_{$edge}_date"] = $item->{"planned_{$edge}_date"}->toDateString();
+                }
+            }
+        }
+
+        if ($status === TrainingStatus::FAILED && $statusChanging && blank($final('score')) && blank($final('comment'))) {
+            throw ValidationException::withMessages(['score' => 'Record the score, or a comment on why the training was failed.']);
+        }
+
+        $start = $final('actual_start_date');
+        $end = $final('actual_end_date');
+        if ($start && $end && Carbon::parse($end)->lt(Carbon::parse($start))) {
+            throw ValidationException::withMessages(['actual_end_date' => 'The actual end date can\'t be before the start date.']);
+        }
+
+        return $data;
+    }
+
+    /**
+     * Record one session for several trainees of a training at once: the same status, dates, hours,
+     * provider and cost per trainee. All or nothing: one line breaking a rule stops them all.
+     */
+    public function recordProgress(Request $request, TrainingPlan $trainingPlan): JsonResponse
+    {
+        $request->validate([
+            'item_uuids'   => ['required', 'array', 'min:1', 'max:500'],
+            'item_uuids.*' => ['distinct', 'string'],
+        ]);
+        $data = array_intersect_key(
+            $this->validated($request, new TrainingPlanItem()),
+            array_flip(['status', 'completed_at', 'comment', ...TrainingPlanItem::ACTUAL_FIELDS])
+        );
+        if (!$data) {
+            throw ValidationException::withMessages(['status' => 'Give a status or something to record.']);
+        }
+
+        $items = $trainingPlan->items()->whereIn('uuid', $request->item_uuids)->get();
+        if ($items->count() !== count($request->item_uuids)) {
+            throw new UserFacingException('Some of these trainees are no longer in this plan. Refresh and try again.', 409);
+        }
+
+        DB::transaction(function () use ($items, $data) {
+            foreach ($items as $item) {
+                if (array_key_exists('status', $data) && $this->differs($item, 'status', $data['status']) && !$item->isApproved()) {
+                    throw new UserFacingException("{$item->employee?->name}: the training status can only be updated once the training is approved.");
+                }
+                try {
+                    $changes = $this->withCompletionDate($this->withRecordRules($item, $data), $item);
+                } catch (UserFacingException $e) {
+                    throw new UserFacingException("{$item->employee?->name}: {$e->getMessage()}", $e->status());
+                }
+                $item->update($changes);
+            }
+        });
+
+        return ApiResponse::success(
+            TrainingPlanItemResource::collection(TrainingPlanItem::with(self::RELATIONS)->whereIn('id', $items->pluck('id'))->get()),
+            $items->count() === 1 ? 'Training record updated.' : "Training record updated for {$items->count()} trainees."
+        );
+    }
+
     private function withCompletionDate(array $data, TrainingPlanItem $item): array
     {
         if (!array_key_exists('status', $data)) {
@@ -531,7 +708,13 @@ class TrainingPlanItemController extends Controller
     private function differs(TrainingPlanItem $item, string $field, mixed $value): bool
     {
         $current = $item->getAttribute($field);
-        $normalise = fn ($v) => $v instanceof \BackedEnum ? $v->value : (is_numeric($v) ? (float) $v : ($v === '' ? null : $v));
+        $normalise = fn ($v) => match (true) {
+            $v instanceof \BackedEnum        => $v->value,
+            $v instanceof \DateTimeInterface => $v->format('Y-m-d'),
+            is_bool($v), is_numeric($v)      => (float) $v,
+            $v === ''                        => null,
+            default                          => $v,
+        };
 
         return $normalise($current) !== $normalise($value);
     }

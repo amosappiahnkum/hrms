@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Competency;
 
+use App\Enums\Competency\DevelopmentStatus;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\Competency\Competency;
@@ -11,6 +12,7 @@ use App\Models\Competency\DevelopmentAction;
 use App\Models\Competency\PositionCompetency;
 use App\Models\JobDetail;
 use App\Models\SelfService\Employee;
+use App\Services\Competency\CertificationStatusService;
 use App\Services\Competency\CompetencyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,9 +42,11 @@ class CompetencyMatrixController extends Controller
         $page = $employees->with(['jobDetail.position', 'department'])->orderBy('first_name')->orderBy('last_name')
             ->paginate($request->integer('per_page', 25));
         $latest = $this->service->latestAssessments(collect($page->items())->pluck('id'));
+        $certificates = app(CertificationStatusService::class);
+        $certifications = $certificates->forEmployees(collect($page->items()));
         $byPosition = $requirements->groupBy('position_id');
 
-        $rows = collect($page->items())->map(function (Employee $e) use ($latest, $byPosition, $columns) {
+        $rows = collect($page->items())->map(function (Employee $e) use ($latest, $byPosition, $columns, $certificates, $certifications) {
             $assessment = $latest->get($e->id);
             $levels = $assessment?->ratings->pluck('level', 'competency_id') ?? collect();
             $required = ($byPosition->get($e->jobDetail?->position_id) ?? collect())->pluck('required_level', 'competency_id');
@@ -68,6 +72,17 @@ class CompetencyMatrixController extends Controller
                 'review_due'  => (bool) $assessment?->next_review_on?->isPast(),
                 'gaps'        => $gaps,
                 'cells'       => $cells,
+                // Required certificates: how many, and how many need attention.
+                'certifications' => (function () use ($certifications, $certificates, $e) {
+                    $rows = $certifications->get($e->id) ?? collect();
+
+                    return [
+                        'required' => $rows->count(),
+                        'gaps'     => $certificates->gaps($rows)->count(),
+                        'expiring' => $rows->where('status', 'expiring')->count(),
+                        'items'    => $rows->map(fn ($r) => ['name' => $r['type']['name'], 'status' => $r['status'], 'mandatory' => $r['mandatory']])->values(),
+                    ];
+                })(),
             ];
         });
 
@@ -148,6 +163,14 @@ class CompetencyMatrixController extends Controller
             ->whereHas('assessment', fn ($a) => $a->whereIn('employee_id', $visible))
             ->whereHas('competency')
             ->when($request->competency_uuid, fn ($q, $v) => $q->whereHas('competency', fn ($c) => $c->where('uuid', $v)))
-            ->when($request->group, fn ($q, $v) => $q->whereHas('competency', fn ($c) => $c->where('group', $v)));
+            ->when($request->group, fn ($q, $v) => $q->whereHas('competency', fn ($c) => $c->where('group', $v)))
+            // Gaps with no open development action yet (the summary's "gaps without a plan").
+            ->when($request->boolean('unplanned'), fn ($q) => $q->whereNotExists(fn ($a) => $a
+                ->from('competency_development_actions as da')
+                ->join('competency_assessments as ca', 'ca.employee_id', '=', 'da.employee_id')
+                ->whereColumn('ca.id', 'competency_ratings.competency_assessment_id')
+                ->whereColumn('da.competency_id', 'competency_ratings.competency_id')
+                ->whereIn('da.status', DevelopmentStatus::openValues())
+                ->whereNull('da.deleted_at')));
     }
 }

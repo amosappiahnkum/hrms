@@ -4,9 +4,11 @@ namespace App\Console\Commands;
 
 use App\Enums\TrainingPlan\ApprovalStatus;
 use App\Enums\TrainingPlan\TrainingStatus;
+use App\Models\TrainingPlan\TrainingEvaluation;
 use App\Models\TrainingPlan\TrainingPlanItem;
 use App\Models\User;
 use App\Notifications\TrainingPlanReminderNotification;
+use App\Services\TrainingPlan\TrainingEvaluationService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -14,7 +16,9 @@ use Illuminate\Support\Collection;
 /**
  * Reminders for approved, dated trainings that are still expected to happen:
  * - 30, 14, 7 and 1 day(s) before the start date → the trainee, their HOD and HR;
- * - the day after the training ends while it is still Not Started/Scheduled → HR, to update its status.
+ * - the day after the training ends while it is still Not Started/Scheduled → HR, to update its status;
+ * - evaluations: a supervisor review is requested on its due date, and any evaluation still unanswered a
+ *   week after its due date gets one reminder.
  * "HR" is everyone who can prepare training plans.
  */
 class SendTrainingPlanReminders extends Command
@@ -63,7 +67,33 @@ class SendTrainingPlanReminders extends Command
             }
         }
 
+        $sent += $this->evaluations($today);
+
         $this->info("Sent {$sent} training reminder(s).");
+    }
+
+    private function evaluations(Carbon $today): int
+    {
+        $service = app(TrainingEvaluationService::class);
+        if (!$service->enabled()) {
+            return 0;
+        }
+
+        $sent = 0;
+        $pending = fn () => TrainingEvaluation::pending()->whereHas('item')->with(['item.employee', 'item.plan', 'evaluator']);
+
+        // Reviews fall due months after the training; feedback was requested when it was completed.
+        foreach ($pending()->whereNull('notified_at')->whereDate('due_on', '<=', $today)->get() as $evaluation) {
+            $service->notify($evaluation);
+            $sent++;
+        }
+
+        foreach ($pending()->whereNotNull('notified_at')->whereNull('reminded_at')->whereDate('due_on', '<=', $today->copy()->subDays(7))->get() as $evaluation) {
+            $service->notify($evaluation, reminder: true);
+            $sent++;
+        }
+
+        return $sent;
     }
 
     private function openItems()

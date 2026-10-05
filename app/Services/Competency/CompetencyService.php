@@ -186,6 +186,7 @@ class CompetencyService
         $required = $this->requirementsFor($position?->id);
 
         $latest = $this->latestAssessments([$employee->id])->get($employee->id);
+        $latest?->ratings->load('evidenceFiles.uploader');
         $ratings = $latest?->ratings->keyBy('competency_id') ?? collect();
 
         $actions = DevelopmentAction::where('employee_id', $employee->id)
@@ -208,16 +209,37 @@ class CompetencyService
                 'gap'            => $requiredLevel !== null && $level !== null ? max(0, $requiredLevel - $level) : 0,
                 'assessed'       => $rating !== null,
                 'evidence'       => $rating?->evidence,
+                'files'          => $rating?->evidenceFiles->map->payload()->values() ?? [],
                 'open_actions'   => $actions->where('competency_id', $id)->filter(fn ($a) => $a->status->isOpen())->count(),
             ];
         })->sortBy([fn ($r) => $r['competency']['group']['value'] ?? '', fn ($r) => $r['competency']['name']])->values();
+
+        $certificates = app(CertificationStatusService::class);
+        $certifications = $certificates->forEmployee($employee);
 
         $draft = CompetencyAssessment::where('employee_id', $employee->id)->where('status', CompetencyAssessment::DRAFT)->latest('id')->first();
         $history = CompetencyAssessment::completed()->where('employee_id', $employee->id)
             ->with(['assessor', 'position'])->withCount('ratings')
             ->orderByDesc('completed_at')->limit(20)->get();
 
+        $summary = [
+            'required'   => $required->count(),
+            'met'        => $rows->filter(fn ($r) => $r['required_level'] !== null && $r['assessed'] && $r['gap'] === 0)->count(),
+            'gaps'       => $rows->where('gap', '>', 0)->count(),
+            'not_rated'  => $rows->filter(fn ($r) => $r['required_level'] !== null && !$r['assessed'])->count(),
+            'certification_gaps' => $certificates->gaps($certifications)->count(),
+        ];
+        $authorizations = \App\Models\Competency\EmployeeAuthorization::current()->where('employee_id', $employee->id)
+            ->whereHas('activity')->with('activity')->orderBy('status')->get();
+
         return [
+            // The one-line answer: is this person competent and authorized, and is something being done about the gaps?
+            'readiness' => [
+                'meets_requirements' => $summary['required'] > 0 && !$summary['gaps'] && !$summary['not_rated'] && !$summary['certification_gaps'],
+                'open_actions'       => $actions->filter(fn ($a) => $a->status->isOpen())->count(),
+                'gaps_without_plan'  => $rows->filter(fn ($r) => $r['gap'] > 0 && !$r['open_actions'])->count(),
+                'authorized'         => $authorizations->where('status', \App\Enums\Competency\AuthorizationStatus::AUTHORIZED)->count(),
+            ],
             'employee' => [
                 'uuid'       => $employee->uuid,
                 'name'       => trim(preg_replace('/\s+/', ' ', $employee->name)),
@@ -226,19 +248,65 @@ class CompetencyService
             ],
             'position'     => $position ? ['uuid' => $position->uuid, 'name' => $position->name] : null,
             'competencies' => $rows,
-            'summary'      => [
-                'required'   => $required->count(),
-                'met'        => $rows->filter(fn ($r) => $r['required_level'] !== null && $r['assessed'] && $r['gap'] === 0)->count(),
-                'gaps'       => $rows->where('gap', '>', 0)->count(),
-                'not_rated'  => $rows->filter(fn ($r) => $r['required_level'] !== null && !$r['assessed'])->count(),
-            ],
+            // Certificates the position requires, and where the employee stands on each.
+            'certifications' => $certifications,
+            // What the employee is authorized (or recommended) to do.
+            'authorizations' => $authorizations->map(fn ($a) => [
+                    'uuid'        => $a->uuid,
+                    'activity'    => ['uuid' => $a->activity->uuid, 'name' => $a->activity->name],
+                    'status'      => self::option($a->status),
+                    'valid_until' => $a->valid_until?->toDateString(),
+                    'reason'      => $a->reason,
+                ])->values(),
+            'summary'      => $summary,
             'latest_assessment' => $latest ? $this->assessmentSummary($latest) : null,
             'draft'             => $draft ? ['uuid' => $draft->uuid, 'updated_at' => $draft->updated_at] : null,
             'review_due'        => $latest?->next_review_on && $latest->next_review_on->isPast(),
             'actions'           => $actions->map(fn ($a) => $this->action($a))->values(),
+            'trainings'         => $this->trainings($employee, $actions),
             'history'           => $history->map(fn ($a) => $this->assessmentSummary($a))->values(),
             'can_assess'        => $viewer ? $this->canAssess($viewer, $employee) : false,
         ];
+    }
+
+    /**
+     * The employee's approved trainings, newest plan first, with what happened and how it was
+     * evaluated, and the competencies each was meant to develop.
+     */
+    private function trainings(Employee $employee, Collection $actions): array
+    {
+        if (!feature('training_plan.enabled')) {
+            return [];
+        }
+
+        $developed = $actions->whereNotNull('training_plan_item_id')->groupBy('training_plan_item_id')
+            ->map(fn ($group) => $group->map(fn ($a) => $a->competency?->name)->filter()->unique()->values());
+
+        return \App\Models\TrainingPlan\TrainingPlanItem::approved()->where('employee_id', $employee->id)
+            ->whereHas('plan')->with(['plan', 'evaluations'])
+            ->get()
+            ->sortBy([fn ($a, $b) => $b->plan->year <=> $a->plan->year, fn ($a, $b) => strcmp($a->quarter, $b->quarter)])
+            ->take(30)
+            ->map(function ($item) use ($developed) {
+                $feedback = $item->evaluations->first(fn ($e) => $e->type === \App\Enums\TrainingPlan\EvaluationType::PARTICIPANT_FEEDBACK);
+                $review = $item->evaluations->first(fn ($e) => $e->type === \App\Enums\TrainingPlan\EvaluationType::SUPERVISOR_REVIEW);
+
+                return [
+                    'uuid'         => $item->uuid,
+                    'title'        => $item->title,
+                    'year'         => $item->plan->year,
+                    'quarter'      => $item->quarter,
+                    'status'       => self::option($item->status),
+                    'completed_at' => $item->completed_at?->toDateString(),
+                    'hours'        => $item->hours,
+                    'attended'     => $item->attended,
+                    'score'        => $item->score,
+                    'passed'       => $item->passed,
+                    'competencies' => $developed->get($item->id, collect())->all(),
+                    'feedback'     => $feedback ? ['status' => $feedback->status(), 'rating' => $feedback->rating] : null,
+                    'review'       => $review ? ['status' => $review->status(), 'applied_on_job' => $review->applied_on_job, 'rating' => $review->rating, 'due_on' => $review->due_on->toDateString()] : null,
+                ];
+            })->values()->all();
     }
 
     public function assessmentSummary(CompetencyAssessment $a): array
@@ -258,8 +326,9 @@ class CompetencyService
 
     public function action(DevelopmentAction $a): array
     {
-        $a->loadMissing(['competency', 'trainingPlanItem.plan']);
+        $a->loadMissing(['competency', 'trainingPlanItem.plan', 'trainingPlanItem.evaluations', 'evaluator', 'evidenceFiles.uploader']);
         $item = $a->trainingPlanItem;
+        $review = $item?->evaluations->first(fn ($e) => $e->type === \App\Enums\TrainingPlan\EvaluationType::SUPERVISOR_REVIEW);
 
         return [
             'uuid'               => $a->uuid,
@@ -270,11 +339,26 @@ class CompetencyService
             'due_on'             => $a->due_on?->toDateString(),
             'completed_on'       => $a->completed_on?->toDateString(),
             'outcome'            => $a->outcome,
+            'files'              => $a->evidenceFiles->map->payload()->values(),
+            // The effectiveness check that finished it (SOP 5.3.6).
+            'effectiveness'      => $a->effectiveness_result ? [
+                'result'         => self::option($a->effectiveness_result),
+                'verified_level' => $a->verified_level,
+                'evaluated_on'   => $a->evaluated_on?->toDateString(),
+                'evaluated_by'   => $a->evaluator?->name,
+            ] : null,
             'training'           => $item ? [
                 'uuid'   => $item->uuid,
                 'title'  => $item->title,
                 'year'   => $item->plan?->year,
                 'status' => ['value' => $item->status->value, 'label' => $item->status->label()],
+                'completed_at' => $item->completed_at?->toDateString(),
+                // The supervisor's view of whether it's applied on the job: input to the effectiveness check.
+                'review' => $review?->isSubmitted() ? [
+                    'applied_on_job' => $review->applied_on_job,
+                    'rating'         => $review->rating,
+                    'comment'        => $review->comment,
+                ] : null,
             ] : null,
         ];
     }

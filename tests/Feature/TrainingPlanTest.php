@@ -327,6 +327,173 @@ class TrainingPlanTest extends TestCase
         $this->assertNull($item->fresh()->completed_at);
     }
 
+    // ── Training record ───────────────────────────────────────────────────────
+
+    public function test_the_training_record_is_kept_on_approved_trainings_and_completion_means_attendance(): void
+    {
+        $plan = $this->createPlan();
+        $item = $this->addItem($plan, ['cost' => 2000, 'planned_start_date' => '2026-07-06', 'planned_end_date' => '2026-07-08']);
+        $absent = $this->addItem($plan, ['cost' => 2000]);
+
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['attended' => true])->assertStatus(422);
+
+        $this->approvePlan($plan);
+        Sanctum::actingAs($this->hr);
+
+        // Completing records attendance and takes the planned dates; recording needs no re-approval.
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['status' => 'completed', 'hours' => 24, 'score' => 82, 'passed' => true, 'actual_cost' => 1800, 'provider' => 'Bultest'])
+            ->assertOk()
+            ->assertJsonPath('data.attended', true)
+            ->assertJsonPath('data.actual_start_date', '2026-07-06')
+            ->assertJsonPath('data.actual_end_date', '2026-07-08')
+            ->assertJsonPath('data.hours', '24.0')
+            ->assertJsonPath('data.approval.status.value', 'approved');
+
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['attended' => false])->assertStatus(422);
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['actual_start_date' => '2026-07-09'])
+            ->assertUnprocessable()->assertJsonValidationErrors('actual_end_date');
+
+        // Failing needs a score or a comment.
+        $this->putJson("/api/v1/training-plan/items/{$absent->uuid}", ['status' => 'failed'])->assertUnprocessable()->assertJsonValidationErrors('score');
+        $this->putJson("/api/v1/training-plan/items/{$absent->uuid}", ['status' => 'failed', 'attended' => false, 'comment' => 'Did not turn up'])->assertOk();
+
+        // Executed spend uses the actual cost where recorded.
+        $this->getJson("/api/v1/training-plan/plans/{$plan->uuid}/dashboard")
+            ->assertJsonPath('data.budget.executed', 1800)
+            ->assertJsonPath('data.totals.hours', 24);
+
+        // Heads of department don't record results.
+        [$head, $staff] = $this->headOf();
+        $item->update(['employee_id' => $staff->id]);
+        Sanctum::actingAs($head);
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['score' => 90])->assertForbidden();
+    }
+
+    public function test_one_session_is_recorded_for_several_trainees_at_once_or_not_at_all(): void
+    {
+        $plan = $this->createPlan();
+        $training = $this->catalogue(['title' => 'BOSIET']);
+        $a = $this->addItem($plan, ['training_catalogue_item_uuid' => $training->uuid]);
+        $b = $this->addItem($plan, ['training_catalogue_item_uuid' => $training->uuid]);
+        $this->approvePlan($plan);
+        // A trainee added in a revision isn't approved yet; the first two stay approved.
+        Sanctum::actingAs($this->hr);
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/revise")->assertOk();
+        $late = $this->addItem($plan, ['training_catalogue_item_uuid' => $training->uuid]);
+
+        $session = ['status' => 'completed', 'actual_start_date' => '2026-08-03', 'actual_end_date' => '2026-08-05', 'hours' => 21, 'provider' => 'RigRight'];
+
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/items/progress", ['item_uuids' => [$a->uuid, $late->uuid]] + $session)
+            ->assertStatus(422);
+        $this->assertNull($a->fresh()->hours, 'nothing saved when one trainee breaks a rule');
+
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/items/progress", ['item_uuids' => [$a->uuid, $b->uuid]] + $session)
+            ->assertOk()->assertJsonCount(2, 'data');
+        foreach ([$a, $b] as $line) {
+            $line = $line->fresh();
+            $this->assertSame('completed', $line->status->value);
+            $this->assertTrue($line->attended);
+            $this->assertSame('2026-08-05', $line->actual_end_date->toDateString());
+            $this->assertSame('RigRight', $line->provider);
+        }
+
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/items/progress", ['item_uuids' => [$a->uuid]])->assertUnprocessable();
+
+        [$head] = $this->headOf();
+        Sanctum::actingAs($head);
+        $this->postJson("/api/v1/training-plan/plans/{$plan->uuid}/items/progress", ['item_uuids' => [$a->uuid]] + $session)->assertForbidden();
+    }
+
+    // ── Evaluation ────────────────────────────────────────────────────────────
+
+    public function test_a_completed_training_asks_the_trainee_for_feedback_and_their_supervisor_for_a_review(): void
+    {
+        \Illuminate\Support\Facades\Notification::fake();
+        $plan = $this->createPlan();
+        $item = $this->addItem($plan);
+        $trainee = $item->employee->userAccount;
+        $supervisor = $this->userWithRole('staff');
+        \App\Models\EmployeeSupervisor::create(['supervisor_id' => $supervisor->employee_id, 'employee_id' => $item->employee_id]);
+        $this->approvePlan($plan);
+
+        Sanctum::actingAs($this->hr);
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['status' => 'completed', 'hours' => 8])->assertOk()
+            ->assertJsonPath('data.evaluations.0.type.value', 'participant_feedback')
+            ->assertJsonPath('data.evaluations.0.status', 'due')
+            ->assertJsonPath('data.evaluations.1.status', 'upcoming')
+            ->assertJsonPath('data.evaluations.1.evaluator', $supervisor->name)
+            ->assertJsonPath('data.evaluations.1.due_on', now()->addDays(90)->toDateString());
+        \Illuminate\Support\Facades\Notification::assertSentTo($trainee, \App\Notifications\TrainingEvaluationNotification::class);
+        \Illuminate\Support\Facades\Notification::assertNotSentTo($supervisor, \App\Notifications\TrainingEvaluationNotification::class);
+
+        // A week past due, one reminder.
+        $this->travel(15)->days();
+        $this->artisan('training-plan:send-reminders')->assertSuccessful();
+        $this->artisan('training-plan:send-reminders')->assertSuccessful();
+        \Illuminate\Support\Facades\Notification::assertSentToTimes($trainee, \App\Notifications\TrainingEvaluationNotification::class, 2);
+
+        // The trainee answers their feedback, once; nobody else can.
+        Sanctum::actingAs($trainee);
+        $feedback = $this->getJson('/api/v1/training-plan/my-evaluations')->assertOk()
+            ->assertJsonCount(1, 'data.pending')
+            ->assertJsonCount(4, 'data.pending.0.questions')
+            ->json('data.pending.0.uuid');
+        $this->putJson("/api/v1/training-plan/evaluations/{$feedback}", ['rating' => 4])->assertUnprocessable()->assertJsonValidationErrors('answers.objectives');
+        $answers = ['objectives' => 4, 'relevance' => 5, 'trainer' => 4, 'materials' => 3];
+        $this->putJson("/api/v1/training-plan/evaluations/{$feedback}", ['rating' => 4, 'answers' => $answers])->assertOk()->assertJsonPath('data.status', 'submitted');
+        $this->putJson("/api/v1/training-plan/evaluations/{$feedback}", ['rating' => 5, 'answers' => $answers])->assertStatus(409);
+
+        $review = \App\Models\TrainingPlan\TrainingEvaluation::where('type', 'supervisor_review')->firstOrFail();
+        Sanctum::actingAs($supervisor);
+        $this->getJson('/api/v1/training-plan/my-evaluations')->assertJsonCount(0, 'data.pending');
+        $this->putJson("/api/v1/training-plan/evaluations/{$review->uuid}", ['rating' => 3, 'applied_on_job' => true])->assertStatus(422);
+
+        // The review is requested on its due date.
+        $this->travel(80)->days();
+        $this->artisan('training-plan:send-reminders')->assertSuccessful();
+        \Illuminate\Support\Facades\Notification::assertSentTo($supervisor, \App\Notifications\TrainingEvaluationNotification::class);
+        $this->getJson('/api/v1/training-plan/my-evaluations')->assertJsonCount(1, 'data.pending')
+            ->assertJsonPath('data.pending.0.training.employee.name', $item->employee->name);
+
+        Sanctum::actingAs($trainee);
+        $this->putJson("/api/v1/training-plan/evaluations/{$review->uuid}", ['rating' => 3, 'applied_on_job' => true])->assertForbidden();
+
+        Sanctum::actingAs($supervisor);
+        $this->putJson("/api/v1/training-plan/evaluations/{$review->uuid}", ['rating' => 2, 'applied_on_job' => false])
+            ->assertUnprocessable()->assertJsonValidationErrors('comment');
+        $this->putJson("/api/v1/training-plan/evaluations/{$review->uuid}", ['rating' => 2, 'applied_on_job' => false, 'comment' => 'Still needs supervision on UT scans'])->assertOk();
+
+        Sanctum::actingAs($this->hr);
+        $this->getJson("/api/v1/training-plan/plans/{$plan->uuid}/items")
+            ->assertJsonPath('data.0.evaluations.1.applied_on_job', false)
+            ->assertJsonPath('data.0.evaluations.1.comment', 'Still needs supervision on UT scans');
+    }
+
+    public function test_unanswered_evaluations_are_withdrawn_when_a_completion_is_corrected_and_unassigned_ones_go_to_hr(): void
+    {
+        \Illuminate\Support\Facades\Notification::fake();
+        $plan = $this->createPlan();
+        $item = $this->addItem($plan);
+        $this->approvePlan($plan);
+        Sanctum::actingAs($this->hr);
+
+        // No supervisor and no head of department: HR is asked for the review.
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['status' => 'completed', 'hours' => 8])->assertOk()
+            ->assertJsonPath('data.evaluations.1.evaluator', null);
+        $this->travel(91)->days();
+        $this->getJson('/api/v1/training-plan/my-evaluations')->assertJsonCount(1, 'data.pending')->assertJsonPath('data.pending.0.unassigned', true);
+        $this->travelBack();
+
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['status' => 'cancelled'])->assertOk()->assertJsonCount(0, 'data.evaluations');
+        $this->assertSame(0, \App\Models\TrainingPlan\TrainingEvaluation::count());
+
+        // Switched off: completing asks for nothing.
+        \App\Models\Config\Setting::where('key', 'features.training_plan.evaluations')->update(['value' => false]);
+        app(\App\Services\SettingService::class)->refreshCache();
+        $this->putJson("/api/v1/training-plan/items/{$item->uuid}", ['status' => 'completed', 'hours' => 8])->assertOk();
+        $this->assertSame(0, \App\Models\TrainingPlan\TrainingEvaluation::count());
+    }
+
     // ── Dashboard ─────────────────────────────────────────────────────────────
 
     public function test_dashboard_reproduces_the_analysis_sheet(): void

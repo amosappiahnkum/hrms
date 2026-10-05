@@ -18,6 +18,12 @@ class Position extends ApplicationModel
         return $this->hasMany(\App\Models\Competency\PositionCompetency::class);
     }
 
+    /** The certificates this position requires or recommends. */
+    public function certificationRequirements(): HasMany
+    {
+        return $this->hasMany(\App\Models\Competency\PositionCertification::class);
+    }
+
     public function jobDetails(): HasMany
     {
         return $this->hasMany(JobDetail::class);

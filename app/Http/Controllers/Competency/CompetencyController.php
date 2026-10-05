@@ -29,6 +29,35 @@ class CompetencyController extends Controller
         ]);
     }
 
+    /**
+     * Catalogue trainings that develop this competency, those reaching the highest level first.
+     * Empty while training plans are switched off, since nothing could be planned from them.
+     */
+    public function courses(Competency $competency): JsonResponse
+    {
+        if (!feature('training_plan.enabled')) {
+            return ApiResponse::success([]);
+        }
+
+        $courses = $competency->courseLinks()
+            ->whereHas('catalogueItem')
+            ->with('catalogueItem.domain')
+            ->get()
+            ->sortBy([fn ($a, $b) => $b->target_level <=> $a->target_level, fn ($a, $b) => strcasecmp($a->catalogueItem->title, $b->catalogueItem->title)])
+            ->map(fn ($link) => [
+                'uuid'           => $link->catalogueItem->uuid,
+                'title'          => $link->catalogueItem->title,
+                'nature'         => CompetencyService::option($link->catalogueItem->nature),
+                'domain'         => $link->catalogueItem->domain?->name,
+                'default_days'   => $link->catalogueItem->default_days,
+                'estimated_cost' => $link->catalogueItem->estimated_cost,
+                'trainer'        => $link->catalogueItem->trainer,
+                'target_level'   => $link->target_level,
+            ]);
+
+        return ApiResponse::success($courses->values());
+    }
+
     public function index(Request $request): JsonResponse
     {
         $competencies = Competency::query()

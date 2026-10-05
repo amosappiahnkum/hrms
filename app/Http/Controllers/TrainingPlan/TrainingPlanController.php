@@ -193,7 +193,7 @@ class TrainingPlanController extends Controller
     {
         abort_unless($this->access->seesEverything($request->user()), 403, 'Only HR and the plan\'s reviewers see the whole plan.');
 
-        $items = $trainingPlan->items()->get(['id', 'employee_id', 'nature', 'category', 'quarter', 'status', 'delivery', 'cost', 'approval_status']);
+        $items = $trainingPlan->items()->get(['id', 'employee_id', 'nature', 'category', 'quarter', 'status', 'delivery', 'cost', 'actual_cost', 'hours', 'approval_status']);
 
         // Until the plan is approved, show its draft figures (everything in it) rather than zeros.
         $draft = !$trainingPlan->isApproved();
@@ -202,7 +202,9 @@ class TrainingPlanController extends Controller
             : $items->partition(fn (TrainingPlanItem $i) => $i->isApproved());
 
         $planned = (float) $approved->sum('cost');
-        $executed = (float) $approved->filter(fn ($i) => $i->status === TrainingStatus::COMPLETED)->sum('cost');
+        $completedItems = $approved->filter(fn ($i) => $i->status === TrainingStatus::COMPLETED);
+        // What completed trainings actually cost, where recorded; otherwise what was planned.
+        $executed = (float) $completedItems->sum(fn ($i) => $i->actual_cost ?? $i->cost);
         $factor = (float) $trainingPlan->budget_factor ?: 1.0;
 
         $breakdown = fn (array $cases, callable $key) => collect($cases)->map(function ($case) use ($approved, $key) {
@@ -229,7 +231,8 @@ class TrainingPlanController extends Controller
             'totals' => [
                 'trainings' => $approved->count(),
                 'trainees'  => $approved->pluck('employee_id')->unique()->count(),
-                'completed' => $approved->filter(fn ($i) => $i->status === TrainingStatus::COMPLETED)->count(),
+                'completed' => $completedItems->count(),
+                'hours'     => round((float) $completedItems->sum('hours'), 1),
             ],
             'by_nature'   => $breakdown(TrainingNature::cases(), fn ($i) => $i->nature),
             'by_category' => $breakdown(PersonnelCategory::cases(), fn ($i) => $i->category),

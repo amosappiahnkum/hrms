@@ -48,13 +48,14 @@ class CompetencyAssessmentController extends Controller
                 ]);
 
                 foreach ($required as $competencyId => $level) {
-                    $assessment->ratings()->create([
+                    $rating = $assessment->ratings()->create([
                         'competency_id'  => $competencyId,
                         'required_level' => $level,
-                        // Start from where they were last time.
+                        // Start from where they were last time, evidence files included.
                         'level'          => $previous->get($competencyId)?->level,
                         'evidence'       => $previous->get($competencyId)?->evidence,
                     ]);
+                    $previous->get($competencyId)?->evidenceFiles->each->copyTo($rating);
                 }
 
                 return $assessment;
@@ -119,6 +120,8 @@ class CompetencyAssessmentController extends Controller
             'assessed_on'    => $assessedOn->toDateString(),
             'next_review_on' => $competencyAssessment->next_review_on ?? $this->service->defaultNextReview($assessedOn)->toDateString(),
         ]);
+        // The new levels may no longer support authorizations the employee holds.
+        app(\App\Services\Competency\AuthorizationService::class)->recheck($competencyAssessment->employee);
 
         return ApiResponse::success($this->detail($competencyAssessment->fresh(), $request), 'Assessment completed.');
     }
@@ -143,13 +146,15 @@ class CompetencyAssessmentController extends Controller
 
     private function detail(CompetencyAssessment $a, Request $request): array
     {
-        $a->load(['ratings.competency' => fn ($q) => $q->withTrashed(), 'employee.department']);
+        $a->load(['ratings.competency' => fn ($q) => $q->withTrashed(), 'ratings.evidenceFiles.uploader', 'employee.department']);
 
         return $this->service->assessmentSummary($a) + [
             'employee' => ['uuid' => $a->employee->uuid, 'name' => trim(preg_replace('/\s+/', ' ', $a->employee->name)), 'department' => $a->employee->department?->name],
             'ratings'  => $a->ratings
                 ->sortBy([fn ($r) => $r->competency->group->value, fn ($r) => $r->competency->name])
                 ->map(fn (CompetencyRating $r) => [
+                    'uuid'           => $r->uuid,
+                    'files'          => $r->evidenceFiles->map->payload()->values(),
                     'competency'     => ['uuid' => $r->competency->uuid, 'name' => $r->competency->name, 'group' => CompetencyService::option($r->competency->group), 'description' => $r->competency->description],
                     'required_level' => $r->required_level,
                     'level'          => $r->level,

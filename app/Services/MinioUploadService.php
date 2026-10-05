@@ -13,9 +13,9 @@ class MinioUploadService
     protected string $disk = 's3';
 
     /**
-     * Upload file to MinIO
+     * Upload file to MinIO. Private files are only reachable through temporary URLs.
      */
-    public function upload(UploadedFile $file, string $filename = null, string $folder = 'uploads'): array
+    public function upload(UploadedFile $file, ?string $filename = null, string $folder = 'uploads', string $visibility = 'public'): array
     {
         try {
             $name = $this->generateFileName($file, $filename);
@@ -24,7 +24,7 @@ class MinioUploadService
                 $folder,
                 $file,
                 $name,
-                'public'
+                $visibility
             );
 
             return [

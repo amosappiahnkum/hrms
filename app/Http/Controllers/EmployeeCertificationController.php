@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Helpers\ApiResponse;
 use App\Http\Resources\EmployeeCertificationResource;
 use App\Models\CertificationProvider;
+use App\Models\Competency\CertificationType;
 use App\Models\EmployeeCertification;
 use App\Models\SelfService\Employee;
 use App\Models\TrainingPlan\TrainingPlanItem;
@@ -14,6 +15,7 @@ use App\Notifications\CertificationActionNotification;
 use App\Services\MinioUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
 
@@ -25,7 +27,7 @@ class EmployeeCertificationController extends Controller
     {
         abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
-        $query = EmployeeCertification::with(['provider', 'employee', 'uploader', 'trainingPlanItem.plan'])
+        $query = EmployeeCertification::with(['provider', 'type', 'employee', 'uploader', 'trainingPlanItem.plan'])
             ->when($request->employee_id, fn($q, $v) => $q->whereHas(
                 'employee', fn($eq) => $eq->where('uuid', $v)
             ))
@@ -84,6 +86,7 @@ class EmployeeCertificationController extends Controller
             'certification_provider_id' => ['nullable', 'exists:certification_providers,id'],
             'provider_name'            => ['nullable', 'string', 'max:255', 'required_without:certification_provider_id'],
             'file'                     => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:20480'],
+            'certification_type_uuid'  => ['nullable', 'string', Rule::exists('certification_types', 'uuid')->whereNull('deleted_at')],
             'training_plan_item_uuid'  => ['nullable', 'string'],
             'mark_training_completed'  => ['boolean'],
         ]);
@@ -97,6 +100,7 @@ class EmployeeCertificationController extends Controller
             'employee_id'               => $employee->id,
             'training_plan_item_id'     => $training?->id,
             'certification_provider_id' => $providerId,
+            'certification_type_id'     => $this->typeId($request->certification_type_uuid),
             'title'                     => $request->title,
             'description'               => $request->description,
             'date_received'             => $request->date_received,
@@ -113,7 +117,7 @@ class EmployeeCertificationController extends Controller
 
         $this->completeTraining($training, $request, $cert);
 
-        $cert->load(['provider', 'employee', 'uploader', 'trainingPlanItem.plan']);
+        $cert->load(['provider', 'type', 'employee', 'uploader', 'trainingPlanItem.plan']);
         $this->notifyEmployee($cert, 'uploaded');
 
         return ApiResponse::success(
@@ -128,7 +132,7 @@ class EmployeeCertificationController extends Controller
         abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
         return ApiResponse::success(
-            EmployeeCertificationResource::make($employeeCertification->load(['provider', 'employee', 'uploader', 'trainingPlanItem.plan']))
+            EmployeeCertificationResource::make($employeeCertification->load(['provider', 'type', 'employee', 'uploader', 'trainingPlanItem.plan']))
         );
     }
 
@@ -144,6 +148,7 @@ class EmployeeCertificationController extends Controller
             'does_not_expire'          => ['boolean'],
             'certification_provider_id' => ['nullable', 'exists:certification_providers,id'],
             'provider_name'            => ['nullable', 'string', 'max:255'],
+            'certification_type_uuid'  => ['nullable', 'string', Rule::exists('certification_types', 'uuid')->whereNull('deleted_at')],
             'training_plan_item_uuid'  => ['nullable', 'string'],
             'mark_training_completed'  => ['boolean'],
         ]);
@@ -167,13 +172,17 @@ class EmployeeCertificationController extends Controller
             'expiry_date'               => $doesNotExpire ? null : $request->input('expiry_date', $employeeCertification->expiry_date),
             'does_not_expire'           => $doesNotExpire,
             'training_plan_item_id'     => $training?->id,
+            // Omit to keep; null to clear.
+            'certification_type_id'     => $request->exists('certification_type_uuid')
+                ? $this->typeId($request->certification_type_uuid)
+                : $employeeCertification->certification_type_id,
         ]);
 
         $this->completeTraining($training, $request, $employeeCertification);
 
         activity('certifications')->performedOn($employeeCertification)->log("Updated certification: {$employeeCertification->title}");
 
-        $employeeCertification->load(['provider', 'employee', 'uploader', 'trainingPlanItem.plan']);
+        $employeeCertification->load(['provider', 'type', 'employee', 'uploader', 'trainingPlanItem.plan']);
         $this->notifyEmployee($employeeCertification, 'updated');
 
         return ApiResponse::success(
@@ -307,5 +316,10 @@ class EmployeeCertificationController extends Controller
         return CertificationProvider::firstOrCreate(
             ['name' => trim($request->provider_name)]
         )->id;
+    }
+
+    private function typeId(?string $uuid): ?int
+    {
+        return $uuid ? CertificationType::where('uuid', $uuid)->value('id') : null;
     }
 }

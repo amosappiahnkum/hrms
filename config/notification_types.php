@@ -145,6 +145,31 @@ return [
                 'default_email'  => true,
                 'default_in_app' => true,
             ],
+            'training_evaluation' => [
+                'label'          => 'Training Feedback & Reviews',
+                'description'    => 'When a training you completed needs your feedback, or a training your staff completed needs your review.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+        ],
+    ],
+    'competency' => [
+        'label'       => 'Competency Matrix',
+        'description' => 'Effectiveness checks of development, and the authorization register.',
+        'icon'        => 'competency',
+        'types'       => [
+            'competency_authorization' => [
+                'label'          => 'Authorizations',
+                'description'    => 'Recommendations to review, and authorizations granted, declined, suspended, revoked or expiring.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'competency_evaluation' => [
+                'label'          => 'Effectiveness Checks',
+                'description'    => 'When development you planned (e.g. a training) has taken place and the competency needs re-rating.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
         ],
     ],
 ];

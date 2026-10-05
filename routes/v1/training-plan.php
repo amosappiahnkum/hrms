@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\TrainingPlan\TrainingCatalogueController;
 use App\Http\Controllers\TrainingPlan\TrainingDomainController;
+use App\Http\Controllers\TrainingPlan\TrainingEvaluationController;
+use App\Http\Controllers\TrainingPlan\TrainingNeedsController;
 use App\Http\Controllers\TrainingPlan\TrainingPlanApprovalLevelController;
 use App\Http\Controllers\TrainingPlan\TrainingPlanController;
 use App\Http\Controllers\TrainingPlan\TrainingPlanItemController;
@@ -12,6 +14,9 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('feature:training_plan.enabled')->prefix('training-plan')->group(function () {
     // Self-service: every employee sees their own approved trainings.
     Route::get('my-items', [TrainingPlanItemController::class, 'mine']);
+    // Self-service: feedback on trainings the user completed, and reviews of their staff's.
+    Route::get('my-evaluations', [TrainingEvaluationController::class, 'mine']);
+    Route::put('evaluations/{trainingEvaluation}', [TrainingEvaluationController::class, 'submit']);
 
     Route::middleware('training-plan.access:manage-certifications')->group(function () {
         Route::get('options', [TrainingPlanController::class, 'options']);
@@ -59,6 +64,13 @@ Route::middleware('feature:training_plan.enabled')->prefix('training-plan')->gro
         Route::delete('plans/{trainingPlan}/collection', [TrainingPlanController::class, 'closeCollection']);
         Route::post('plans/{trainingPlan}/submit', [TrainingPlanController::class, 'submit']);
         Route::post('plans/{trainingPlan}/revise', [TrainingPlanController::class, 'revise']);
+
+        // Training needs handed over from the competency matrix, and planning them in bulk.
+        Route::get('needs', [TrainingNeedsController::class, 'index']);
+        Route::post('plans/{trainingPlan}/needs', [TrainingPlanItemController::class, 'planNeeds']);
+
+        // Record one session (attendance, dates, hours, results) for several trainees at once.
+        Route::post('plans/{trainingPlan}/items/progress', [TrainingPlanItemController::class, 'recordProgress']);
     });
 
     // Who validates and approves.

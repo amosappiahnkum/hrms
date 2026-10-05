@@ -18,6 +18,7 @@ class EmployeeCertification extends Model
         'employee_id',
         'training_plan_item_id',
         'certification_provider_id',
+        'certification_type_id',
         'title',
         'description',
         'date_received',
@@ -49,6 +50,18 @@ class EmployeeCertification extends Model
     public function provider(): BelongsTo
     {
         return $this->belongsTo(CertificationProvider::class, 'certification_provider_id');
+    }
+
+    /** The kind of certificate, when HR has set it (needed to meet a position's requirements). */
+    public function type(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Competency\CertificationType::class, 'certification_type_id');
+    }
+
+    /** Valid on the given day: received, and not expired. */
+    public function isValidOn(\DateTimeInterface $day): bool
+    {
+        return $this->does_not_expire || !$this->expiry_date || $this->expiry_date->gte(\Carbon\Carbon::instance($day)->startOfDay());
     }
 
     public function uploader(): BelongsTo

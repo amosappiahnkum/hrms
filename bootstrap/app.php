@@ -25,6 +25,21 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // Messages written for users, thrown anywhere, become a clean JSON error with their status.
-        $exceptions->render(fn (\App\Exceptions\UserFacingException $e) => \App\Helpers\ApiResponse::fromException($e));
+        // Answers written for users (e.g. "doesn't meet the requirements yet"), not faults: don't log them.
+        $exceptions->dontReport(\App\Exceptions\UserFacingException::class);
+        // API errors never carry exception messages, SQL, class names or traces, even with APP_DEBUG on;
+        // details stay in the logs. Validation and auth errors keep Laravel's own (safe) responses.
+        $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Http\Exceptions\HttpResponseException) {
+                return null;
+            }
+
+            return \App\Helpers\ApiResponse::uncaught($e);
+        });
     })->create();

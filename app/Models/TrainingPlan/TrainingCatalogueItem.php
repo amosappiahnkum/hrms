@@ -34,6 +34,12 @@ class TrainingCatalogueItem extends AppModel
         return $this->belongsTo(TrainingDomain::class, 'training_domain_id');
     }
 
+    /** The competencies this training develops. */
+    public function competencyLinks(): HasMany
+    {
+        return $this->hasMany(TrainingCatalogueCompetency::class);
+    }
+
     public function planItems(): HasMany
     {
         return $this->hasMany(TrainingPlanItem::class);
