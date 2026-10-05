@@ -172,4 +172,17 @@ return [
             ],
         ],
     ],
+    'payroll' => [
+        'label'       => 'Payroll',
+        'description' => 'Overtime, loans and pay runs waiting for your approval.',
+        'icon'        => 'payroll',
+        'types'       => [
+            'payroll_approval' => [
+                'label'          => 'Approvals',
+                'description'    => 'When an overtime request, loan or pay run reaches a step you approve.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+        ],
+    ],
 ];

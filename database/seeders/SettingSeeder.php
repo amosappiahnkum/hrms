@@ -61,6 +61,24 @@ class SettingSeeder extends Seeder
         // Months until an employee is due for reassessment (procedure: periodic review).
         $service->setDefault('competency.review_interval_months', 12, 'competency');
 
+        // === PAYROLL ===
+        // Opt-in, each part on its own: overtime works without payroll (approved hours are exported instead).
+        $service->setDefault('features.payroll.enabled', false, 'payroll', 'Pay runs, payslips and statutory reports');
+        $service->setDefault('features.payroll.overtime', false, 'payroll', 'Overtime requests and approval');
+        $service->setDefault('features.payroll.loans', false, 'payroll', 'Staff loans and advances');
+        $service->setDefault('features.payroll.time_inputs', false, 'payroll', 'Monthly unit inputs such as offshore days');
+        // How pay is worked out; HR changes these under Payroll → Settings.
+        $service->setDefault('payroll.base_currency', 'GHS', 'payroll');
+        $service->setDefault('payroll.working_days_per_month', 22, 'payroll');
+        $service->setDefault('payroll.hours_per_day', 8, 'payroll');
+        // income: overtime is taxed with the rest of pay; gra_junior: GRA's concessionary rates for junior staff.
+        $service->setDefault('payroll.overtime_tax_method', 'income', 'payroll');
+        $service->setDefault('payroll.require_different_approvers', true, 'payroll');
+        // A starting set of Ghana statutory rates, unconfirmed until HR checks it (only when none exists).
+        $this->call(StatutoryRatesSeeder::class);
+        // The built-in pay components (basic salary).
+        $this->call(PayComponentsSeeder::class);
+
         // === ANNOUNCEMENTS ===
         $service->setDefault('features.announcements.enabled', true, 'announcements');
 

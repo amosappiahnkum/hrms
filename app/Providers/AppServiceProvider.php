@@ -51,6 +51,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Tables that exist only for tests (e.g. a stand-in for approval workflow subjects).
+        if ($this->app->environment('testing')) {
+            $this->loadMigrationsFrom(base_path('tests/database/migrations'));
+        }
+
 //        if (env('APP_ENV') != 'local') {
 //            URL::forceScheme('https');
 //        }

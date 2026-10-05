@@ -18,6 +18,8 @@
         </include>
     </coverage>
     <php>
+        <!-- The suite builds up memory in one process; spreadsheet tests need headroom. -->
+        <ini name="memory_limit" value="512M"/>
         <server name="APP_ENV" value="testing"/>
         <server name="BCRYPT_ROUNDS" value="4"/>
         <server name="CACHE_DRIVER" value="array"/>

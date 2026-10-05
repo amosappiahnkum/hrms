@@ -261,6 +261,18 @@ class Employee extends AppModel
     /**
      * @return HasOne
      */
+    /** Pay details from each effective date (payroll). */
+    public function payProfiles(): HasMany
+    {
+        return $this->hasMany(\App\Models\Payroll\EmployeePayProfile::class);
+    }
+
+    /** Recurring pay components given to the employee (payroll). */
+    public function payComponents(): HasMany
+    {
+        return $this->hasMany(\App\Models\Payroll\EmployeePayComponent::class);
+    }
+
     public function employeeSupervisor(): HasOne
     {
         return $this->hasOne(EmployeeSupervisor::class);
