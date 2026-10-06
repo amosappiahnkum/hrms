@@ -29,6 +29,7 @@ class ExchangeRateController extends Controller
 
     public function update(Request $request, ExchangeRate $exchangeRate): JsonResponse
     {
+        $this->ensureNotUsed($exchangeRate);
         $exchangeRate->update($this->validated($request, $exchangeRate));
 
         return ApiResponse::success($this->row($exchangeRate), 'Rate saved.');
@@ -36,9 +37,19 @@ class ExchangeRateController extends Controller
 
     public function destroy(ExchangeRate $exchangeRate): JsonResponse
     {
+        $this->ensureNotUsed($exchangeRate);
         $exchangeRate->delete();
 
         return ApiResponse::success(null, 'Rate removed.');
+    }
+
+    /** A rate an approved or paid pay run used is part of its record. */
+    private function ensureNotUsed(ExchangeRate $rate): void
+    {
+        if (\App\Models\Payroll\PayRun::where('year', $rate->year)->whereIn('status', ['approved', 'paid'])->get()
+            ->contains(fn ($run) => isset(($run->exchange_rates ?? [])[$rate->currency]))) {
+            throw new \App\Exceptions\UserFacingException("An approved pay run in {$rate->year} used this rate, so it can't change.");
+        }
     }
 
     private function validated(Request $request, ?ExchangeRate $rate = null): array

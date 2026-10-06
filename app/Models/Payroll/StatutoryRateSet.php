@@ -13,7 +13,7 @@ class StatutoryRateSet extends AppModel
     use SoftDeletes;
 
     protected $fillable = [
-        'name', 'effective_from', 'notes', 'ssnit', 'paye_bands', 'reliefs', 'tier3_relief_limit_percent',
+        'name', 'effective_from', 'notes', 'ssnit', 'paye_bands', 'reliefs', 'tier3_relief_limit_percent', 'non_resident_rate',
         'overtime_tax', 'bonus_tax', 'confirmed_at', 'confirmed_by', 'created_by',
     ];
 
@@ -25,6 +25,7 @@ class StatutoryRateSet extends AppModel
         'overtime_tax'               => 'array',
         'bonus_tax'                  => 'array',
         'tier3_relief_limit_percent' => 'decimal:2',
+        'non_resident_rate'          => 'decimal:2',
         'confirmed_at'               => 'datetime',
     ];
 

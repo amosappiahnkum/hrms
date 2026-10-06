@@ -37,6 +37,7 @@ class StatutoryRateSetController extends Controller
     /** Editing clears the confirmation: changed figures need checking again. */
     public function update(Request $request, StatutoryRateSet $statutoryRateSet): JsonResponse
     {
+        $this->ensureNotUsed($statutoryRateSet);
         $statutoryRateSet->update($this->validated($request, $statutoryRateSet) + ['confirmed_at' => null, 'confirmed_by' => null]);
 
         return ApiResponse::success($this->row($statutoryRateSet->fresh('confirmer')), 'Rates saved. Confirm them once checked.');
@@ -51,12 +52,21 @@ class StatutoryRateSetController extends Controller
 
     public function destroy(StatutoryRateSet $statutoryRateSet): JsonResponse
     {
+        $this->ensureNotUsed($statutoryRateSet);
         if ($statutoryRateSet->isConfirmed()) {
             throw new UserFacingException('Confirmed rates can\'t be removed. Add new rates from a later date instead.');
         }
         $statutoryRateSet->delete();
 
         return ApiResponse::success(null, 'Rates removed.');
+    }
+
+    /** Rates an approved or paid pay run used are part of its record. */
+    private function ensureNotUsed(StatutoryRateSet $set): void
+    {
+        if (\App\Models\Payroll\PayRun::where('statutory_rate_set_id', $set->id)->whereIn('status', ['approved', 'paid'])->exists()) {
+            throw new UserFacingException('An approved pay run used these rates, so they can\'t change. Add new rates from a later date instead.');
+        }
     }
 
     private function validated(Request $request, ?StatutoryRateSet $set = null): array
@@ -81,6 +91,7 @@ class StatutoryRateSetController extends Controller
             'reliefs.*.max_units'                  => ['nullable', 'integer', 'min:1'],
             'reliefs.*.percent_of_income'          => ['nullable', 'numeric', 'between:0,100'],
             'tier3_relief_limit_percent'           => ['nullable', 'numeric', 'between:0,100'],
+            'non_resident_rate'                    => ['sometimes', 'numeric', 'between:0,100'],
             'overtime_tax'                         => ['nullable', 'array'],
             'overtime_tax.annual_basic_threshold'  => ['required_with:overtime_tax', 'numeric', 'min:0'],
             'overtime_tax.percent_of_basic'        => ['required_with:overtime_tax', 'numeric', 'between:0,100'],
@@ -123,6 +134,7 @@ class StatutoryRateSetController extends Controller
             'paye_bands'                 => $s->paye_bands,
             'reliefs'                    => $s->reliefs ?? [],
             'tier3_relief_limit_percent' => $s->tier3_relief_limit_percent !== null ? (float) $s->tier3_relief_limit_percent : null,
+            'non_resident_rate'          => (float) $s->non_resident_rate,
             'overtime_tax'               => $s->overtime_tax,
             'bonus_tax'                  => $s->bonus_tax,
             'confirmed_at'               => $s->confirmed_at?->toIso8601String(),

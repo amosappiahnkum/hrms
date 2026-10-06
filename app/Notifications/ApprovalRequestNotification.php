@@ -33,7 +33,9 @@ class ApprovalRequestNotification extends Notification implements ShouldQueue
             ->greeting("Dear {$notifiable->name},")
             ->line(($who ? "**{$who}**: " : '') . $summary)
             ->line("It's waiting for your decision at the **{$this->stepName}** step.")
-            ->action('Review', env('FRONTEND_URL') . '/self-service/approvals');
+            ->action('Review', env('FRONTEND_URL') . ($this->approval->process === \App\Enums\Payroll\ApprovalProcess::PAY_RUN
+                ? '/payroll/runs/' . $this->approval->subject?->uuid
+                : '/self-service/approvals'));
     }
 
     public function toArray($notifiable): array

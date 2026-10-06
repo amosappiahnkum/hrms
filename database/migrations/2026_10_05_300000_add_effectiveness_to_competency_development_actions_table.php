@@ -26,8 +26,10 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('competency_development_actions', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('competency_rating_id');
-            $table->dropConstrainedForeignId('evaluated_by');
+            // Dropped by the names they were created with.
+            $table->dropForeign('comp_actions_rating_fk');
+            $table->dropForeign('comp_actions_evaluator_fk');
+            $table->dropColumn(['competency_rating_id', 'evaluated_by']);
             $table->dropColumn(['effectiveness_result', 'verified_level', 'evaluated_on']);
         });
     }

@@ -13,10 +13,13 @@ class PayComponent extends AppModel
     use SoftDeletes;
 
     public const BASIC = 'BASIC';
+    public const LOAN_REPAYMENT = 'LOAN_REPAY';
+    public const LOAN_DISBURSEMENT = 'LOAN_PAYOUT';
+    public const ARREARS = 'ARREARS';
 
     protected $fillable = [
-        'code', 'name', 'kind', 'calculation', 'rate', 'currency', 'unit', 'taxable', 'ssnit_applicable',
-        'recurring', 'prorate', 'show_on_payslip', 'sort_order', 'active', 'is_system',
+        'code', 'name', 'kind', 'calculation', 'rate', 'currency', 'unit', 'taxable', 'is_bonus', 'ssnit_applicable',
+        'recurring', 'prorate', 'show_on_payslip', 'sort_order', 'account_code', 'active', 'is_system',
     ];
 
     protected $casts = [
@@ -24,6 +27,7 @@ class PayComponent extends AppModel
         'calculation'      => ComponentCalculation::class,
         'rate'             => 'decimal:4',
         'taxable'          => 'boolean',
+        'is_bonus'         => 'boolean',
         'ssnit_applicable' => 'boolean',
         'recurring'        => 'boolean',
         'prorate'          => 'boolean',

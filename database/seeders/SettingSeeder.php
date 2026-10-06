@@ -73,7 +73,29 @@ class SettingSeeder extends Seeder
         $service->setDefault('payroll.hours_per_day', 8, 'payroll');
         // income: overtime is taxed with the rest of pay; gra_junior: GRA's concessionary rates for junior staff.
         $service->setDefault('payroll.overtime_tax_method', 'income', 'payroll');
+        // Bonus: at GRA's bonus rate up to a share of annual basic (the rest as income), or all as income.
+        $service->setDefault('payroll.bonus_tax_method', 'gra_bonus', 'payroll');
         $service->setDefault('payroll.require_different_approvers', true, 'payroll');
+        // Overtime policy (Payroll → Settings → Overtime).
+        $service->setDefault('payroll.overtime_auto_type', true, 'payroll');          // type from the date (weekday/weekend/holiday)
+        $service->setDefault('payroll.overtime_eligibility', 'everyone', 'payroll'); // everyone | job_types
+        $service->setDefault('payroll.overtime_job_types', [], 'payroll');
+        $service->setDefault('payroll.overtime_max_hours_per_day', 12, 'payroll');
+        $service->setDefault('payroll.overtime_max_hours_per_month', 0, 'payroll'); // 0: no monthly limit
+        $service->setDefault('payroll.overtime_backdate_days', 31, 'payroll');
+        $service->setDefault('payroll.overtime_require_reason', true, 'payroll');
+        $service->setDefault('payroll.overtime_require_location', false, 'payroll');
+        $service->setDefault('payroll.overtime_locations', [], 'payroll');
+        // Time inputs: approved through the time_input workflow, or counted as entered.
+        $service->setDefault('payroll.time_inputs_require_approval', true, 'payroll');
+        // Loans: a leaver's balance comes off their final pay.
+        $service->setDefault('payroll.loans_deduct_from_final_pay', true, 'payroll');
+        // Back pay: how many months back a regular run looks for raises entered late (0: off).
+        $service->setDefault('payroll.arrears_months', 12, 'payroll');
+        // Payslips: shown to employees once a run is marked paid.
+        $service->setDefault('payroll.payslip_show_employer', true, 'payroll');
+        $service->setDefault('payroll.payslip_show_ytd', true, 'payroll');
+        $service->setDefault('payroll.email_payslips', false, 'payroll');
         // A starting set of Ghana statutory rates, unconfirmed until HR checks it (only when none exists).
         $this->call(StatutoryRatesSeeder::class);
         // The built-in pay components (basic salary).

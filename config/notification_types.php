@@ -177,6 +177,18 @@ return [
         'description' => 'Overtime, loans and pay runs waiting for your approval.',
         'icon'        => 'payroll',
         'types'       => [
+            'payslip_available' => [
+                'label'          => 'Payslips',
+                'description'    => 'When your payslip for a month is ready.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'payroll_decided' => [
+                'label'          => 'Decisions on my requests',
+                'description'    => 'When your overtime or loan request is approved or rejected.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
             'payroll_approval' => [
                 'label'          => 'Approvals',
                 'description'    => 'When an overtime request, loan or pay run reaches a step you approve.',

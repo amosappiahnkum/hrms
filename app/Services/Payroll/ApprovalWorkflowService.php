@@ -23,6 +23,10 @@ use Illuminate\Support\Facades\DB;
  */
 class ApprovalWorkflowService
 {
+    /** Who decides a step when the workflow and its fallbacks find nobody but the requester. */
+    private const ESCALATION_PERMISSIONS = ['approve-payroll', 'configure-payroll'];
+    private const ESCALATION_ROLE = 'super-admin';
+
     /** The workflow a process uses by default. */
     public function defaultFor(ApprovalProcess $process): ?ApprovalWorkflow
     {
@@ -62,10 +66,11 @@ class ApprovalWorkflowService
             'can_adjust'     => array_values(array_intersect($s->can_adjust ?? [], array_keys($process->adjustable()))),
         ])->values()->all();
 
-        // No workflow set up: HR (whoever configures payroll) approves, rather than nobody.
+        // No workflow set up: the fallback approvers decide, rather than nobody.
         $steps = $steps ?: [[
-            'position' => 1, 'name' => 'HR approval', 'approver_type' => ApproverType::PERMISSION->value,
-            'approver_value' => ['configure-payroll'], 'can_adjust' => array_keys($process->adjustable()),
+            'position' => 1, 'name' => $process === ApprovalProcess::PAY_RUN ? 'Payroll approval' : 'HR approval',
+            'approver_type' => ApproverType::PERMISSION->value,
+            'approver_value' => [$this->fallbackPermission($process)], 'can_adjust' => array_keys($process->adjustable()),
         ]];
 
         $approval = Approval::create([
@@ -88,7 +93,46 @@ class ApprovalWorkflowService
     /** Users who may decide the current step. */
     public function canDecide(Approval $approval, User $user): bool
     {
-        return $approval->isPending() && in_array($user->id, $approval->current_approver_ids ?? [], true);
+        if (!$approval->isPending()) {
+            return false;
+        }
+        if ($this->hasNoApprover($approval)) {
+            return $this->canEscalate($user) && !in_array($user->id, $this->requesters($approval), true);
+        }
+
+        return in_array($user->id, $approval->current_approver_ids ?? [], true);
+    }
+
+    /** A pending step nobody could be found to decide. */
+    public function hasNoApprover(Approval $approval): bool
+    {
+        return $approval->isPending() && empty($approval->current_approver_ids);
+    }
+
+    /** Whether this user picks up steps nobody else can decide. */
+    public function canEscalate(User $user): bool
+    {
+        return $user->hasAnyPermission(self::ESCALATION_PERMISSIONS) || $user->hasRole(self::ESCALATION_ROLE);
+    }
+
+    /** People who decide when nobody else can: payroll approvers and configurers, then admins. */
+    private function escalation(): Collection
+    {
+        $users = User::permission(self::ESCALATION_PERMISSIONS)->get();
+        if (\Spatie\Permission\Models\Role::where('name', self::ESCALATION_ROLE)->exists()) {
+            $users = $users->merge(User::role(self::ESCALATION_ROLE)->get());
+        }
+
+        return $users->unique('id')->values();
+    }
+
+    /** Who asked: the employee, and for pay runs the preparer too. */
+    private function requesters(Approval $approval): array
+    {
+        return array_values(array_filter([
+            $approval->employee?->userAccount?->id,
+            $approval->process === ApprovalProcess::PAY_RUN ? $approval->started_by : null,
+        ]));
     }
 
     /**
@@ -161,24 +205,35 @@ class ApprovalWorkflowService
         $step = collect($approval->steps)->firstWhere('position', $position);
         $users = $this->resolve($step, $approval->employee);
 
-        // Nobody resolves: route to the people who configure payroll rather than skip a step.
+        $fallback = fn () => User::permission($this->fallbackPermission($approval->process))->get();
+
+        // Nobody resolves: route to the fallback approvers rather than skip a step.
         if ($users->isEmpty()) {
-            $users = User::permission('configure-payroll')->get();
+            $users = $fallback();
         }
 
-        // The requester never approves their own request; with distinct approvers, earlier deciders can't act again.
+        // The requester never approves their own request; with distinct approvers, earlier deciders can't act again;
+        // a pay run's preparer doesn't approve it when the setting asks for a different approver.
         $excluded = collect([$approval->employee?->userAccount?->id]);
+        if ($approval->process === ApprovalProcess::PAY_RUN && setting('payroll.require_different_approvers', true)) {
+            $excluded->push($approval->started_by);
+        }
         if ($approval->distinct_approvers) {
             $excluded = $excluded->merge($approval->decisions()->pluck('decided_by'));
         }
         $users = $users->reject(fn (User $u) => $excluded->contains($u->id))->values();
         if ($users->isEmpty()) {
-            $users = User::permission('configure-payroll')->get()->reject(fn (User $u) => $excluded->contains($u->id))->values();
+            $users = $fallback()->reject(fn (User $u) => $excluded->contains($u->id))->values();
         }
-        // Still nobody (a small team): HR, never the requester, so the request can't get stuck.
+        // Still nobody (a small team): the fallback approvers, never the requester.
         if ($users->isEmpty()) {
-            $users = User::permission('configure-payroll')->get()->reject(fn (User $u) => $u->id === $approval->employee?->userAccount?->id)->values();
+            $users = $fallback()->reject(fn (User $u) => $u->id === $approval->employee?->userAccount?->id)->values();
         }
+        // Still nobody (e.g. the only HR approver asked): anyone else who approves or configures payroll, or an admin.
+        if ($users->isEmpty()) {
+            $users = $this->escalation()->reject(fn (User $u) => in_array($u->id, $this->requesters($approval), true))->values();
+        }
+        // Nobody at all: the step waits, flagged, for whoever is later given the right to decide it (see canDecide).
 
         $approval->update(['current_position' => $position, 'current_approver_ids' => $users->pluck('id')->all()]);
 
@@ -194,6 +249,12 @@ class ApprovalWorkflowService
         if ($approval->subject instanceof ApprovalSubject) {
             $approval->subject->approvalFinished($approval->fresh());
         }
+    }
+
+    /** Who decides when a workflow has nobody: payroll approvers for pay runs, payroll configurers otherwise. */
+    private function fallbackPermission(ApprovalProcess $process): string
+    {
+        return $process === ApprovalProcess::PAY_RUN ? 'approve-payroll' : 'configure-payroll';
     }
 
     private function parentHead(?Employee $employee): ?User

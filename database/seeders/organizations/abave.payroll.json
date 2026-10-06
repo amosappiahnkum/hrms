@@ -1,0 +1,68 @@
+{
+    "_note": "Payroll setup for Apave (Abave Inspection Gh. Ltd), from how its old timesheet screens worked. Every rate marked CONFIRM is a placeholder: check it with Apave, then set confirmed to true and run: php artisan payroll:apply-preset abave",
+    "confirmed": true,
+
+    "features": {
+        "payroll.enabled": true,
+        "payroll.overtime": true,
+        "payroll.time_inputs": true
+    },
+
+    "settings": {
+        "payroll.base_currency": "GHS",
+        "payroll.working_days_per_month": 22,
+        "payroll.hours_per_day": 8,
+        "payroll.overtime_tax_method": "income",
+        "payroll.overtime_auto_type": true,
+        "payroll.overtime_require_reason": true,
+        "payroll.time_inputs_require_approval": true
+    },
+
+    "exchange_rates": [
+        { "currency": "USD", "year": 2026, "rate": 12, "notes": "CONFIRM: the year's USD → GHS rate" }
+    ],
+
+    "components": [
+        { "code": "LUNCH", "name": "Lunch allowance", "kind": "earning", "calculation": "manual", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 20 },
+        { "code": "TRANSPORT", "name": "Transport allowance", "kind": "earning", "calculation": "manual", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 21 },
+        { "code": "OTHER_ALW", "name": "Other allowance", "kind": "earning", "calculation": "manual", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 22 },
+
+        { "code": "OT_WEEKDAY", "name": "Weekday overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 1.5, "taxable": true, "sort_order": 40, "_confirm": "CONFIRM multiplier" },
+        { "code": "OT_WEEKEND", "name": "Weekend overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 2, "taxable": true, "sort_order": 41, "_confirm": "CONFIRM multiplier" },
+        { "code": "OT_HOLIDAY", "name": "Public holiday overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 2, "taxable": true, "sort_order": 42, "_confirm": "CONFIRM multiplier" },
+        { "code": "OT_OFFSHORE", "name": "Offshore overtime", "kind": "earning", "calculation": "rate_per_unit", "rate": 5, "currency": "USD", "unit": "hour", "taxable": true, "sort_order": 43, "_confirm": "CONFIRM: the offshore day rate ÷ 12" },
+
+        { "code": "OFFSHORE_DAY", "name": "Offshore day", "kind": "earning", "calculation": "rate_per_unit", "rate": 3, "currency": "USD", "unit": "day", "taxable": true, "sort_order": 50, "_confirm": "CONFIRM: rate per offshore day" },
+        { "code": "ROPE_OFFSHORE", "name": "Rope access (offshore)", "kind": "earning", "calculation": "rate_per_unit", "rate": 5, "currency": "USD", "unit": "day", "taxable": true, "sort_order": 51, "_confirm": "CONFIRM: rate per day" },
+        { "code": "ROPE_ONSHORE", "name": "Rope access (onshore)", "kind": "earning", "calculation": "rate_per_unit", "rate": 3, "currency": "USD", "unit": "day", "taxable": true, "sort_order": 52, "_confirm": "CONFIRM: rate per day" }
+    ],
+
+    "overtime_types": [
+        { "name": "Weekday", "component": "OT_WEEKDAY", "applies_on": "weekday", "sort_order": 1 },
+        { "name": "Weekend", "component": "OT_WEEKEND", "applies_on": "weekend", "sort_order": 2 },
+        { "name": "Public holiday", "component": "OT_HOLIDAY", "applies_on": "holiday", "sort_order": 3 },
+        { "name": "Offshore", "component": "OT_OFFSHORE", "applies_on": "any", "sort_order": 4 }
+    ],
+
+    "workflows": [
+        {
+            "process": "overtime",
+            "name": "Supervisor, unit manager, then HR",
+            "distinct_approvers": true,
+            "steps": [
+                { "name": "Supervisor", "approver_type": "supervisor", "can_adjust": ["approved_hours"] },
+                { "name": "Unit manager", "approver_type": "department_head", "can_adjust": ["approved_hours"] },
+                { "name": "HR", "approver_type": "permission", "approver_value": ["configure-payroll"], "can_adjust": [] }
+            ]
+        },
+        {
+            "process": "time_input",
+            "name": "Unit manager, then HR",
+            "distinct_approvers": true,
+            "steps": [
+                { "name": "Unit manager", "approver_type": "department_head", "can_adjust": ["quantity"] },
+                { "name": "HR", "approver_type": "permission", "approver_value": ["configure-payroll"], "can_adjust": [] }
+            ]
+        }
+    ]
+}

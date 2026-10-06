@@ -48,7 +48,11 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('position_certifications');
-        Schema::table('employee_certifications', fn (Blueprint $table) => $table->dropConstrainedForeignId('certification_type_id'));
+        Schema::table('employee_certifications', function (Blueprint $table) {
+            // Dropped by the name it was created with.
+            $table->dropForeign('emp_certs_type_fk');
+            $table->dropColumn('certification_type_id');
+        });
         Schema::dropIfExists('certification_types');
     }
 };

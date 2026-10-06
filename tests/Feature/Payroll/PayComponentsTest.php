@@ -27,10 +27,9 @@ class PayComponentsTest extends TestCase
 
     public function test_basic_salary_is_built_in_and_protected(): void
     {
-        $basic = $this->getJson('/api/v1/payroll/pay-components')->assertOk()
-            ->assertJsonPath('data.components.0.code', 'BASIC')
-            ->assertJsonPath('data.components.0.is_system', true)
-            ->json('data.components.0.uuid');
+        $basic = collect($this->getJson('/api/v1/payroll/pay-components')->assertOk()->json('data.components'))->firstWhere('code', 'BASIC');
+        $this->assertTrue($basic['is_system']);
+        $basic = $basic['uuid'];
 
         $this->deleteJson("/api/v1/payroll/pay-components/{$basic}")->assertStatus(422);
         $this->putJson("/api/v1/payroll/pay-components/{$basic}", ['code' => 'BAS', 'name' => 'Basic pay', 'kind' => 'deduction', 'calculation' => 'fixed', 'rate' => 5])->assertOk();

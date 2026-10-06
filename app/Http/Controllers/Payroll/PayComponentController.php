@@ -41,7 +41,7 @@ class PayComponentController extends Controller
         $data = $this->validated($request, $payComponent);
         if ($payComponent->is_system) {
             // The built-in basic salary keeps what makes it basic.
-            $data = collect($data)->only(['name', 'show_on_payslip', 'sort_order'])->all();
+            $data = collect($data)->only(['name', 'show_on_payslip', 'sort_order', 'account_code'])->all();
         }
         $payComponent->update($data);
 
@@ -51,7 +51,7 @@ class PayComponentController extends Controller
     public function destroy(PayComponent $payComponent): JsonResponse
     {
         if ($payComponent->is_system) {
-            throw new UserFacingException('Basic salary is built in and can\'t be removed.');
+            throw new UserFacingException("{$payComponent->name} is built in and can't be removed.");
         }
         $payComponent->delete();
 
@@ -74,11 +74,13 @@ class PayComponentController extends Controller
             'currency'         => ['nullable', 'string', 'size:3', 'alpha'],
             'unit'             => ['nullable', 'string', 'max:30'],
             'taxable'          => ['boolean'],
+            'is_bonus'         => ['boolean'],
             'ssnit_applicable' => ['boolean'],
             'recurring'        => ['boolean'],
             'prorate'          => ['boolean'],
             'show_on_payslip'  => ['boolean'],
             'sort_order'       => ['nullable', 'integer', 'between:0,1000'],
+            'account_code'     => ['nullable', 'string', 'max:50'],
             'active'           => ['boolean'],
         ]);
 
@@ -106,6 +108,7 @@ class PayComponentController extends Controller
         }
         if ($data['kind'] !== ComponentKind::EARNING->value) {
             $data['ssnit_applicable'] = false;
+            $data['is_bonus'] = false;
         }
         $data['sort_order'] ??= 100;
 
@@ -124,11 +127,13 @@ class PayComponentController extends Controller
             'currency'         => $c->currency,
             'unit'             => $c->unit,
             'taxable'          => $c->taxable,
+            'is_bonus'         => $c->is_bonus,
             'ssnit_applicable' => $c->ssnit_applicable,
             'recurring'        => $c->recurring,
             'prorate'          => $c->prorate,
             'show_on_payslip'  => $c->show_on_payslip,
             'sort_order'       => $c->sort_order,
+            'account_code'     => $c->account_code,
             'active'           => $c->active,
             'is_system'        => $c->is_system,
         ];
