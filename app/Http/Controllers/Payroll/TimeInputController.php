@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Payroll;
 
-use App\Exports\ArrayExport;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\Payroll\PayComponent;
@@ -12,8 +11,6 @@ use App\Services\Payroll\TimeInputService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Maatwebsite\Excel\Facades\Excel;
-use PhpOffice\PhpSpreadsheet\IOFactory;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /** Monthly time inputs: a sheet per component and month, one line per employee. */
@@ -79,11 +76,12 @@ class TimeInputController extends Controller
         return ApiResponse::success($input ? self::entry($input->load(['approval.decisions.decider', 'payRun'])) : null, $input ? 'Saved.' : 'Removed.');
     }
 
-    public function template(): BinaryFileResponse
+    /** The month's sheet: every employee by every per-unit component, filled with what's entered. */
+    public function template(Request $request): BinaryFileResponse
     {
-        $rows = $this->inputs->components()->take(1)->map(fn ($c) => ['STAFF001', $c->code, 10, ''])->values()->all();
+        $data = $request->validate(['year' => ['required', 'integer', 'between:2000,2100'], 'month' => ['required', 'integer', 'between:1,12']]);
 
-        return Excel::download(new ArrayExport(['Staff ID', 'Component code', 'Quantity', 'Notes'], $rows, 'Time inputs'), 'time-inputs.xlsx');
+        return response()->download($this->inputs->template((int) $data['year'], (int) $data['month']), sprintf('time-inputs-%04d-%02d.xlsx', $data['year'], $data['month']))->deleteFileAfterSend();
     }
 
     public function import(Request $request): JsonResponse
@@ -91,16 +89,22 @@ class TimeInputController extends Controller
         $data = $request->validate([
             'year'  => ['required', 'integer', 'between:2000,2100'],
             'month' => ['required', 'integer', 'between:1,12'],
-            'file'  => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
+            'file'  => ['required', 'file', 'mimes:xlsx,xls', 'max:10240'],
+            'check' => ['boolean'],
         ]);
-        $rows = IOFactory::load($request->file('file')->getRealPath())->getActiveSheet()->toArray(null, true, false, false);
-        array_shift($rows); // headings
+        // check: work everything out and say what would change, saving nothing.
+        if ($request->boolean('check')) {
+            return ApiResponse::success($this->inputs->importGrid((int) $data['year'], (int) $data['month'], $request->file('file')->getRealPath(), $request->user(), apply: false), 'Checked.');
+        }
+        $result = $this->inputs->importGrid((int) $data['year'], (int) $data['month'], $request->file('file')->getRealPath(), $request->user());
 
-        $result = $this->inputs->import((int) $data['year'], (int) $data['month'], $rows, $request->user());
+        if ($result['errors']) {
+            return ApiResponse::error('Nothing was imported: fix these rows and try again.', ['rows' => $result['errors']], 422);
+        }
 
-        return $result['errors']
-            ? ApiResponse::error('Nothing was imported: fix these rows and try again.', ['rows' => $result['errors']], 422)
-            : ApiResponse::success($result, "Imported {$result['saved']} line(s).");
+        return ApiResponse::success($result, $result['saved'] + $result['removed']
+            ? "Saved {$result['saved']}, removed {$result['removed']}."
+            : 'Nothing to change: the sheet matches what is entered.');
     }
 
     public static function entry(TimeInput $t): array

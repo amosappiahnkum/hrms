@@ -39,4 +39,27 @@ class ExchangeRatesTest extends TestCase
         $this->putJson("/api/v1/payroll/exchange-rates/{$uuid}", ['currency' => 'USD', 'year' => 2026, 'rate' => 15.75])->assertOk();
         $this->getJson('/api/v1/payroll/exchange-rates')->assertJsonPath('data.base_currency', 'GHS')->assertJsonPath('data.rates.0.rate', 15.75);
     }
+
+    public function test_retired_codes_are_read_as_current_ones_and_a_missing_rate_says_who_uses_it(): void
+    {
+        $this->setUpAccess([]);
+        Setting::where('key', 'features.payroll.enabled')->update(['value' => true]);
+        app(SettingService::class)->refreshCache();
+        \App\Models\Payroll\StatutoryRateSet::query()->update(['confirmed_at' => now()]);
+        $hr = $this->userWithRole('hr');
+        $hr->givePermissionTo(['prepare-payroll', 'configure-payroll']);
+        Sanctum::actingAs($hr);
+        $employee = $this->userWithRole('staff')->employee;
+
+        // GHC (the old cedi code) is saved as the base currency; unknown codes are refused.
+        $profile = ['mode' => 'correct', 'basic_salary' => 5000, 'payment_method' => 'cash'];
+        $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", $profile + ['currency' => 'GHC'])->assertOk()->assertJsonPath('data.profile.currency', 'GHS');
+        $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", $profile + ['currency' => 'XYZ'])->assertStatus(422);
+
+        // A currency without a rate stops the run, saying which and who uses it.
+        $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", $profile + ['currency' => 'EUR'])->assertOk();
+        $run = $this->postJson('/api/v1/payroll/runs', ['year' => (int) now()->year, 'month' => (int) now()->month])->json('data.uuid');
+        $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertStatus(422)
+            ->assertJsonPath('message', fn ($m) => str_contains($m, 'no EUR exchange rate') && str_contains($m, "1 employee's pay details"));
+    }
 }

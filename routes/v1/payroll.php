@@ -119,9 +119,10 @@ Route::middleware('feature:payroll.enabled|payroll.overtime|payroll.loans|payrol
             Route::post('runs', [PayRunController::class, 'store']);
             Route::post('runs/{payRun}/calculate', [PayRunController::class, 'calculate']);
             Route::post('runs/{payRun}/submit', [PayRunController::class, 'submit']);
+            Route::post('runs/{payRun}/reopen', [PayRunController::class, 'reopen']);
             Route::post('runs/{payRun}/paid', [PayRunController::class, 'markPaid']);
             Route::delete('runs/{payRun}', [PayRunController::class, 'destroy']);
-            Route::get('inputs-template', [PayRunInputController::class, 'template']);
+            Route::get('runs/{payRun}/inputs/template', [PayRunInputController::class, 'template']);
             Route::post('runs/{payRun}/inputs', [PayRunInputController::class, 'store']);
             Route::post('runs/{payRun}/inputs/import', [PayRunInputController::class, 'import']);
             Route::put('runs/{payRun}/inputs/{payRunInput}', [PayRunInputController::class, 'update']);
@@ -139,6 +140,8 @@ Route::middleware('feature:payroll.enabled|payroll.overtime|payroll.loans|payrol
             Route::get('employees/{employee}', [EmployeePayController::class, 'show']);
         });
         Route::middleware('permission:prepare-payroll')->group(function () {
+            Route::get('employees-template', [EmployeePayController::class, 'template']);
+            Route::post('employees-import', [EmployeePayController::class, 'import']);
             Route::put('employees/{employee}/profile', [EmployeePayController::class, 'saveProfile']);
             Route::post('employees/{employee}/components', [EmployeePayController::class, 'addComponent']);
             Route::put('employees/{employee}/components/{employeePayComponent}', [EmployeePayController::class, 'updateComponent']);

@@ -54,11 +54,11 @@ class ExchangeRateController extends Controller
 
     private function validated(Request $request, ?ExchangeRate $rate = null): array
     {
-        $request->merge(['currency' => strtoupper((string) $request->input('currency'))]);
+        $request->merge(['currency' => \App\Support\Currencies::normalize($request->input('currency'))]);
         $base = strtoupper((string) setting('payroll.base_currency', 'GHS'));
 
         return $request->validate([
-            'currency' => ['required', 'string', 'size:3', 'alpha', Rule::notIn([$base])],
+            'currency' => ['required', \App\Support\Currencies::rule(), Rule::notIn([$base])],
             'year'     => ['required', 'integer', 'between:2000,2100',
                 Rule::unique('exchange_rates', 'year')->where('currency', $request->input('currency'))->ignore($rate?->id)->whereNull('deleted_at')],
             'rate'     => ['required', 'numeric', 'gt:0'],

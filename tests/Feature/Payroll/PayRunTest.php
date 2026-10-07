@@ -183,4 +183,35 @@ class PayRunTest extends TestCase
         $this->assertSame('1011,"Ama Mensah",3945.25,"Salary June 2026"', $lines[1]);
         $this->get("/api/v1/payroll/runs/{$run}/reports/journal")->assertOk();
     }
+
+    public function test_a_run_lists_who_it_leaves_out_and_can_be_reopened_and_rerun_after_details_are_filled(): void
+    {
+        StatutoryRateSet::query()->update(['confirmed_at' => now()]);
+        $paid = $this->paid($this->userWithRole('staff'));
+        $blank = $this->userWithRole('staff')->employee;
+
+        $run = $this->postJson('/api/v1/payroll/runs', ['year' => 2026, 'month' => 6])->json('data.uuid');
+        $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk()->assertJsonPath('data.totals.employees', 1);
+        $leftOut = collect($this->getJson("/api/v1/payroll/runs/{$run}")->json('data.left_out.people'));
+        $this->assertSame('No pay details', $leftOut->firstWhere('uuid', $blank->uuid)['reason']);
+
+        // Sent for approval, then the missing details turn up: reopen, fill them in, rerun.
+        $this->postJson("/api/v1/payroll/runs/{$run}/submit")->assertOk();
+        $this->postJson("/api/v1/payroll/runs/{$run}/reopen")->assertOk()->assertJsonPath('data.status.value', 'draft');
+        $this->assertSame('cancelled', PayRun::where('uuid', $run)->first()->approval->status);
+
+        // Details that start after June don't count for June, and the reason says so.
+        $late = EmployeePayProfile::create(['employee_id' => $blank->id, 'effective_from' => '2026-07-01', 'basic_salary' => 4000, 'payment_method' => 'cash']);
+        $this->assertStringContainsString('after this month', collect($this->getJson("/api/v1/payroll/runs/{$run}")->json('data.left_out.people'))->firstWhere('uuid', $blank->uuid)['reason']);
+        $late->update(['effective_from' => '2026-06-01']);
+
+        $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk()
+            ->assertJsonPath('data.totals.employees', 2)
+            ->assertJsonPath('message', fn ($m) => str_contains($m, '1 added since the last calculation'));
+        $this->assertNull(collect($this->getJson("/api/v1/payroll/runs/{$run}")->json('data.left_out.people'))->firstWhere('uuid', $blank->uuid));
+
+        // A paid run can't be reopened.
+        PayRun::where('uuid', $run)->update(['status' => \App\Enums\Payroll\PayRunStatus::PAID]);
+        $this->postJson("/api/v1/payroll/runs/{$run}/reopen")->assertStatus(422);
+    }
 }

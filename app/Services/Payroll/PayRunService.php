@@ -107,6 +107,9 @@ class PayRunService
         app(ArrearsService::class)->claimFor($run, $employees->pluck('id')->all());
         $inputs = app(PayRunInputs::class)->forRun($run);
 
+        $paidIds = $employees->pluck('id')->flip();
+        $this->ensureRates($profiles->filter(fn ($p, $employeeId) => $paidIds->has($employeeId)), $components->flatten(), $inputs, $rates, $settings['base_currency'], $run->year);
+
         // Work everything out first: a missing rate stops the run before anything is saved.
         $results = $employees->mapWithKeys(fn (Employee $e) => [$e->id => $calculator->calculate(
             $profiles[$e->id],
@@ -134,6 +137,9 @@ class PayRunService
                         'tier2_scheme' => $profile->tier2_scheme,
                     ],
                     'payment_snapshot'  => collect($profile->only(['payment_method', 'bank_name', 'bank_branch', 'account_name', 'account_number', 'mobile_money_provider', 'mobile_money_number']))->all(),
+                    // Plain copies for filtering (the snapshot is encrypted).
+                    'payment_method'    => $profile->payment_method,
+                    'bank_name'         => $profile->payment_method === 'bank' ? $profile->bank_name : null,
                     'warnings'          => array_values(array_unique(array_merge($result['warnings'], array_diff($gaps, ['SSNIT number', 'TIN / Ghana Card'])))),
                 ]);
                 $payslip->lines()->createMany($result['lines']);
@@ -167,6 +173,47 @@ class PayRunService
     }
 
     /**
+     * Stop with a clear message when pay is set in a currency that has no rate for the year: which
+     * currency, and who or what uses it, so it can be fixed (add the rate, or correct the currency).
+     */
+    private function ensureRates($profiles, $components, array $inputs, array $rates, string $base, int $year): void
+    {
+        $missing = fn (?string $c) => $c && strtoupper($c) !== $base && !isset($rates[strtoupper($c)]);
+        $byCurrency = [];
+        foreach ($profiles as $p) {
+            if ($missing($p->currency)) {
+                $byCurrency[strtoupper($p->currency)]['employees'][$p->employee_id] = true;
+            }
+        }
+        foreach ($components as $given) {
+            if ($missing($given->component?->currency)) {
+                $byCurrency[strtoupper($given->component->currency)]['components'][$given->component->name] = true;
+            }
+        }
+        foreach ($inputs as $items) {
+            foreach ($items as $i) {
+                if ($missing($i['component']->currency)) {
+                    $byCurrency[strtoupper($i['component']->currency)]['components'][$i['component']->name] = true;
+                }
+            }
+        }
+        if (!$byCurrency) {
+            return;
+        }
+
+        $parts = collect($byCurrency)->map(function ($uses, $currency) use ($year) {
+            $who = array_filter([
+                isset($uses['employees']) ? count($uses['employees']) . ' employee' . (count($uses['employees']) === 1 ? "'s pay details" : "s' pay details") : null,
+                isset($uses['components']) ? 'the component' . (count($uses['components']) > 1 ? 's ' : ' ') . implode(', ', array_keys($uses['components'])) : null,
+            ]);
+
+            return "no {$currency} exchange rate for {$year} (used by " . implode(' and ', $who) . ')';
+        })->implode('; ');
+
+        throw new UserFacingException('There is ' . $parts . '. Add the rate in Payroll → Settings → Exchange rates, or correct the currency on the pay details or component.');
+    }
+
+    /**
      * What earlier runs already taxed, per employee: for an off-cycle run, the month's other runs
      * (taxable income and SSNIT base); for any run, bonus taxed at the bonus rate earlier in the year.
      *
@@ -190,6 +237,63 @@ class PayRunService
                 'bonus_concession_ytd' => round((float) $items->sum('bonus_concession'), 2),
             ];
         })->all();
+    }
+
+    /**
+     * Take a run sent for approval (or approved, not yet paid) back to draft so it can be corrected and
+     * recalculated, e.g. after pay details were filled in. Its approval is withdrawn; sending it again
+     * starts a new one.
+     */
+    public function reopen(PayRun $run, User $user): PayRun
+    {
+        if (!in_array($run->status, [PayRunStatus::PENDING_APPROVAL, PayRunStatus::APPROVED], true)) {
+            throw new UserFacingException($run->status === PayRunStatus::PAID
+                ? 'A paid pay run can\'t be reopened. Use an off-cycle run for corrections.'
+                : 'This pay run is already open: recalculate it.');
+        }
+        DB::transaction(function () use ($run) {
+            if ($run->approval?->isPending()) {
+                $this->approvals->cancel($run->approval);
+            }
+            $run->update(['status' => PayRunStatus::DRAFT, 'approved_at' => null]);
+        });
+
+        return $run->fresh();
+    }
+
+    /**
+     * Who isn't paid by a regular run and why: no pay details, details that start after the month,
+     * or joining after it. Leavers who left before the month aren't listed.
+     *
+     * @return array{count: int, people: array<array{uuid: string, name: string, staff_id: ?string, reason: string}>}
+     */
+    public function leftOut(PayRun $run, int $limit = 50): array
+    {
+        if ($run->type !== 'regular') {
+            return ['count' => 0, 'people' => []];
+        }
+        $start = $run->period_start->copy()->startOfDay();
+        $end = $run->period_end->copy()->startOfDay();
+        $inForce = EmployeePayProfile::inForceOn($end)->pluck('employee_id')->flip();
+        $firstDetails = EmployeePayProfile::query()->selectRaw('employee_id, min(effective_from) as starts')->groupBy('employee_id')->pluck('starts', 'employee_id');
+
+        $people = Employee::withTrashed()
+            ->where(fn ($q) => $q->whereNull('deleted_at')->orWhereDate('termination_date', '>=', $start))
+            ->where(fn ($q) => $q->whereNull('termination_date')->orWhereDate('termination_date', '>=', $start))
+            ->with('jobDetail')->orderBy('first_name')->orderBy('last_name')->get()
+            ->map(function (Employee $e) use ($inForce, $firstDetails, $end) {
+                $joined = $e->jobDetail?->joined_date ? Carbon::parse($e->jobDetail->joined_date) : null;
+                $reason = match (true) {
+                    $joined && $joined->gt($end)                  => 'Joins ' . $joined->format('j M Y') . ', after this month',
+                    $inForce->has($e->id)                         => null,
+                    isset($firstDetails[$e->id])                  => 'Pay details start ' . Carbon::parse($firstDetails[$e->id])->format('j M Y') . ', after this month',
+                    default                                       => 'No pay details',
+                };
+
+                return $reason ? ['uuid' => $e->uuid, 'name' => trim(preg_replace('/\s+/', ' ', $e->name)), 'staff_id' => $e->staff_id, 'reason' => $reason] : null;
+            })->filter()->values();
+
+        return ['count' => $people->count(), 'people' => $people->take($limit)->all()];
     }
 
     public function submit(PayRun $run, User $user): PayRun

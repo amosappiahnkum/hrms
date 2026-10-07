@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Payroll;
 
-use App\Exports\PayRunInputsTemplate;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\Payroll\PayRun;
@@ -10,8 +9,6 @@ use App\Models\Payroll\PayRunInput;
 use App\Services\Payroll\PayRunInputs;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Maatwebsite\Excel\Facades\Excel;
-use PhpOffice\PhpSpreadsheet\IOFactory;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /** A pay run's variable items: list, add, edit, remove, and import from Excel. */
@@ -49,22 +46,29 @@ class PayRunInputController extends Controller
         return ApiResponse::success(null, 'Input removed.');
     }
 
-    public function template(): BinaryFileResponse
+    /** The run's sheet: everyone who can be paid in it, by component, filled with the inputs entered by hand. */
+    public function template(PayRun $payRun): BinaryFileResponse
     {
-        return Excel::download(new PayRunInputsTemplate(), 'pay-run-inputs.xlsx');
+        return response()->download($this->inputs->template($payRun), 'inputs-' . str($payRun->name)->slug() . '.xlsx')->deleteFileAfterSend();
     }
 
     public function import(Request $request, PayRun $payRun): JsonResponse
     {
-        $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120']]);
-        $rows = IOFactory::load($request->file('file')->getRealPath())->getActiveSheet()->toArray(null, true, false, false);
-        array_shift($rows); // headings
+        $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls', 'max:10240'], 'check' => ['boolean']]);
+        // check: work everything out and say what would change, saving nothing.
+        if ($request->boolean('check')) {
+            return ApiResponse::success($this->inputs->importGrid($payRun, $request->file('file')->getRealPath(), $request->user(), apply: false), 'Checked.');
+        }
+        $result = $this->inputs->importGrid($payRun, $request->file('file')->getRealPath(), $request->user());
 
-        $result = $this->inputs->import($payRun, $rows, $request->user());
+        if ($result['errors']) {
+            return ApiResponse::error('Nothing was imported: fix these rows and try again.', ['rows' => $result['errors']], 422);
+        }
+        $total = $result['created'] + $result['updated'] + $result['removed'];
 
-        return $result['errors']
-            ? ApiResponse::error('Nothing was imported: fix these rows and try again.', ['rows' => $result['errors']], 422)
-            : ApiResponse::success($result, "Imported {$result['created']} input(s).");
+        return ApiResponse::success($result, $total
+            ? "Imported: {$result['created']} added, {$result['updated']} changed, {$result['removed']} removed."
+            : 'Nothing to change: the sheet matches the inputs.');
     }
 
     private function validated(Request $request, bool $editing = false): array

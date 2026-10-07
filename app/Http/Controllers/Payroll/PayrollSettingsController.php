@@ -14,7 +14,7 @@ class PayrollSettingsController extends Controller
 {
     /** setting key => validation rules */
     private const SETTINGS = [
-        'payroll.base_currency'               => ['required', 'string', 'size:3'],
+        'payroll.base_currency'               => ['required', 'string', 'size:3'], // a known code: checked in update()
         'payroll.working_days_per_month'      => ['required', 'integer', 'between:1,31'],
         'payroll.hours_per_day'               => ['required', 'numeric', 'between:1,24'],
         'payroll.overtime_tax_method'         => ['required', 'in:income,gra_junior'],
@@ -50,6 +50,10 @@ class PayrollSettingsController extends Controller
     {
         $rules = collect(self::SETTINGS)->mapWithKeys(fn ($r, $key) => [$this->field($key) => ['sometimes', ...$r]])->all()
             + ['overtime_job_types.*' => ['string', 'max:50'], 'overtime_locations.*' => ['string', 'max:100']];
+        if ($request->has('base_currency')) {
+            $request->merge(['base_currency' => \App\Support\Currencies::normalize($request->input('base_currency'))]);
+            $rules['base_currency'][] = \App\Support\Currencies::rule();
+        }
         $data = $request->validate($rules);
 
         foreach (array_filter($data, fn ($k) => !str_contains($k, '.'), ARRAY_FILTER_USE_KEY) as $field => $value) {

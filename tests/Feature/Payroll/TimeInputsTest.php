@@ -10,17 +10,14 @@ use App\Models\Payroll\TimeInput;
 use App\Models\User;
 use App\Services\SettingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\Concerns\SetsUpAccess;
 use Tests\TestCase;
 
 class TimeInputsTest extends TestCase
 {
-    use RefreshDatabase, SetsUpAccess;
+    use RefreshDatabase, SetsUpAccess, \Tests\Support\FillsGridTemplates;
 
     private User $hr;
     private User $approver;
@@ -81,6 +78,12 @@ class TimeInputsTest extends TestCase
         // Once the run is sent for approval, it can't change.
         $this->postJson("/api/v1/payroll/runs/{$run}/submit")->assertOk();
         $this->enter(20)->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'has been paid'));
+
+        // In the month's sheet, that cell is locked.
+        $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($this->downloaded($this->get('/api/v1/payroll/time-inputs/template?year=2026&month=6')))->getSheet(0);
+        $row = collect(range(3, $sheet->getHighestRow()))->first(fn ($r) => $sheet->getCell("B{$r}")->getValue() === 'AI001');
+        $this->assertSame(13.0, (float) $sheet->getCell("E{$row}")->getValue());
+        $this->assertSame(\PhpOffice\PhpSpreadsheet\Style\Protection::PROTECTION_PROTECTED, $sheet->getStyle("E{$row}")->getProtection()->getLocked());
     }
 
     public function test_without_approval_inputs_count_as_entered_and_imports_are_all_or_nothing(): void
@@ -93,19 +96,30 @@ class TimeInputsTest extends TestCase
         $this->enter(0)->assertOk()->assertJsonPath('data', null);
         $this->assertSame(0, TimeInput::count());
 
-        $file = function (array $rows) {
-            $book = new Spreadsheet();
-            $book->getActiveSheet()->fromArray([['Staff ID', 'Component code', 'Quantity', 'Notes'], ...$rows]);
-            $path = tempnam(sys_get_temp_dir(), 'ti') . '.xlsx';
-            (new Xlsx($book))->save($path);
+        // The month's sheet: everyone by every per-unit component, filled with what's entered.
+        $template = fn (int $month = 6) => $this->downloaded($this->get("/api/v1/payroll/time-inputs/template?year=2026&month={$month}"));
+        $import = fn ($file, int $month = 6) => $this->post('/api/v1/payroll/time-inputs/import', ['year' => 2026, 'month' => $month, 'file' => $file], ['Accept' => 'application/json']);
 
-            return new UploadedFile($path, 'time.xlsx', null, null, true);
-        };
-        $this->get('/api/v1/payroll/time-inputs/template')->assertOk();
-        $this->post('/api/v1/payroll/time-inputs/import', ['year' => 2026, 'month' => 6, 'file' => $file([['AI001', 'OFFSHORE', 8, ''], ['NOPE', 'OFFSHORE', 2, '']])], ['Accept' => 'application/json'])
-            ->assertStatus(422)->assertJsonPath('errors.rows.3', fn ($m) => str_contains($m, 'Unknown staff ID'));
+        $import($this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Offshore day' => 'ten'] : null))
+            ->assertStatus(422)->assertJsonPath('errors.rows', fn ($rows) => str_contains(collect($rows)->first(), 'must be a number'));
         $this->assertSame(0, TimeInput::count());
-        $this->post('/api/v1/payroll/time-inputs/import', ['year' => 2026, 'month' => 6, 'file' => $file([['AI001', 'offshore', 8, 'Rig A']])], ['Accept' => 'application/json'])
+
+        // Checking first shows the change (and a warning for more days than June has) without saving.
+        $sheet = $this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Offshore day' => 31] : null);
+        $this->post('/api/v1/payroll/time-inputs/import', ['year' => 2026, 'month' => 6, 'file' => $sheet, 'check' => 1], ['Accept' => 'application/json'])
+            ->assertOk()->assertJsonPath('data.changes.0.fields.0.to', '31 days')
+            ->assertJsonPath('data.changes.0.warnings.0', fn ($w) => str_contains($w, "more than the month's 30"));
+        $this->assertSame(0, TimeInput::count());
+
+        $import($this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Offshore day' => 8] : null))
             ->assertOk()->assertJsonPath('data.saved', 1);
+        $this->assertSame('8.00', TimeInput::sole()->quantity);
+
+        // June's sheet can't be imported into July.
+        $import($this->fillGrid($template(), fn () => null), 7)->assertStatus(422)->assertJsonPath('errors.rows.1', fn ($m) => str_contains($m, 'June 2026'));
+
+        // Emptying the cell removes the entry.
+        $import($this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Offshore day' => null] : null))->assertOk()->assertJsonPath('data.removed', 1);
+        $this->assertSame(0, TimeInput::whereIn('status', ['pending', 'approved'])->count());
     }
 }

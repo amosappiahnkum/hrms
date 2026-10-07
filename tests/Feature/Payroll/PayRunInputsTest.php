@@ -9,17 +9,14 @@ use App\Models\Payroll\PayRun;
 use App\Models\Payroll\StatutoryRateSet;
 use App\Services\SettingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\Concerns\SetsUpAccess;
 use Tests\TestCase;
 
 class PayRunInputsTest extends TestCase
 {
-    use RefreshDatabase, SetsUpAccess;
+    use RefreshDatabase, SetsUpAccess, \Tests\Support\FillsGridTemplates;
 
     private string $run;
     private $employee;
@@ -73,33 +70,55 @@ class PayRunInputsTest extends TestCase
         $this->deleteJson("/api/v1/payroll/runs/{$this->run}/inputs/{$bonus}")->assertStatus(422);
     }
 
-    public function test_an_import_saves_everything_or_nothing_and_lists_the_bad_rows(): void
+    public function test_the_runs_sheet_is_filled_in_and_imported_all_or_nothing(): void
     {
-        $this->get('/api/v1/payroll/inputs-template')->assertOk();
+        $this->add(['pay_component_uuid' => $this->bonus->uuid, 'amount' => 100])->assertCreated();
+        $template = fn () => $this->downloaded($this->get("/api/v1/payroll/runs/{$this->run}/inputs/template"));
 
-        $file = function (array $rows) {
-            $book = new Spreadsheet();
-            $book->getActiveSheet()->fromArray([['Staff ID', 'Component code', 'Quantity', 'Amount', 'Notes'], ...$rows]);
-            $path = tempnam(sys_get_temp_dir(), 'in') . '.xlsx';
-            (new Xlsx($book))->save($path);
+        // The sheet holds what's entered; reference cells are locked, the rows and columns identified by hidden refs.
+        $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($template())->getSheet(0);
+        $this->assertSame("pay-run:{$this->run}", $sheet->getCell('A1')->getValue());
+        $this->assertFalse($sheet->getColumnDimension('A')->getVisible());
+        $this->assertFalse($sheet->getRowDimension(1)->getVisible());
 
-            return new UploadedFile($path, 'inputs.xlsx', null, null, true);
-        };
+        // A bonus without an amount is fine (it's emptied = removed); hours must be numbers.
+        $import = fn ($file) => $this->post("/api/v1/payroll/runs/{$this->run}/inputs/import", ['file' => $file], ['Accept' => 'application/json']);
+        $import($this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Weekday overtime' => 'eight'] : null))
+            ->assertStatus(422)->assertJsonPath('errors.rows', fn ($rows) => str_contains(collect($rows)->first(), 'must be a number'));
+        $this->getJson("/api/v1/payroll/runs/{$this->run}/inputs")->assertJsonCount(1, 'data');
 
-        $this->post("/api/v1/payroll/runs/{$this->run}/inputs/import", ['file' => $file([
-            ['AI001', 'OT_WD', 8, null, null],
-            ['NOPE', 'OT_WD', 8, null, null],
-            ['AI001', 'BONUS', null, null, null],
-        ])], ['Accept' => 'application/json'])
-            ->assertStatus(422)
-            ->assertJsonPath('errors.rows.3', fn ($e) => str_contains($e, 'Unknown employee'))
-            ->assertJsonPath('errors.rows.4', fn ($e) => str_contains($e, 'needs an amount'));
-        $this->getJson("/api/v1/payroll/runs/{$this->run}/inputs")->assertJsonCount(0, 'data');
+        $import($this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Weekday overtime' => 8, 'Bonus' => 250, 'Notes' => 'Spot award'] : null))
+            ->assertOk()->assertJsonPath('data.created', 1)->assertJsonPath('data.updated', 1);
+        $inputs = collect($this->getJson("/api/v1/payroll/runs/{$this->run}/inputs")->json('data'));
+        $this->assertSame(250.0, (float) $inputs->firstWhere('component.code', 'BONUS')['amount']);
 
-        $this->post("/api/v1/payroll/runs/{$this->run}/inputs/import", ['file' => $file([
-            ['AI001', 'OT_WD', 8, null, null],
-            ['ai001', 'bonus', null, 250, 'Spot award'],
-            [null, null, null, null, null],
-        ])], ['Accept' => 'application/json'])->assertOk()->assertJsonPath('data.created', 2);
+        // Emptying a cell removes the input; the same sheet again changes nothing.
+        $import($this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Bonus' => null] : null))->assertOk()->assertJsonPath('data.removed', 1);
+        $import($this->fillGrid($template(), fn () => null))->assertOk()->assertJsonPath('message', fn ($m) => str_contains($m, 'Nothing to change'));
+
+        // Another run's sheet is refused.
+        $other = $this->postJson('/api/v1/payroll/runs', ['year' => 2026, 'month' => 7])->json('data.uuid');
+        $this->post("/api/v1/payroll/runs/{$other}/inputs/import", ['file' => $this->fillGrid($template(), fn () => null)], ['Accept' => 'application/json'])
+            ->assertStatus(422)->assertJsonPath('errors.rows.1', fn ($m) => str_contains($m, 'another pay run'));
+    }
+
+    public function test_payslips_filter_by_what_they_were_calculated_with_and_total_the_filter(): void
+    {
+        $other = $this->userWithRole('staff')->employee;
+        $other->update(['staff_id' => 'AI002', 'ssnit_number' => 'C2']);
+        EmployeePayProfile::create(['employee_id' => $other->id, 'effective_from' => '2026-01-01', 'basic_salary' => 3000, 'payment_method' => 'bank', 'bank_name' => 'GCB', 'account_number' => '1']);
+        $this->add(['pay_component_uuid' => $this->overtime->uuid, 'quantity' => 10])->assertCreated();
+        $this->postJson("/api/v1/payroll/runs/{$this->run}/calculate")->assertOk();
+        $list = fn (string $query = '') => $this->getJson("/api/v1/payroll/runs/{$this->run}/payslips?{$query}")->assertOk();
+
+        $all = $list();
+        $this->assertSame(['GCB'], $all->json('data.filters.banks'));
+        $this->assertContains('OT_WD', array_column($all->json('data.filters.components'), 'value'));
+
+        $list('component=OT_WD')->assertJsonPath('data.meta.total', 1)->assertJsonPath('data.data.0.employee.staff_id', 'AI001');
+        $list('payment_method=bank')->assertJsonPath('data.meta.total', 1)->assertJsonPath('data.totals.payslips', 1);
+        $list('bank=GCB')->assertJsonPath('data.data.0.employee.staff_id', 'AI002');
+        $list('sort=net_asc')->assertJsonPath('data.data.0.employee.staff_id', 'AI002');
+        $this->assertSame(round((float) $all->json('data.totals.gross_pay'), 2), round(4775 + 3000, 2));
     }
 }

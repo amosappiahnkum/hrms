@@ -55,16 +55,24 @@ return new class extends Migration
             $table->json('employee_snapshot');
             // How they're paid (method, bank, account), encrypted.
             $table->text('payment_snapshot')->nullable();
+            // How they're paid, in plain columns for filtering (the snapshot is encrypted).
+            $table->string('payment_method', 30)->nullable();
+            $table->string('bank_name')->nullable();
             $table->decimal('proration', 6, 4)->default(1);
             $table->decimal('basic_salary', 14, 2)->default(0);
             $table->decimal('gross_pay', 14, 2)->default(0);
             $table->decimal('taxable_income', 14, 2)->default(0);
+            // Earnings SSNIT was worked out on (after the cap), for off-cycle runs in the month.
+            $table->decimal('ssnit_base', 14, 2)->default(0);
             $table->decimal('ssnit_employee', 14, 2)->default(0);
             $table->decimal('ssnit_employer', 14, 2)->default(0);
             $table->decimal('tier1', 14, 2)->default(0);
             $table->decimal('tier2', 14, 2)->default(0);
             $table->decimal('tier3', 14, 2)->default(0);
             $table->decimal('paye', 14, 2)->default(0);
+            // Bonus taxed at the bonus rate, and that tax (part of PAYE), for the year's bonus allowance.
+            $table->decimal('bonus_concession', 14, 2)->default(0);
+            $table->decimal('bonus_tax', 14, 2)->default(0);
             $table->decimal('total_deductions', 14, 2)->default(0);
             $table->decimal('net_pay', 14, 2)->default(0);
             $table->decimal('employer_cost', 14, 2)->default(0);
@@ -72,6 +80,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['pay_run_id', 'employee_id'], 'payslips_run_employee_unique');
+            $table->index(['pay_run_id', 'payment_method'], 'payslips_run_method_idx');
         });
 
         Schema::create('payslip_lines', function (Blueprint $table) {

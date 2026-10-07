@@ -155,6 +155,24 @@ There are two ways to change details, and the difference matters:
 
 Bank and mobile money numbers are stored encrypted and shown masked to the employee.
 
+### Many employees at once: Excel import
+
+On **Payroll › Employees**, tap **Import from Excel**.
+
+1. Download the template. It lists every employee with their current pay details. **Staff ID, Name and Department
+   are locked** so you can see whose row it is; a hidden column is what actually identifies each row, so rows typed in
+   or copied from another sheet are refused. You can still filter and sort the columns.
+2. Change only what's different. An empty cell keeps what is saved now. Account and mobile money numbers are left out
+   of the template on purpose; fill them in only to change them. **Paid by** and **Tax resident** have dropdowns.
+3. **In force from** decides what a row does:
+   - empty, or the current date: the current details are corrected;
+   - a later date: new details from then (a raise), the old ones kept for earlier months;
+   - for someone with no pay details yet: when they start (empty means the 1st of this month).
+4. Choose the file. It's **checked first**: you see every row that would change, old → new, with anything that
+   looks wrong highlighted (a pay cut, a big raise, a change of account or payment method, details that start after
+   a pay run that's still open, corrections to months already paid). Nothing is saved until you tap **Import**. If
+   any row has a problem, it's listed by row and nothing can be imported until it's fixed.
+
 ### Recurring components
 
 Under the employee's pay, add the standing allowances and deductions they get each month, with their own amount if
@@ -296,8 +314,11 @@ days. First add a **Rate per unit** component for each in Pay components.
 1. Open **Payroll › Time inputs**. Choose the month and the component.
 2. Type each employee's quantity. It saves when you leave the box or press Enter. Clear the box (or enter 0) to remove
    it.
-3. For many people at once, use **Import**: download the template, fill one row per employee (staff ID, component
-   code, quantity, notes) and upload it. If any row has a problem, nothing is saved and the rows are listed.
+3. For many people at once, use **Import**: download the month's sheet. It has one row per employee and one column per
+   component, already filled with what's entered. Staff ID and name are locked, and grey cells are already in a pay run
+   sent for approval and can't change. Type the quantities (empty a cell to remove it) and upload it. Only cells that
+   changed are saved; if any has a problem, nothing is saved and the rows are listed. A sheet for another month is
+   refused.
 
 If approval is on (**Settings › General › Time inputs need approval**), each entry goes through the time inputs
 workflow and shows Pending until approved. Changing an entry sends it for approval again. Once an entry is in a pay run
@@ -353,18 +374,24 @@ A pay run moves through these statuses:
 1. **Create the run.** In **Payroll › Pay runs**, tap **New pay run**, choose the month and Regular monthly payroll,
    and the pay date (empty means the last day of the month). There is one regular run per month.
 2. **Add this month's inputs.** On the run's **Inputs** tab, tap **Add input** for one-off items (a bonus, a
-   deduction, extra hours) or **Import from Excel** for many. You don't enter approved overtime, time inputs, loan
+   deduction, extra hours) or **Import from Excel** for many: the run's own sheet has one row per employee and one
+   column per component, filled with what's entered (hours or units, or an amount); staff ID and name are locked, and
+   emptying a cell removes that input. You don't enter approved overtime, time inputs, loan
    repayments or back pay: they're added automatically and tagged with where they came from.
 3. **Calculate.** Tap **Calculate**. Everyone with pay details in force for the month is included, pro-rated if they
    joined or left mid-month. It stops if the statutory rates aren't confirmed or an exchange rate is missing, and says
    which.
 4. **Check.** Look at the totals and the **Payslips** tab. Payslips with warnings (no SSNIT number, missing bank
    details, negative net pay) are flagged; filter to see only those. Download the payroll register to review in Excel.
-   Fix anything and **Recalculate** as often as you need.
+   Fix anything and **Recalculate** as often as you need; it says who was added or dropped since the last time.
+   **Not in this run** lists everyone the run doesn't pay and why (no pay details, details that start after the
+   month, or joining after it): fix their pay details and recalculate.
 5. **Send for approval.** Tap **Send for approval**. The run is locked while it's being approved. If the setting is
    on, the person who prepared it can't approve it.
 6. **Approve.** The approver opens the run (from the email or Approvals) and taps **Approve** or **Reject** with a
-   reason. A rejected run goes back to be corrected and recalculated.
+   reason. A rejected run goes back to be corrected and recalculated. To correct a run that's waiting for approval or
+   approved but not yet paid (for example, pay details were missing), tap **Reopen**: it goes back to draft, the
+   approval is withdrawn, and you recalculate and send it again. A paid run can't be reopened.
 7. **Pay.** Once approved, download the payment files and the statutory reports under **Reports and payment files**.
    Upload the payment files to the bank or mobile money provider.
 8. **Mark as paid.** Once salaries have gone out, tap **Mark as paid**. Employees can now see their payslips (and are

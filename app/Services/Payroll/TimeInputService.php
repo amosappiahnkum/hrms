@@ -13,6 +13,7 @@ use App\Models\Payroll\PayRunInput;
 use App\Models\Payroll\TimeInput;
 use App\Models\SelfService\Employee;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -90,53 +91,117 @@ class TimeInputService
     }
 
     /**
-     * Import rows [staff id, component code, quantity, notes] for a month. All or nothing: any
-     * problem and nothing is saved, every problem listed by row.
-     *
-     * @return array{saved: int, errors: array<int, string>}
+     * The month's sheet: every employee by every per-unit component, filled with what's entered.
+     * Entries already in a pay run sent for approval are locked.
      */
-    public function import(int $year, int $month, array $rows, User $user): array
+    public function template(int $year, int $month): string
     {
-        $employees = Employee::whereIn('staff_id', array_filter(array_map(fn ($r) => trim((string) ($r[0] ?? '')), $rows)))->get()->keyBy(fn ($e) => strtolower($e->staff_id));
-        $components = $this->components()->keyBy(fn ($c) => strtoupper($c->code));
+        $components = $this->components();
+        $employees = Employee::with('department')->orderBy('first_name')->orderBy('last_name')->get();
+        $entries = TimeInput::where(['year' => $year, 'month' => $month])->whereIn('status', ['pending', 'approved'])
+            ->with(['payRun', 'employee:id,uuid'])->get();
+        $period = Carbon::create($year, $month, 1)->format('F Y');
+
+        $columns = $components->map(fn (PayComponent $c) => [
+            'ref'     => $c->uuid,
+            'heading' => "{$c->name} ({$c->code}) · " . ($c->unit ?: 'units'),
+            'values'  => $entries->where('pay_component_id', $c->id)->mapWithKeys(fn ($t) => [$t->employee->uuid => (float) $t->quantity])->all(),
+            'locked'  => $entries->where('pay_component_id', $c->id)->filter(fn ($t) => $t->payRun && !$t->payRun->status->isOpen())
+                ->mapWithKeys(fn ($t) => [$t->employee->uuid => true])->all(),
+        ])->values()->all();
+
+        return Sheets\EmployeeGrid::build("Time inputs {$period}", "time-inputs:" . sprintf('%04d-%02d', $year, $month), $employees, $columns, null, [
+            "Time inputs for {$period}",
+            'One row per employee, one column per component. Type the quantity for the month; empty or 0 means none.',
+            'Staff ID, Name and Department are locked. Hidden references identify each row and column, so rows or columns added by hand are ignored or refused.',
+            'Grey cells are already in a pay run sent for approval and can no longer change.',
+            'Only cells that differ from what is entered are saved. If any cell has a problem, nothing is saved and the problems are listed.',
+        ]);
+    }
+
+    /**
+     * Import the month's sheet. All or nothing.
+     *
+     * @return array{saved: int, removed: int, errors: array<int, string>}
+     */
+    public function importGrid(int $year, int $month, string $path, User $user, bool $apply = true): array
+    {
+        $days = Carbon::create($year, $month, 1)->daysInMonth;
+        $grid = Sheets\EmployeeGrid::read($path);
+        $expected = 'time-inputs:' . sprintf('%04d-%02d', $year, $month);
+        if ($grid['reference'] !== $expected) {
+            $sheetFor = str_starts_with((string) $grid['reference'], 'time-inputs:') ? Carbon::parse(substr($grid['reference'], 12) . '-01')->format('F Y') : null;
+
+            return ['saved' => 0, 'removed' => 0, 'errors' => [1 => $sheetFor
+                ? "This sheet is for {$sheetFor}, not " . Carbon::create($year, $month, 1)->format('F Y') . '. Choose that month, or download this month\'s template.'
+                : 'This isn\'t a time inputs template. Download the template and fill that in.']];
+        }
+
+        $components = $this->components()->keyBy('uuid');
+        $employees = Employee::whereIn('uuid', collect($grid['rows'])->pluck('ref')->filter())->get()->keyBy('uuid');
+        $entries = TimeInput::where(['year' => $year, 'month' => $month])->whereIn('status', ['pending', 'approved'])->with('payRun')->get()
+            ->keyBy(fn ($t) => "{$t->employee_id}:{$t->pay_component_id}");
+
         $errors = [];
-        $valid = [];
-        $seen = [];
-
-        foreach ($rows as $i => $row) {
-            [$staffId, $code, $quantity, $notes] = array_pad(array_map(fn ($v) => is_string($v) ? trim($v) : $v, $row), 4, null);
-            if (!$staffId && !$code) {
+        $plans = [];
+        $preview = [];
+        foreach ($grid['rows'] as $line => $row) {
+            $employee = $row['ref'] ? $employees->get($row['ref']) : null;
+            if (!$employee) {
+                $errors[$line] = "{$row['label']}: This row isn't from the template. Download a fresh template.";
                 continue;
             }
-            $employee = $employees->get(strtolower((string) $staffId));
-            $component = $components->get(strtoupper((string) $code));
-            $problems = array_filter([
-                $employee ? null : 'Unknown staff ID.',
-                $component ? null : 'Unknown component code (it must be a per-unit component).',
-                is_numeric($quantity) && $quantity >= 0 ? null : 'The quantity must be a number.',
-            ]);
-            $key = strtolower((string) $staffId) . ':' . strtoupper((string) $code);
-            if (!$problems && isset($seen[$key])) {
-                $problems[] = "Repeats row {$seen[$key]}.";
+            $fields = [];
+            $warnings = [];
+            foreach ($row['values'] as $ref => $value) {
+                $component = $components->get($ref);
+                if (!$component) {
+                    if ($value !== null) {
+                        $errors[$line] = "{$row['label']}: A column isn't a per-unit component any more. Download a fresh template.";
+                    }
+                    continue;
+                }
+                if ($value !== null && (!is_numeric($value) || $value < 0)) {
+                    $errors[$line] = "{$row['label']}: {$component->name} must be a number.";
+                    continue;
+                }
+                $quantity = $value === null ? null : round((float) $value, 2);
+                $existing = $entries->get("{$employee->id}:{$component->id}");
+                if ((float) ($existing?->quantity ?? 0) === (float) ($quantity ?? 0)) {
+                    continue;
+                }
+                if ($existing?->payRun && !$existing->payRun->status->isOpen()) {
+                    $errors[$line] = "{$row['label']}: {$component->name} is already in {$existing->payRun->name} and can't change.";
+                    continue;
+                }
+                $plans[] = [$employee, $component, $quantity ?: null];
+                $fields[] = ['label' => $component->name, 'from' => $existing ? (string) (float) $existing->quantity : '—', 'to' => $quantity ? $quantity . ' ' . ($component->unit ?: 'units') : 'removed'];
+                if ($quantity && str_starts_with((string) $component->unit, 'day') && $quantity > $days) {
+                    $warnings[] = "{$quantity} days of {$component->name}, more than the month's {$days}.";
+                }
+                if ($existing && $quantity && setting('payroll.time_inputs_require_approval', true)) {
+                    $warnings[] = "{$component->name} changes, so it goes for approval again.";
+                }
             }
-            if ($problems) {
-                $errors[$i + 2] = ($staffId ? "{$staffId}: " : '') . implode(' ', $problems);
-                continue;
+            if ($fields && !isset($errors[$line])) {
+                $preview[] = ['line' => $line, 'who' => "{$row['label']} · " . trim(preg_replace('/\s+/', ' ', $employee->name)), 'action' => 'Changed', 'fields' => $fields, 'warnings' => array_values(array_unique($warnings))];
             }
-            $seen[$key] = $i + 2;
-            $valid[] = [$employee, $component, (float) $quantity, $notes ?: null];
         }
-
+        $counts = ['saved' => count(array_filter($plans, fn ($p) => $p[2] !== null)), 'removed' => count(array_filter($plans, fn ($p) => $p[2] === null))];
         if ($errors) {
-            return ['saved' => 0, 'errors' => $errors];
+            return ['saved' => 0, 'removed' => 0, 'errors' => $errors, 'changes' => []];
         }
-        DB::transaction(function () use ($valid, $year, $month, $user) {
-            foreach ($valid as [$employee, $component, $quantity, $notes]) {
-                $this->save($employee, $component, $year, $month, $quantity, $notes, $user);
+        if (!$apply) {
+            return $counts + ['errors' => [], 'changes' => $preview];
+        }
+
+        DB::transaction(function () use ($plans, $year, $month, $user) {
+            foreach ($plans as [$employee, $component, $quantity]) {
+                $this->save($employee, $component, $year, $month, $quantity, null, $user);
             }
         });
 
-        return ['saved' => count($valid), 'errors' => []];
+        return $counts + ['errors' => [], 'changes' => $preview];
     }
 
     /** Approved, unpaid inputs up to the run's month join a regular run, one input per employee and component. */

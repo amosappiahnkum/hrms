@@ -24,6 +24,8 @@ return new class extends Migration
             $table->string('unit', 30)->nullable(); // e.g. day, hour (rate_per_unit)
             // Earnings: counts as taxable income. Deductions: taken before tax.
             $table->boolean('taxable')->default(true);
+            // Taxed at the bonus rate up to a share of annual basic (when that rule is on).
+            $table->boolean('is_bonus')->default(false);
             $table->boolean('ssnit_applicable')->default(false);
             // A standing item employees are given (vs. entered per pay run).
             $table->boolean('recurring')->default(false);

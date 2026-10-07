@@ -11,6 +11,7 @@ use App\Models\Payroll\PayRun;
 use App\Models\Payroll\PayRunInput;
 use App\Models\SelfService\Employee;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /** A pay run's variable items: checked, saved, imported, and handed to the calculator. */
@@ -84,51 +85,173 @@ class PayRunInputs
         $this->changed($run);
     }
 
+    /** Components a pay run's inputs can use: one-off items, and those paid by the hour or unit. */
+    public function inputComponents(PayRun $run): Collection
+    {
+        $used = PayRunInput::where('pay_run_id', $run->id)->where('source', 'input')->pluck('pay_component_id');
+
+        return PayComponent::where('is_system', false)
+            ->where(fn ($q) => $q->where('active', true)->where(fn ($w) => $w->where('recurring', false)
+                ->orWhereIn('calculation', [ComponentCalculation::HOURLY_MULTIPLIER, ComponentCalculation::RATE_PER_UNIT]))
+                ->orWhereIn('id', $used))
+            ->orderBy('kind')->orderBy('sort_order')->orderBy('name')->get();
+    }
+
+    /** Whether a component's cell holds a quantity (hours, units) rather than an amount. */
+    private function byQuantity(PayComponent $c): bool
+    {
+        return in_array($c->calculation, [ComponentCalculation::HOURLY_MULTIPLIER, ComponentCalculation::RATE_PER_UNIT], true);
+    }
+
     /**
-     * Import rows [staff id, component code, quantity, amount, notes]. All or nothing: any problem
-     * and nothing is saved, every problem listed by row.
-     *
-     * @return array{created: int, errors: array<int, string>}
+     * The run's sheet: everyone who can be paid in it, by component, filled with the inputs entered by hand.
+     * Inputs that came from approved overtime, time inputs, loans or back pay aren't in it.
      */
-    public function import(PayRun $run, array $rows, User $user): array
+    public function template(PayRun $run): string
+    {
+        $components = $this->inputComponents($run);
+        $inputs = PayRunInput::where('pay_run_id', $run->id)->where('source', 'input')->with('employee:id,uuid')->get();
+        $employees = Employee::with('department')
+            ->where(fn ($q) => $q->whereIn('id', EmployeePayProfile::inForceOn($run->period_end)->select('employee_id'))->orWhereIn('id', $inputs->pluck('employee_id')))
+            ->orderBy('first_name')->orderBy('last_name')->get();
+        $closed = !$run->status->isOpen();
+        $everyone = $closed ? $employees->mapWithKeys(fn ($e) => [$e->uuid => true])->all() : [];
+
+        $columns = $components->map(function (PayComponent $c) use ($inputs, $everyone) {
+            $mine = $inputs->where('pay_component_id', $c->id)->groupBy(fn ($i) => $i->employee->uuid);
+
+            return [
+                'ref'     => $c->uuid,
+                'heading' => "{$c->name} ({$c->code}) · " . ($this->byQuantity($c) ? ($c->unit ?: 'hours') : 'amount' . ($c->currency ? " {$c->currency}" : '')),
+                'values'  => $mine->map(fn ($items) => $this->byQuantity($c)
+                    ? (float) $items->sum('quantity')
+                    : (float) $items->sum(fn ($i) => $i->amount ?? $c->rate))->all(),
+                'locked'  => $everyone,
+            ];
+        })->values()->all();
+        $notes = ['heading' => 'Notes', 'values' => $inputs->groupBy(fn ($i) => $i->employee->uuid)->map(fn ($items) => $items->pluck('notes')->filter()->first())->all()];
+
+        return Sheets\EmployeeGrid::build('Inputs', "pay-run:{$run->uuid}", $employees, $columns, $notes, [
+            "Inputs for {$run->name}",
+            'One row per employee who can be paid in this run, one column per component. Hours or units for components paid by the hour or unit; an amount for the others.',
+            'The sheet is filled with the inputs entered by hand. Change a cell to change it, empty it to remove it. Notes apply to that employee\'s inputs.',
+            'Approved overtime, time inputs, loan repayments and back pay come in on their own and are not in this sheet.',
+            'Staff ID, Name and Department are locked. Hidden references identify each row and column.',
+            'Only cells that differ are saved. If any cell has a problem, nothing is saved and the problems are listed.',
+        ]);
+    }
+
+    /**
+     * Import the run's sheet. All or nothing.
+     *
+     * @return array{created: int, updated: int, removed: int, errors: array<int, string>}
+     */
+    public function importGrid(PayRun $run, string $path, User $user, bool $apply = true): array
     {
         $this->ensureOpen($run);
-        $employees = Employee::whereIn('staff_id', array_filter(array_map(fn ($r) => trim((string) ($r[0] ?? '')), $rows)))->get()->keyBy(fn ($e) => strtolower($e->staff_id));
-        $components = PayComponent::all()->keyBy(fn ($c) => strtoupper($c->code));
+        $days = $run->period_start->daysInMonth;
+        $grid = Sheets\EmployeeGrid::read($path);
+        if ($grid['reference'] !== "pay-run:{$run->uuid}") {
+            return ['created' => 0, 'updated' => 0, 'removed' => 0, 'errors' => [1 => str_starts_with((string) $grid['reference'], 'pay-run:')
+                ? 'This sheet is for another pay run. Download this run\'s template.'
+                : 'This isn\'t a pay run inputs template. Download the template and fill that in.']];
+        }
+
+        $components = PayComponent::whereIn('uuid', collect($grid['rows'])->flatMap(fn ($r) => array_keys($r['values']))->unique())->get()->keyBy('uuid');
+        $employees = Employee::whereIn('uuid', collect($grid['rows'])->pluck('ref')->filter())->get()->keyBy('uuid');
+        $existing = PayRunInput::where('pay_run_id', $run->id)->where('source', 'input')->orderBy('id')->get()
+            ->groupBy(fn ($i) => "{$i->employee_id}:{$i->pay_component_id}");
+
         $errors = [];
-        $valid = [];
-
-        foreach ($rows as $i => $row) {
-            [$staffId, $code, $quantity, $amount, $notes] = array_pad(array_map(fn ($v) => is_string($v) ? trim($v) : $v, $row), 5, null);
-            if (!$staffId && !$code) {
+        $plans = [];
+        $preview = [];
+        foreach ($grid['rows'] as $line => $row) {
+            $employee = $row['ref'] ? $employees->get($row['ref']) : null;
+            if (!$employee) {
+                $errors[$line] = "{$row['label']}: This row isn't from the template. Download a fresh template.";
                 continue;
             }
-            $employee = $employees->get(strtolower((string) $staffId));
-            $component = $components->get(strtoupper((string) $code));
-            $quantity = is_numeric($quantity) ? (float) $quantity : null;
-            $amount = is_numeric($amount) ? (float) $amount : null;
-
-            if ($problems = $this->problems($run, $employee, $component, $quantity, $amount)) {
-                $errors[$i + 2] = ($staffId ? "{$staffId}: " : '') . implode(' ', $problems);
-                continue;
+            $notes = filled($row['notes']) ? mb_substr((string) $row['notes'], 0, 255) : null;
+            $problems = [];
+            $fields = [];
+            $warnings = [];
+            $show = fn (PayComponent $c, $items) => $items->isEmpty() ? '—' : (string) (float) ($this->byQuantity($c) ? $items->sum('quantity') : $items->sum(fn ($i) => $i->amount ?? $c->rate));
+            foreach ($row['values'] as $ref => $value) {
+                $component = $components->get($ref);
+                $items = $component ? $existing->get("{$employee->id}:{$component->id}", collect()) : collect();
+                if (!$component) {
+                    if ($value !== null) {
+                        $problems[] = 'A column isn\'t a component any more. Download a fresh template.';
+                    }
+                    continue;
+                }
+                if ($value === null) {
+                    if ($items->isNotEmpty()) {
+                        $plans[] = ['remove', $items];
+                        $fields[] = ['label' => $component->name, 'from' => $show($component, $items), 'to' => 'removed'];
+                    }
+                    continue;
+                }
+                if (!is_numeric($value) || $value < 0) {
+                    $problems[] = "{$component->name} must be a number.";
+                    continue;
+                }
+                $quantity = $this->byQuantity($component) ? round((float) $value, 2) : null;
+                $amount = $this->byQuantity($component) ? null : round((float) $value, 2);
+                if ($found = $this->problems($run, $employee, $component, $quantity, $amount)) {
+                    $problems = [...$problems, ...$found];
+                    continue;
+                }
+                $first = $items->first();
+                $same = $items->count() === 1
+                    && (float) ($first->quantity ?? 0) === (float) ($quantity ?? 0)
+                    && (float) ($first->amount ?? ($quantity === null ? $component->rate : 0)) === (float) ($amount ?? 0)
+                    && $first->notes === $notes;
+                if (!$same) {
+                    $fields[] = ['label' => $component->name, 'from' => $show($component, $items), 'to' => (string) (float) $value . ($this->byQuantity($component) ? ' ' . ($component->unit ?: 'h') : '')];
+                    if ($component->calculation === ComponentCalculation::HOURLY_MULTIPLIER && $value > 100) {
+                        $warnings[] = "{$value} hours of {$component->name} in one month.";
+                    }
+                    if ($component->calculation === ComponentCalculation::RATE_PER_UNIT && str_starts_with((string) $component->unit, 'day') && $value > $days) {
+                        $warnings[] = "{$value} days of {$component->name}, more than the month's {$days}.";
+                    }
+                    $plans[] = $first
+                        ? ['update', $items, ['quantity' => $quantity, 'amount' => $amount, 'notes' => $notes]]
+                        : ['create', ['pay_run_id' => $run->id, 'employee_id' => $employee->id, 'pay_component_id' => $component->id, 'quantity' => $quantity, 'amount' => $amount, 'notes' => $notes, 'source' => 'input', 'created_by' => $user->id]];
+                }
             }
-            $valid[] = ['pay_run_id' => $run->id, 'employee_id' => $employee->id, 'pay_component_id' => $component->id, 'quantity' => $quantity, 'amount' => $amount, 'notes' => $notes ?: null, 'source' => 'input', 'created_by' => $user->id];
+            if ($problems) {
+                $errors[$line] = "{$row['label']}: " . implode(' ', array_unique($problems));
+            } elseif ($fields) {
+                $preview[] = ['line' => $line, 'who' => "{$row['label']} · " . trim(preg_replace('/\s+/', ' ', $employee->name)), 'action' => 'Changed', 'fields' => $fields, 'warnings' => $warnings];
+            }
         }
-
+        $planned = collect($plans)->countBy(fn ($p) => $p[0]);
+        $counts = ['created' => $planned['create'] ?? 0, 'updated' => $planned['update'] ?? 0, 'removed' => $planned['remove'] ?? 0];
         if ($errors) {
-            return ['created' => 0, 'errors' => $errors];
+            return ['created' => 0, 'updated' => 0, 'removed' => 0, 'errors' => $errors, 'changes' => []];
+        }
+        if (!$apply) {
+            return $counts + ['errors' => [], 'changes' => $preview];
         }
 
-        DB::transaction(function () use ($valid) {
-            foreach ($valid as $values) {
-                PayRunInput::create($values);
+        $counts = ['created' => 0, 'updated' => 0, 'removed' => 0];
+        DB::transaction(function () use ($plans, &$counts) {
+            foreach ($plans as $plan) {
+                match ($plan[0]) {
+                    'create' => PayRunInput::create($plan[1]),
+                    // One input per employee and component: the first is kept, any others go.
+                    'update' => [$plan[1]->first()->update($plan[2]), $plan[1]->slice(1)->each->delete()],
+                    'remove' => $plan[1]->each->delete(),
+                };
+                $counts[['create' => 'created', 'update' => 'updated', 'remove' => 'removed'][$plan[0]]]++;
             }
         });
-        if ($valid) {
+        if ($plans) {
             $this->changed($run);
         }
 
-        return ['created' => count($valid), 'errors' => []];
+        return $counts + ['errors' => [], 'changes' => $preview];
     }
 
     private function ensureOpen(PayRun $run): void

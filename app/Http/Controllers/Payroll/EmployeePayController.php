@@ -69,6 +69,34 @@ class EmployeePayController extends Controller
         return ApiResponse::success($this->detail($employee, masked: true));
     }
 
+    /** Everyone's pay details as a spreadsheet to fill in (whose row it is, locked). */
+    public function template(\App\Services\Payroll\EmployeePayImport $import): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return response()->download($import->template(), 'pay-details-' . now()->format('Y-m-d') . '.xlsx')->deleteFileAfterSend();
+    }
+
+    /** The filled-in spreadsheet back. All or nothing: any problem and nothing is saved. */
+    public function import(Request $request, \App\Services\Payroll\EmployeePayImport $import): JsonResponse
+    {
+        $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls', 'max:10240'], 'check' => ['boolean']]);
+        $rows = \PhpOffice\PhpSpreadsheet\IOFactory::load($request->file('file')->getRealPath())->getSheet(0)->toArray(null, true, false, false);
+        array_shift($rows); // headings
+
+        // check: work everything out and say what would change, saving nothing.
+        if ($request->boolean('check')) {
+            return ApiResponse::success($import->import($rows, $request->user(), apply: false), 'Checked.');
+        }
+        $result = $import->import($rows, $request->user());
+        if ($result['errors']) {
+            return ApiResponse::error('Nothing was imported: fix these rows and try again.', ['rows' => $result['errors']], 422);
+        }
+        $saved = $result['created'] + $result['corrected'] + $result['changed'];
+
+        return ApiResponse::success($result, $saved
+            ? "Saved {$saved}: {$result['created']} new, {$result['corrected']} corrected, {$result['changed']} changed from a date."
+            : 'Nothing to change: every row matches what is saved.');
+    }
+
     /**
      * mode=correct: fix the profile in force (or create the first one).
      * mode=change: a new profile from a later date (e.g. a raise), keeping the old one for past periods.
@@ -126,32 +154,16 @@ class EmployeePayController extends Controller
         if ($change && !$current) {
             throw new UserFacingException('There are no pay details to change yet. Save the first ones instead.');
         }
-        $request->merge(['currency' => $request->filled('currency') ? strtoupper($request->input('currency')) : null]);
+        $request->merge(['currency' => \App\Support\Currencies::normalize($request->input('currency'))]);
 
         $data = $request->validate([
             'mode'                  => ['required', Rule::in(['correct', 'change'])],
             'effective_from'        => [$change ? 'required' : 'nullable', 'date', ...($change ? ['after:' . $current->effective_from->toDateString()] : [])],
-            'basic_salary'          => ['required', 'numeric', 'min:0'],
-            'currency'              => ['nullable', 'string', 'size:3', 'alpha'],
-            'payment_method'        => ['required', Rule::in(array_keys(EmployeePayProfile::PAYMENT_METHODS))],
-            'bank_name'             => ['nullable', 'required_if:payment_method,bank', 'string', 'max:255'],
-            'bank_branch'           => ['nullable', 'string', 'max:255'],
-            'account_name'          => ['nullable', 'string', 'max:255'],
-            'account_number'        => ['nullable', 'required_if:payment_method,bank', 'string', 'max:50'],
-            'mobile_money_provider' => ['nullable', 'required_if:payment_method,mobile_money', 'string', 'max:50'],
-            'mobile_money_number'   => ['nullable', 'required_if:payment_method,mobile_money', 'string', 'max:20'],
-            'tin'                   => ['nullable', 'string', 'max:30'],
-            'ssnit_number'          => ['sometimes', 'nullable', 'string', 'max:30'],
-            'tier2_scheme'          => ['nullable', 'string', 'max:255'],
-            'tier3_scheme'          => ['nullable', 'string', 'max:255'],
-            'tier3_percent'         => ['nullable', 'numeric', 'between:0,100'],
             'reliefs'               => ['nullable', 'array'],
             'reliefs.*.code'        => ['required', 'string', 'distinct'],
             'reliefs.*.units'       => ['nullable', 'integer', 'min:1'],
-            'tax_resident'          => ['boolean'],
-            'overtime_eligible'     => ['nullable', 'boolean'],
             'notes'                 => ['nullable', 'string', 'max:2000'],
-        ], ['effective_from.after' => 'A change must start after the current details (from ' . $current?->effective_from->format('j M Y') . ').']);
+        ] + EmployeePayProfile::rules(), ['effective_from.after' => 'A change must start after the current details (from ' . $current?->effective_from->format('j M Y') . ').']);
 
         // Reliefs claimed must be ones the statutory rates define, within their limits.
         $defined = collect(StatutoryRateSet::inForceOn(now())?->reliefs ?? [])->keyBy('code');
@@ -165,13 +177,7 @@ class EmployeePayController extends Controller
             }
         }
 
-        // Payment details that don't apply are cleared.
-        if ($data['payment_method'] !== 'bank') {
-            $data = array_merge($data, ['bank_name' => null, 'bank_branch' => null, 'account_name' => null, 'account_number' => null]);
-        }
-        if ($data['payment_method'] !== 'mobile_money') {
-            $data = array_merge($data, ['mobile_money_provider' => null, 'mobile_money_number' => null]);
-        }
+        $data = EmployeePayProfile::withoutUnusedPayment($data);
         if ($data['currency'] === $this->base()) {
             $data['currency'] = null;
         }

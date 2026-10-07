@@ -61,8 +61,11 @@ class PayComponentController extends Controller
     private function validated(Request $request, ?PayComponent $component = null): array
     {
         $request->merge([
-            'code'     => strtoupper(preg_replace('/[^A-Za-z0-9_]+/', '_', (string) $request->input('code', $component?->code))),
-            'currency' => $request->filled('currency') ? strtoupper($request->input('currency')) : null,
+            // Left empty: made from the name (a new component), or kept (an existing one).
+            'code'     => filled($request->input('code'))
+                ? self::codeOf((string) $request->input('code'))
+                : ($component?->code ?? self::uniqueCode((string) $request->input('name'))),
+            'currency' => \App\Support\Currencies::normalize($request->input('currency')),
         ]);
 
         $data = $request->validate([
@@ -71,7 +74,7 @@ class PayComponentController extends Controller
             'kind'             => ['required', Rule::enum(ComponentKind::class)],
             'calculation'      => ['required', Rule::enum(ComponentCalculation::class)],
             'rate'             => ['nullable', 'numeric', 'min:0'],
-            'currency'         => ['nullable', 'string', 'size:3', 'alpha'],
+            'currency'         => ['nullable', \App\Support\Currencies::rule()],
             'unit'             => ['nullable', 'string', 'max:30'],
             'taxable'          => ['boolean'],
             'is_bonus'         => ['boolean'],
@@ -113,6 +116,25 @@ class PayComponentController extends Controller
         $data['sort_order'] ??= 100;
 
         return $data;
+    }
+
+    /** A code as stored: upper case, letters, digits and underscores. */
+    private static function codeOf(string $text): string
+    {
+        return trim(strtoupper(preg_replace('/[^A-Za-z0-9]+/', '_', $text)), '_');
+    }
+
+    /** A code made from a name, not used by another component: TRANSPORT_ALLOWANCE, then TRANSPORT_ALLOWANCE_2… */
+    private static function uniqueCode(string $name): string
+    {
+        $base = substr(self::codeOf($name), 0, 26) ?: 'COMPONENT';
+        $base = rtrim($base, '_');
+        $code = $base;
+        for ($n = 2; PayComponent::where('code', $code)->exists(); $n++) {
+            $code = "{$base}_{$n}";
+        }
+
+        return $code;
     }
 
     private function row(PayComponent $c): array

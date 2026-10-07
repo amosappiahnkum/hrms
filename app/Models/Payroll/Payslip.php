@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Payslip extends AppModel
 {
     protected $fillable = [
-        'pay_run_id', 'employee_id', 'employee_snapshot', 'payment_snapshot', 'proration', 'basic_salary', 'gross_pay',
+        'pay_run_id', 'employee_id', 'employee_snapshot', 'payment_snapshot', 'payment_method', 'bank_name', 'proration', 'basic_salary', 'gross_pay',
         'taxable_income', 'ssnit_base', 'ssnit_employee', 'ssnit_employer', 'tier1', 'tier2', 'tier3', 'paye', 'bonus_concession', 'bonus_tax', 'total_deductions',
         'net_pay', 'employer_cost', 'warnings',
     ];

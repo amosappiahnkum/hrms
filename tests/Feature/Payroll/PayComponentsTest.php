@@ -54,4 +54,21 @@ class PayComponentsTest extends TestCase
         $this->postJson('/api/v1/payroll/pay-components', ['code' => 'UNION', 'name' => 'Union dues', 'kind' => 'deduction', 'calculation' => 'manual', 'rate' => 9, 'ssnit_applicable' => true, 'taxable' => false])
             ->assertCreated()->assertJsonPath('data.ssnit_applicable', false)->assertJsonPath('data.rate', null);
     }
+
+    public function test_a_code_left_empty_is_made_from_the_name(): void
+    {
+        $this->setUpAccess([]);
+        \App\Models\Config\Setting::where('key', 'features.payroll.enabled')->update(['value' => true]);
+        app(\App\Services\SettingService::class)->refreshCache();
+        $hr = $this->userWithRole('hr');
+        $hr->givePermissionTo('configure-payroll');
+        \Laravel\Sanctum\Sanctum::actingAs($hr);
+        $component = ['name' => 'Transport allowance', 'kind' => 'earning', 'calculation' => 'fixed', 'rate' => 300];
+
+        $this->postJson('/api/v1/payroll/pay-components', $component)->assertCreated()->assertJsonPath('data.code', 'TRANSPORT_ALLOWANCE');
+        $uuid = $this->postJson('/api/v1/payroll/pay-components', $component + ['code' => ''])->assertCreated()->assertJsonPath('data.code', 'TRANSPORT_ALLOWANCE_2')->json('data.uuid');
+        // Editing without a code keeps the one it has.
+        $this->putJson("/api/v1/payroll/pay-components/{$uuid}", ['name' => 'Fuel allowance'] + $component)->assertOk()->assertJsonPath('data.code', 'TRANSPORT_ALLOWANCE_2');
+        $this->postJson('/api/v1/payroll/pay-components', ['code' => 'lunch - daily'] + $component)->assertCreated()->assertJsonPath('data.code', 'LUNCH_DAILY');
+    }
 }
