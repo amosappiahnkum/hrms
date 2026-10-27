@@ -27,7 +27,7 @@ class TrainingEvaluationService
             return;
         }
 
-        $item->loadMissing('employee.userAccount', 'employee.employeeSupervisor.supervisor.userAccount');
+        $item->loadMissing('employee.userAccount', 'employee.reportsTo.userAccount');
         $completed = Carbon::parse($item->completed_at ?? now());
 
         $feedback = $this->ensure($item, EvaluationType::PARTICIPANT_FEEDBACK, $item->employee?->userAccount,
@@ -51,7 +51,8 @@ class TrainingEvaluationService
     {
         $employee = $item->employee;
 
-        return $employee?->employeeSupervisor?->supervisor?->userAccount ?? $employee?->hodUser();
+        // Their supervisor ("Reports to", else the head of their unit), else their department's head.
+        return ($employee ? app(\App\Services\Org\ReportingLine::class)->supervisorOf($employee)?->userAccount : null) ?? $employee?->hodUser();
     }
 
     /** Tell the evaluator (or, with nobody to ask, everyone preparing training plans). */

@@ -41,7 +41,7 @@ class PayRunTest extends TestCase
         $user->employee->update($employee + ['ssnit_number' => 'C1234']);
         EmployeePayProfile::create($profile + [
             'employee_id' => $user->employee_id, 'effective_from' => '2026-01-01', 'basic_salary' => 5000,
-            'payment_method' => 'bank', 'bank_name' => 'GCB', 'account_number' => '1011',
+            'payment_method' => 'bank', 'bank_id' => $this->bank('GCB')->id, 'bank_name' => 'GCB', 'account_number' => '1011',
         ]);
 
         return $user;
@@ -65,15 +65,18 @@ class PayRunTest extends TestCase
         $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk()
             ->assertJsonPath('data.status.value', 'calculated')
             ->assertJsonPath('data.totals.employees', 1) // the leaver left before June, the joiner joins after
-            // 5,000 basic, no reliefs: SSNIT 275, taxable 4,725 → PAYE 779.75, net 3,945.25.
-            ->assertJsonPath('data.totals.net_pay', 3945.25)
+            // 5,000 basic, no reliefs: SSNIT 275, taxable 4,725 → PAYE 785.75 (2026 bands), net 3,939.25.
+            ->assertJsonPath('data.totals.net_pay', 3939.25)
             ->assertJsonPath('data.totals.with_warnings', 0);
 
         $slip = $this->getJson("/api/v1/payroll/runs/{$run}/payslips")->assertOk()
             ->json('data.data.0.uuid');
         $this->getJson("/api/v1/payroll/runs/{$run}/payslips/{$slip}")->assertOk()
-            ->assertJsonPath('data.figures.paye', 779.75)
-            ->assertJsonPath('data.lines.0.code', 'BASIC');
+            ->assertJsonPath('data.figures.paye', 785.75)
+            ->assertJsonPath('data.lines.0.code', 'BASIC')
+            // As printed, for the payslip view (the same as the employee sees).
+            ->assertJsonPath('data.earnings.0.amount', 5000)
+            ->assertJsonPath('data.totals.net_pay', 3939.25);
 
         // The preparer can't approve their own run; the other approver can.
         $this->postJson("/api/v1/payroll/runs/{$run}/submit")->assertOk()->assertJsonPath('data.status.value', 'pending_approval')->assertJsonPath('data.can.decide', false);
@@ -102,7 +105,7 @@ class PayRunTest extends TestCase
         $run = $this->postJson('/api/v1/payroll/runs', ['year' => 2026, 'month' => 6])->json('data.uuid');
 
         $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'USD'));
-        $this->postJson('/api/v1/payroll/exchange-rates', ['currency' => 'USD', 'year' => 2026, 'rate' => 15])->assertCreated();
+        $this->postJson('/api/v1/payroll/exchange-rates', ['currency' => 'USD', 'effective_date' => '2026-06-01', 'rate' => 15])->assertCreated();
         $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk()->assertJsonPath('data.totals.gross_pay', 15000);
 
         $this->postJson("/api/v1/payroll/runs/{$run}/submit")->assertOk();
@@ -131,6 +134,7 @@ class PayRunTest extends TestCase
         Sanctum::actingAs($staff);
         $this->getJson('/api/v1/payroll/my-payslips')->assertOk()->assertJsonCount(0, 'data');
         $this->get("/api/v1/payroll/my-payslips/{$slip->uuid}/pdf")->assertNotFound();
+        $this->getJson("/api/v1/payroll/my-payslips/{$slip->uuid}")->assertNotFound(); // not paid yet
 
         Sanctum::actingAs($this->preparer);
         $this->postJson("/api/v1/payroll/runs/{$run}/submit")->assertOk();
@@ -141,23 +145,31 @@ class PayRunTest extends TestCase
         Notification::assertSentTo($staff, \App\Notifications\PayslipAvailableNotification::class);
 
         Sanctum::actingAs($staff);
-        $this->getJson('/api/v1/payroll/my-payslips')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.net_pay', 3945.25);
+        $this->getJson('/api/v1/payroll/my-payslips')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.net_pay', 3939.25);
         $this->get("/api/v1/payroll/my-payslips/{$slip->uuid}/pdf")->assertOk()->assertHeader('content-type', 'application/pdf');
+        // The details as the payslip prints them, without HR's warnings.
+        $this->getJson("/api/v1/payroll/my-payslips/{$slip->uuid}")->assertOk()
+            ->assertJsonPath('data.totals.net_pay', 3939.25)
+            ->assertJsonPath('data.header.month', 'June 2026')
+            ->assertJsonPath('data.earnings.0.amount', 5000)
+            ->assertJsonPath('data.deductions', fn ($d) => collect($d)->pluck('amount')->sum() == 1060.75)
+            ->assertJsonMissingPath('data.warnings');
 
         $otherSlip = \App\Models\Payroll\Payslip::where('employee_id', $other->employee_id)->first();
         $this->get("/api/v1/payroll/my-payslips/{$otherSlip->uuid}/pdf")->assertNotFound();
+        $this->getJson("/api/v1/payroll/my-payslips/{$otherSlip->uuid}")->assertNotFound();
     }
 
     public function test_reports_and_payment_files_come_from_an_approved_run(): void
     {
         StatutoryRateSet::query()->update(['confirmed_at' => now()]);
-        $gcb = $this->paid($this->userWithRole('staff'), ['bank_name' => 'GCB', 'account_name' => 'Ama Mensah', 'account_number' => '1011']);
-        $this->paid($this->userWithRole('staff'), ['bank_name' => 'Ecobank', 'account_number' => '2022']);
+        $gcb = $this->paid($this->userWithRole('staff'), ['bank_id' => $this->bank('GCB')->id, 'bank_name' => 'GCB', 'account_name' => 'Ama Mensah', 'account_number' => '1011']);
+        $this->paid($this->userWithRole('staff'), ['bank_id' => $this->bank('Ecobank')->id, 'bank_name' => 'Ecobank', 'account_number' => '2022']);
         $run = $this->postJson('/api/v1/payroll/runs', ['year' => 2026, 'month' => 6])->json('data.uuid');
         $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk();
 
         $layout = $this->postJson('/api/v1/payroll/payment-file-layouts', [
-            'name' => 'GCB upload', 'payment_method' => 'bank', 'bank_name' => 'gcb', 'format' => 'csv', 'delimiter' => ',', 'include_header' => true,
+            'name' => 'GCB upload', 'payment_method' => 'bank', 'bank_uuid' => $this->bank('GCB')->uuid, 'format' => 'csv', 'delimiter' => ',', 'include_header' => true,
             'columns' => [['field' => 'account_number', 'heading' => 'ACCOUNT'], ['field' => 'account_name', 'heading' => 'NAME'], ['field' => 'amount', 'heading' => 'AMOUNT'], ['field' => 'narration', 'heading' => 'NARRATION']],
         ])->assertCreated()->json('data.uuid');
 
@@ -180,8 +192,24 @@ class PayRunTest extends TestCase
         $lines = array_values(array_filter(explode("\n", trim($csv))));
         $this->assertSame('ACCOUNT,NAME,AMOUNT,NARRATION', $lines[0]);
         $this->assertCount(2, $lines, 'only the GCB employee');
-        $this->assertSame('1011,"Ama Mensah",3945.25,"Salary June 2026"', $lines[1]);
+        $this->assertSame('1011,"Ama Mensah",3939.25,"Salary June 2026"', $lines[1]);
         $this->get("/api/v1/payroll/runs/{$run}/reports/journal")->assertOk();
+    }
+
+    public function test_employees_paid_into_the_same_account_are_flagged_on_their_payslips(): void
+    {
+        StatutoryRateSet::query()->update(['confirmed_at' => now()]);
+        // Saved before duplicates were refused: both at GCB 1011; a third at another bank with the same number.
+        $ama = $this->paid($this->userWithRole('staff'), [], ['staff_id' => 'A1']);
+        $kofi = $this->paid($this->userWithRole('staff'), [], ['staff_id' => 'K1']);
+        $other = $this->paid($this->userWithRole('staff'), ['bank_id' => $this->bank('Ecobank')->id, 'bank_name' => 'Ecobank']);
+
+        $run = $this->postJson('/api/v1/payroll/runs', ['year' => 2026, 'month' => 6])->json('data.uuid');
+        $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk()->assertJsonPath('data.totals.with_warnings', 2);
+        $warnings = \App\Models\Payroll\Payslip::pluck('warnings', 'employee_id');
+        $this->assertContains('Paid into the same account as ' . trim(preg_replace('/\s+/', ' ', $kofi->employee->name)) . ' (K1).', $warnings[$ama->employee_id]);
+        $this->assertContains('Paid into the same account as ' . trim(preg_replace('/\s+/', ' ', $ama->employee->name)) . ' (A1).', $warnings[$kofi->employee_id]);
+        $this->assertSame([], $warnings[$other->employee_id]);
     }
 
     public function test_a_run_lists_who_it_leaves_out_and_can_be_reopened_and_rerun_after_details_are_filled(): void
@@ -213,5 +241,11 @@ class PayRunTest extends TestCase
         // A paid run can't be reopened.
         PayRun::where('uuid', $run)->update(['status' => \App\Enums\Payroll\PayRunStatus::PAID]);
         $this->postJson("/api/v1/payroll/runs/{$run}/reopen")->assertStatus(422);
+    }
+
+    /** A bank on the banks list (made the first time). */
+    private function bank(string $name): \App\Models\Payroll\Bank
+    {
+        return \App\Models\Payroll\Bank::firstOrCreate(['name' => $name], ['active' => true]);
     }
 }

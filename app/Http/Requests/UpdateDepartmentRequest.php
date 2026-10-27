@@ -31,6 +31,8 @@ class UpdateDepartmentRequest extends FormRequest
             'name' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('departments')->ignore($department)->whereNull('deleted_at')],
             'hod' => ['nullable', 'string', 'exists:employees,uuid'],
             'parent_department_id' => ['nullable', 'string', 'exists:departments,uuid'],
+            // An index into the level names (org.department_levels), e.g. 2 = Section.
+            'level' => ['nullable', 'integer', 'min:0', 'max:' . max(0, count(\App\Models\Config\Department::levels()) - 1)],
         ];
     }
 

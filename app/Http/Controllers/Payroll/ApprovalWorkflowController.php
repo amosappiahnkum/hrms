@@ -33,13 +33,16 @@ class ApprovalWorkflowController extends Controller
         return ApiResponse::success([
             'workflows' => $workflows->map(fn ($w) => $this->row($w, $users))->values(),
             'options'   => [
-                'processes'      => collect(ApprovalProcess::cases())->map(fn ($p) => [
+                'processes'      => collect(ApprovalProcess::cases())->filter(fn ($p) => $p->configurable())->values()->map(fn ($p) => [
                     'value' => $p->value, 'label' => $p->label(),
                     'adjustable' => collect($p->adjustable())->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values(),
+                    'questions'  => collect($p->questions())->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values(),
                 ]),
                 'approver_types' => collect(ApproverType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label(), 'needs_value' => $t->needsValue()]),
                 'roles'          => Role::where('guard_name', 'web')->orderBy('name')->pluck('name'),
                 'permissions'    => Permission::where('guard_name', 'web')->orderBy('name')->pluck('name'),
+                // For "heads up the chain … up to the Directorate".
+                'department_levels' => \App\Models\Config\Department::levels(),
             ],
         ]);
     }
@@ -71,11 +74,14 @@ class ApprovalWorkflowController extends Controller
     {
         $employee = Employee::where('uuid', $request->validate(['employee_uuid' => ['required', 'string']])['employee_uuid'])->firstOrFail();
 
-        return ApiResponse::success($approvalWorkflow->steps->map(function ($step) use ($employee) {
+        // The steps as this employee's request would follow them ("heads up the chain" expanded).
+        $steps = $this->workflows->stepsFor($approvalWorkflow->steps, $approvalWorkflow->process, $employee);
+
+        return ApiResponse::success(collect($steps)->map(function (array $step) use ($employee) {
             $users = $this->workflows->resolve($step, $employee);
 
             return [
-                'name'      => $step->name,
+                'name'      => $step['name'],
                 'approvers' => $users->map(fn ($u) => $u->name)->values(),
                 // Resolves to nobody: HR is asked instead.
                 'fallback'  => $users->isEmpty(),
@@ -94,10 +100,40 @@ class ApprovalWorkflowController extends Controller
             ->map(fn ($u) => ['uuid' => $u->uuid, 'name' => $u->name, 'email' => $u->email]));
     }
 
+    /**
+     * A "heads up the chain" rule: stop at the top, or after a number of heads (1–10); leave out the supervisor
+     * already asked (default yes).
+     */
+    private function chainRule(mixed $value, string $field): array
+    {
+        $value = is_array($value) ? $value : [];
+        $stop = $value['stop'] ?? 'top';
+        if (!in_array($stop, ['top', 'count', 'level'], true)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([$field => 'Stop at the top, at a level, or after a number of heads.']);
+        }
+        $rule = ['stop' => $stop, 'skip_supervisor' => filter_var($value['skip_supervisor'] ?? true, FILTER_VALIDATE_BOOL)];
+        if ($stop === 'count') {
+            $count = filter_var($value['count'] ?? null, FILTER_VALIDATE_INT);
+            if ($count === false || $count < 1 || $count > 10) {
+                throw \Illuminate\Validation\ValidationException::withMessages([$field => 'Stop after 1 to 10 heads.']);
+            }
+            $rule['count'] = $count;
+        }
+        if ($stop === 'level') {
+            $level = filter_var($value['level'] ?? null, FILTER_VALIDATE_INT);
+            if ($level === false || $level < 0 || $level >= count(\App\Models\Config\Department::levels())) {
+                throw \Illuminate\Validation\ValidationException::withMessages([$field => 'Choose the level to stop at.']);
+            }
+            $rule['level'] = $level;
+        }
+
+        return $rule;
+    }
+
     private function validated(Request $request, ?ApprovalWorkflow $workflow = null): array
     {
         $data = $request->validate([
-            'process'                => [$workflow ? 'prohibited' : 'required', Rule::enum(ApprovalProcess::class)],
+            'process'                => [$workflow ? 'prohibited' : 'required', Rule::enum(ApprovalProcess::class)->except([ApprovalProcess::APPRAISAL])],
             'name'                   => ['required', 'string', 'max:255'],
             'is_default'             => ['sometimes', 'boolean'],
             'distinct_approvers'     => ['sometimes', 'boolean'],
@@ -106,6 +142,7 @@ class ApprovalWorkflowController extends Controller
             'steps.*.approver_type'  => ['required', Rule::enum(ApproverType::class)],
             'steps.*.approver_value' => ['nullable'],
             'steps.*.can_adjust'     => ['nullable', 'array'],
+            'steps.*.questions'      => ['nullable', 'array'],
         ], ['steps.required' => 'Add at least one step.']);
 
         $process = $workflow?->process ?? ApprovalProcess::from($data['process']);
@@ -115,9 +152,11 @@ class ApprovalWorkflowController extends Controller
                 ApproverType::ROLE       => $this->named($step['approver_value'] ?? null, Role::class, "steps.{$i}.approver_value"),
                 ApproverType::PERMISSION => $this->named($step['approver_value'] ?? null, Permission::class, "steps.{$i}.approver_value"),
                 ApproverType::USERS      => $this->users((array) ($step['approver_value'] ?? []), "steps.{$i}.approver_value"),
+                ApproverType::HEADS_CHAIN => $this->chainRule($step['approver_value'] ?? null, "steps.{$i}.approver_value"),
                 default                  => null,
             };
             $step['can_adjust'] = array_values(array_intersect($step['can_adjust'] ?? [], array_keys($process->adjustable())));
+            $step['questions'] = array_values(array_intersect($step['questions'] ?? [], array_keys($process->questions())));
         }
         $data['process'] = $process;
 
@@ -188,8 +227,9 @@ class ApprovalWorkflowController extends Controller
                 // Roles and permissions by name; people as {uuid, name}.
                 'approver_value' => $s->approver_type === ApproverType::USERS
                     ? collect((array) $s->approver_value)->map(fn ($id) => $users->get($id))->filter()->map(fn ($u) => ['uuid' => $u->uuid, 'name' => $u->name])->values()
-                    : ($s->approver_value[0] ?? null),
+                    : ($s->approver_type === ApproverType::HEADS_CHAIN ? $s->approver_value : ($s->approver_value[0] ?? null)),
                 'can_adjust'     => $s->can_adjust ?? [],
+                'questions'      => $s->questions ?? [],
             ])->values(),
         ];
     }

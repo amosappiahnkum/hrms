@@ -71,6 +71,13 @@ class StatutoryRateSetController extends Controller
 
     private function validated(Request $request, ?StatutoryRateSet $set = null): array
     {
+        // The junior-staff threshold was annual basic (annual_basic_threshold); it's income now. Accept the old name.
+        $ot = $request->input('overtime_tax');
+        if (is_array($ot) && !array_key_exists('annual_income_threshold', $ot) && array_key_exists('annual_basic_threshold', $ot)) {
+            $ot['annual_income_threshold'] = $ot['annual_basic_threshold'];
+            unset($ot['annual_basic_threshold']);
+            $request->merge(['overtime_tax' => $ot]);
+        }
         $data = $request->validate([
             'name'                                 => ['required', 'string', 'max:255'],
             'effective_from'                       => ['required', 'date', Rule::unique('statutory_rate_sets', 'effective_from')->ignore($set?->id)->whereNull('deleted_at')],
@@ -92,8 +99,12 @@ class StatutoryRateSetController extends Controller
             'reliefs.*.percent_of_income'          => ['nullable', 'numeric', 'between:0,100'],
             'tier3_relief_limit_percent'           => ['nullable', 'numeric', 'between:0,100'],
             'non_resident_rate'                    => ['sometimes', 'numeric', 'between:0,100'],
+            // Non-residents' overtime and bonuses (GRA: 20%).
+            'non_resident_special_rate'            => ['sometimes', 'numeric', 'between:0,100'],
+            'freelance_withholding_rate'           => ['nullable', 'numeric', 'between:0,100'],
             'overtime_tax'                         => ['nullable', 'array'],
-            'overtime_tax.annual_basic_threshold'  => ['required_with:overtime_tax', 'numeric', 'min:0'],
+            // Junior staff: annual taxable employment income up to this (GRA: GH¢18,000).
+            'overtime_tax.annual_income_threshold' => ['required_with:overtime_tax', 'numeric', 'min:0'],
             'overtime_tax.percent_of_basic'        => ['required_with:overtime_tax', 'numeric', 'between:0,100'],
             'overtime_tax.lower_rate'              => ['required_with:overtime_tax', 'numeric', 'between:0,100'],
             'overtime_tax.higher_rate'             => ['required_with:overtime_tax', 'numeric', 'between:0,100'],
@@ -135,7 +146,11 @@ class StatutoryRateSetController extends Controller
             'reliefs'                    => $s->reliefs ?? [],
             'tier3_relief_limit_percent' => $s->tier3_relief_limit_percent !== null ? (float) $s->tier3_relief_limit_percent : null,
             'non_resident_rate'          => (float) $s->non_resident_rate,
-            'overtime_tax'               => $s->overtime_tax,
+            'non_resident_special_rate'  => (float) $s->non_resident_special_rate,
+            'freelance_withholding_rate' => $s->freelance_withholding_rate !== null ? (float) $s->freelance_withholding_rate : null,
+            // Sets saved before the threshold was income (annual_basic_threshold) read the same.
+            'overtime_tax'               => $s->overtime_tax ? ['annual_income_threshold' => $s->overtime_tax['annual_income_threshold'] ?? $s->overtime_tax['annual_basic_threshold'] ?? null]
+                + collect($s->overtime_tax)->except(['annual_basic_threshold', 'annual_income_threshold'])->all() : null,
             'bonus_tax'                  => $s->bonus_tax,
             'confirmed_at'               => $s->confirmed_at?->toIso8601String(),
             'confirmed_by'               => $s->confirmer?->name,

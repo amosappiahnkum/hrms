@@ -19,25 +19,25 @@ class StatutoryRatesSeeder extends Seeder
         }
 
         StatutoryRateSet::create([
-            'name'           => 'Ghana (starting set: verify before use)',
-            'effective_from' => '2024-01-01',
-            'notes'          => 'Seeded from the 2024 GRA monthly PAYE schedule and SSNIT rates. Check every figure, '
+            'name' => 'Ghana (starting set: verify before use)',
+            'effective_from' => '2026-01-01',
+            'notes' => 'Seeded from the 2024 GRA monthly PAYE schedule and SSNIT rates. Check every figure, '
                 . 'especially the maximum insurable earnings, which SSNIT revises each year.',
             'ssnit' => [
-                'employee_rate'          => 5.5,
-                'employer_rate'          => 13,
-                'tier1_rate'             => 13.5,
-                'tier2_rate'             => 5,
+                'employee_rate' => 5.5,
+                'employer_rate' => 13,
+                'tier1_rate' => 13.5,
+                'tier2_rate' => 5,
                 'max_insurable_earnings' => null,
             ],
             // Monthly chargeable income: each band's width, then the rest.
             'paye_bands' => [
-                ['limit' => 490, 'rate' => 0],
-                ['limit' => 110, 'rate' => 5],
-                ['limit' => 130, 'rate' => 10],
-                ['limit' => 3166.67, 'rate' => 17.5],
+                ['limit' => 588, 'rate' => 0],
+                ['limit' => 80, 'rate' => 5],
+                ['limit' => 100, 'rate' => 10],
+                ['limit' => 2900, 'rate' => 17.5],
                 ['limit' => 16000, 'rate' => 25],
-                ['limit' => 30520, 'rate' => 30],
+                ['limit' => 30332, 'rate' => 30],
                 ['limit' => null, 'rate' => 35],
             ],
             'reliefs' => [
@@ -49,8 +49,9 @@ class StatutoryRatesSeeder extends Seeder
                 ['code' => 'professional_training', 'name' => 'Professional / vocational training', 'annual_amount' => 2000, 'max_units' => null, 'percent_of_income' => null],
             ],
             'tier3_relief_limit_percent' => 16.5,
-            'overtime_tax' => ['annual_basic_threshold' => 18000, 'percent_of_basic' => 50, 'lower_rate' => 5, 'higher_rate' => 10],
-            'bonus_tax'    => ['rate' => 5, 'percent_of_annual_basic' => 15],
+            // Junior staff: annual taxable employment income up to 18,000.
+            'overtime_tax' => ['annual_income_threshold' => 18000, 'percent_of_basic' => 50, 'lower_rate' => 5, 'higher_rate' => 10],
+            'bonus_tax' => ['rate' => 5, 'percent_of_annual_basic' => 15],
         ]);
     }
 }

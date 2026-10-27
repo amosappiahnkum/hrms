@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\UpdateApprovalService;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -30,6 +31,10 @@ class QualificationResource extends JsonResource
             'date' => $this->date,
             'type' => $this->type,
             'info_update' => $this->informationUpdate,
+            // A pending change, shaped for the form (related records by uuid).
+            'pending_values' => $this->pendingApproval
+                ? app(UpdateApprovalService::class)->formValues($this->resource, $this->pendingApproval->new_info ?? [])
+                : null,
         ];
     }
 }

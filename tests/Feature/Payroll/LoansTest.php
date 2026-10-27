@@ -82,7 +82,7 @@ class LoansTest extends TestCase
 
         // June's run deducts the first instalment: 3,945.25 net less 1,000.
         $run = $this->postJson('/api/v1/payroll/runs', ['year' => 2026, 'month' => 6])->json('data.uuid');
-        $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk()->assertJsonPath('data.totals.net_pay', 2945.25);
+        $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk()->assertJsonPath('data.totals.net_pay', 2939.25);
         $this->postJson("/api/v1/payroll/runs/{$run}/submit")->assertOk();
         Sanctum::actingAs($this->runApprover);
         $this->postJson('/api/v1/payroll/approvals/' . PayRun::where('uuid', $run)->first()->approval->uuid . '/decide', ['decision' => 'approved'])->assertOk();
@@ -133,7 +133,7 @@ class LoansTest extends TestCase
 
         // June: paid out (not taxable), nothing repaid yet.
         $june = $this->postJson('/api/v1/payroll/runs', ['year' => 2026, 'month' => 6])->json('data.uuid');
-        $this->postJson("/api/v1/payroll/runs/{$june}/calculate")->assertOk()->assertJsonPath('data.totals.net_pay', 6945.25);
+        $this->postJson("/api/v1/payroll/runs/{$june}/calculate")->assertOk()->assertJsonPath('data.totals.net_pay', 6939.25);
         $this->deleteJson("/api/v1/payroll/runs/{$june}")->assertOk();
         $this->assertNull($loan->fresh()->disbursement_run_id);
 

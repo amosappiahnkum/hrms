@@ -7,6 +7,8 @@ use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\Payroll\OvertimeRequest;
 use App\Models\Payroll\OvertimeType;
+use App\Models\Payroll\WorkOrder;
+use App\Models\Payroll\WorkSite;
 use App\Models\SelfService\Employee;
 use App\Services\Payroll\OvertimeService;
 use Illuminate\Database\Eloquent\Builder;
@@ -46,7 +48,17 @@ class OvertimeRequestController extends Controller
             'backdate_days'      => (int) setting('payroll.overtime_backdate_days', 31),
             'require_reason'     => (bool) setting('payroll.overtime_require_reason', true),
             'require_location'   => (bool) setting('payroll.overtime_require_location', false),
-            'locations'          => array_values((array) setting('payroll.overtime_locations', [])),
+            'locations'          => app(OvertimeService::class)->locations(),
+            // before / after / both: requested before the work (FM-07), after it, or before and confirmed after.
+            'mode'               => $this->overtime->mode(),
+            'advance_days'       => (int) setting('payroll.overtime_advance_days', 30),
+            // Kinds of day that need a request before the work; and whether hours worked are confirmed on the timesheet.
+            'advance_kinds'      => $this->overtime->inAdvance() ? \App\Services\Payroll\WorkingDay::advanceKinds() : [],
+            'confirm_on_timesheet' => feature('payroll.timesheets') && setting('payroll.time_source', 'manual') === 'timesheet',
+            'sites'              => WorkSite::where('active', true)->orderBy('name')->get()
+                ->map(fn ($s) => ['uuid' => $s->uuid, 'code' => $s->code, 'name' => $s->name, 'is_offshore' => $s->is_offshore])->values(),
+            'work_orders'        => WorkOrder::with('client')->where('active', true)->orderBy('number')->get()
+                ->map(fn ($w) => ['uuid' => $w->uuid, 'number' => $w->number, 'description' => $w->description, 'client' => $w->client?->name])->values(),
         ]);
     }
 
@@ -86,7 +98,7 @@ class OvertimeRequestController extends Controller
             'hours_approved'  => (float) (clone $query)->where('status', 'approved')->sum('approved_hours'),
             'pending'         => (clone $query)->where('status', 'pending')->count(),
         ];
-        $page = $query->with(['type', 'approval.decisions.decider', 'payRun'])
+        $page = $query->with(['type', 'addonType', 'approval.decisions.decider', 'group.approval.decisions.decider', 'group.requests', 'payRun', 'workOrder.client'])
             ->latest('work_date')->latest('id')
             ->paginate(min((int) $request->input('per_page', 20), 100));
 
@@ -100,15 +112,21 @@ class OvertimeRequestController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'work_date'          => ['required', 'date'],
-            'hours'              => ['required', 'numeric', 'min:0.25', 'max:24'],
+            // One date (work_date, hours), or several with the same details (dates).
+            'work_date'          => ['required_without:dates', 'nullable', 'date'],
+            'hours'              => ['required_without:dates', 'nullable', 'numeric', 'min:0.25', 'max:24'],
+            'dates'              => ['nullable', 'array', 'min:2', 'max:31'],
+            'dates.*.date'       => ['required', 'date'],
+            'dates.*.hours'      => ['required', 'numeric', 'min:0.25', 'max:24'],
             'overtime_type_uuid' => [Rule::requiredIf(!setting('payroll.overtime_auto_type', true)), 'nullable', 'uuid'],
-            'location'           => ['nullable', 'string', 'max:100'],
-            'reason'             => ['nullable', 'string', 'max:1000'],
+            'addon_type_uuid'    => ['nullable', 'uuid'],
+            'location'             => ['nullable', 'string', 'max:100'],
+            'work_site_uuid'       => ['nullable', 'uuid'],
+            'work_order_uuid'      => ['nullable', 'uuid'],
+            'activity_description' => ['nullable', 'string', 'max:1000'],
+            'reason'               => ['nullable', 'string', 'max:1000'],
         ]);
-        $overtime = $this->overtime->request($this->me($request), $data, $request->user());
-
-        return ApiResponse::success($this->row($overtime->load(['type', 'approval.decisions.decider']), true), 'Overtime sent for approval.', 201);
+        return $this->send($this->me($request), $data, $request);
     }
 
     /** HR records overtime for an employee; it still goes through the employee's workflow. */
@@ -116,15 +134,41 @@ class OvertimeRequestController extends Controller
     {
         $employee = Employee::where('uuid', $request->validate(['employee_uuid' => ['required', 'uuid']])['employee_uuid'])->firstOrFail();
         $data = $request->validate([
-            'work_date'          => ['required', 'date'],
-            'hours'              => ['required', 'numeric', 'min:0.25', 'max:24'],
+            // One date (work_date, hours), or several with the same details (dates).
+            'work_date'          => ['required_without:dates', 'nullable', 'date'],
+            'hours'              => ['required_without:dates', 'nullable', 'numeric', 'min:0.25', 'max:24'],
+            'dates'              => ['nullable', 'array', 'min:2', 'max:31'],
+            'dates.*.date'       => ['required', 'date'],
+            'dates.*.hours'      => ['required', 'numeric', 'min:0.25', 'max:24'],
             'overtime_type_uuid' => [Rule::requiredIf(!setting('payroll.overtime_auto_type', true)), 'nullable', 'uuid'],
-            'location'           => ['nullable', 'string', 'max:100'],
-            'reason'             => ['nullable', 'string', 'max:1000'],
+            'addon_type_uuid'    => ['nullable', 'uuid'],
+            'location'             => ['nullable', 'string', 'max:100'],
+            'work_site_uuid'       => ['nullable', 'uuid'],
+            'work_order_uuid'      => ['nullable', 'uuid'],
+            'activity_description' => ['nullable', 'string', 'max:1000'],
+            'reason'               => ['nullable', 'string', 'max:1000'],
         ]);
-        $overtime = $this->overtime->request($employee, $data, $request->user());
+        return $this->send($employee, $data, $request);
+    }
 
-        return ApiResponse::success($this->row($overtime->load(['employee', 'type', 'approval.decisions.decider']), true), 'Overtime sent for approval.', 201);
+    /** The employee confirms the hours they worked on overtime approved in advance. */
+    public function confirmMine(Request $request, OvertimeRequest $overtimeRequest): JsonResponse
+    {
+        abort_unless($overtimeRequest->employee_id === $this->me($request)->id, 404);
+        // With pay from timesheets, the hours worked are confirmed on the timesheet.
+        abort_if(feature('payroll.timesheets') && setting('payroll.time_source', 'manual') === 'timesheet', 422,
+            'Confirm the hours worked on your timesheet.');
+
+        return $this->confirm($request, $overtimeRequest);
+    }
+
+    /** HR or payroll confirm the hours worked (e.g. from the timesheet). */
+    public function confirm(Request $request, OvertimeRequest $overtimeRequest): JsonResponse
+    {
+        $hours = (float) $request->validate(['actual_hours' => ['required', 'numeric', 'min:0', 'max:24']])['actual_hours'];
+        $overtime = $this->overtime->confirmActual($overtimeRequest, $hours);
+
+        return ApiResponse::success($this->row($overtime->load(['employee', 'type', 'addonType', 'approval.decisions.decider', 'payRun', 'workOrder.client']), true), 'Hours worked saved.');
     }
 
     public function cancel(Request $request, OvertimeRequest $overtimeRequest): JsonResponse
@@ -138,7 +182,7 @@ class OvertimeRequestController extends Controller
     /** Everyone's requests, for HR and payroll. */
     public function index(Request $request): JsonResponse
     {
-        $page = $this->filtered($request)->with(['employee', 'type', 'approval.decisions.decider', 'payRun'])
+        $page = $this->filtered($request)->with(['employee', 'type', 'addonType', 'approval.decisions.decider', 'group.approval.decisions.decider', 'group.requests', 'payRun', 'workOrder.client'])
             ->latest('work_date')->latest('id')
             ->paginate(min((int) $request->input('per_page', 20), 100));
 
@@ -155,15 +199,16 @@ class OvertimeRequestController extends Controller
     /** The filtered requests as a spreadsheet: how approved hours reach payroll when payroll is run elsewhere. */
     public function export(Request $request): BinaryFileResponse
     {
-        $rows = $this->filtered($request)->with(['employee', 'type.component', 'payRun'])->orderBy('work_date')->get()
+        $rows = $this->filtered($request)->with(['employee', 'type.component', 'addonType.component', 'payRun', 'workOrder'])->orderBy('work_date')->get()
             ->map(fn (OvertimeRequest $r) => [
                 $r->employee?->staff_id, trim(preg_replace('/\s+/', ' ', (string) $r->employee?->name)), $r->work_date->toDateString(),
-                $r->type?->name, $r->type?->component?->code, (float) $r->hours_requested, (float) $r->approved_hours,
-                $r->location, $r->reason, ucfirst($r->status), $r->payRun?->name,
+                $r->typeLabel(), collect([$r->type?->component?->code, $r->addonType?->component?->code])->filter()->implode(' + '), (float) $r->hours_requested, (float) $r->approved_hours,
+                $r->location, $r->workOrder?->number, $r->activity_description, $r->reason,
+                $r->actual_hours !== null ? (float) $r->actual_hours : null, ucfirst($r->status), $r->payRun?->name,
             ])->all();
 
         return Excel::download(new ArrayExport(
-            ['Staff ID', 'Name', 'Date', 'Type', 'Component', 'Hours requested', 'Hours approved', 'Location', 'Reason', 'Status', 'Paid in'],
+            ['Staff ID', 'Name', 'Date', 'Type', 'Component', 'Hours requested', 'Hours approved', 'Location', 'PO / work order', 'Activities', 'Reason', 'Hours worked', 'Status', 'Paid in'],
             $rows,
         ), 'overtime-' . now()->format('Y-m-d') . '.xlsx');
     }
@@ -194,22 +239,57 @@ class OvertimeRequestController extends Controller
         return $employee;
     }
 
+    /** One date, or several (a group approved once): the request, or the group's first date, is returned. */
+    private function send(Employee $employee, array $data, Request $request): JsonResponse
+    {
+        if (!empty($data['dates'])) {
+            $group = $this->overtime->requestMany($employee, $data, $request->user());
+            $first = $group->requests()->with(['employee', 'type', 'addonType', 'group.approval.decisions.decider', 'group.requests'])->first();
+
+            return ApiResponse::success(self::row($first, true), count($data['dates']) . ' days of overtime sent for approval.', 201);
+        }
+        $overtime = $this->overtime->request($employee, $data, $request->user());
+
+        return ApiResponse::success(self::row($overtime->load(['employee', 'type', 'addonType', 'approval.decisions.decider']), true), 'Overtime sent for approval.', 201);
+    }
+
     public static function row(OvertimeRequest $r, bool $withApproval = false): array
     {
+        // Requested with other dates: the group's approval is this date's.
+        $approval = $r->overtime_request_group_id ? $r->group?->approval : $r->approval;
+
         return [
             'uuid'            => $r->uuid,
             'employee'        => $r->relationLoaded('employee') && $r->employee
                 ? ['uuid' => $r->employee->uuid, 'name' => trim(preg_replace('/\s+/', ' ', $r->employee->name)), 'staff_id' => $r->employee->staff_id]
                 : null,
             'type'            => $r->type ? ['uuid' => $r->type->uuid, 'name' => $r->type->name] : null,
+            // Paid on top for the same hours (e.g. offshore).
+            'addon_type'      => $r->addonType ? ['uuid' => $r->addonType->uuid, 'name' => $r->addonType->name] : null,
             'work_date'       => $r->work_date->toDateString(),
             'hours_requested' => (float) $r->hours_requested,
             'approved_hours'  => (float) $r->approved_hours,
             'location'        => $r->location,
+            'work_order'      => $r->work_order_id && $r->workOrder
+                ? ['uuid' => $r->workOrder->uuid, 'number' => $r->workOrder->number, 'client' => $r->workOrder->client?->name]
+                : null,
+            'activity_description' => $r->activity_description,
             'reason'          => $r->reason,
+            'requested_in_advance' => $r->requested_in_advance,
+            // The supervisor's answers (FM-07); null until answered.
+            'can_postpone'    => $r->can_postpone,
+            'on_client_timesheet' => $r->on_client_timesheet,
+            'actual_hours'    => $r->actual_hours !== null ? (float) $r->actual_hours : null,
+            // Approved in advance and the work is done, but the hours worked aren't confirmed yet.
+            'awaiting_actual' => $r->status === 'approved' && $r->requested_in_advance && $r->actual_hours === null && !$r->work_date->isFuture(),
             'status'          => $r->status,
             'paid_in'         => $r->payRun ? ['uuid' => $r->payRun->uuid, 'name' => $r->payRun->name] : null,
-            'approval'        => $withApproval && $r->approval ? ApprovalController::summary($r->approval) : null,
+            'approval'        => $withApproval && $approval ? ApprovalController::summary($approval) : null,
+            // Requested with other dates (approved and withdrawn together).
+            'group'           => $r->overtime_request_group_id && $r->group ? [
+                'uuid' => $r->group->uuid, 'days' => $r->group->requests->count(),
+                'from' => $r->group->requests->min('work_date')?->toDateString(), 'to' => $r->group->requests->max('work_date')?->toDateString(),
+            ] : null,
             'created_at'      => $r->created_at?->toIso8601String(),
         ];
     }

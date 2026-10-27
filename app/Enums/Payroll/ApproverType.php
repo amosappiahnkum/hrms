@@ -11,6 +11,8 @@ enum ApproverType: string
     case ROLE = 'role';
     case PERMISSION = 'permission';
     case USERS = 'users';
+    /** One step per head above the employee (see ReportingLine::chainAbove), with a rule for where to stop. */
+    case HEADS_CHAIN = 'heads_chain';
 
     public function label(): string
     {
@@ -21,6 +23,7 @@ enum ApproverType: string
             self::ROLE                   => 'Everyone with a role',
             self::PERMISSION             => 'Everyone with a permission',
             self::USERS                  => 'Specific people',
+            self::HEADS_CHAIN            => 'Heads up the chain',
         };
     }
 

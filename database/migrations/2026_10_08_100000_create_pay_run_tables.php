@@ -15,6 +15,8 @@ return new class extends Migration
         Schema::table('statutory_rate_sets', function (Blueprint $table) {
             // PAYE for non-residents: a flat rate on taxable income.
             $table->decimal('non_resident_rate', 5, 2)->default(25)->after('tier3_relief_limit_percent');
+            // Non-residents' overtime and bonuses: a flat rate of their own (GRA: 20%), apart from their income.
+            $table->decimal('non_resident_special_rate', 5, 2)->default(20)->after('non_resident_rate');
         });
 
         Schema::create('pay_runs', function (Blueprint $table) {
@@ -57,6 +59,7 @@ return new class extends Migration
             $table->text('payment_snapshot')->nullable();
             // How they're paid, in plain columns for filtering (the snapshot is encrypted).
             $table->string('payment_method', 30)->nullable();
+            $table->foreignId('bank_id')->nullable()->constrained(indexName: 'payslips_bank_fk')->nullOnDelete();
             $table->string('bank_name')->nullable();
             $table->decimal('proration', 6, 4)->default(1);
             $table->decimal('basic_salary', 14, 2)->default(0);
@@ -70,6 +73,8 @@ return new class extends Migration
             $table->decimal('tier2', 14, 2)->default(0);
             $table->decimal('tier3', 14, 2)->default(0);
             $table->decimal('paye', 14, 2)->default(0);
+            // Freelancers taxed by withholding instead of PAYE (kept apart from PAYE returns).
+            $table->decimal('withholding_tax', 14, 2)->default(0);
             // Bonus taxed at the bonus rate, and that tax (part of PAYE), for the year's bonus allowance.
             $table->decimal('bonus_concession', 14, 2)->default(0);
             $table->decimal('bonus_tax', 14, 2)->default(0);
@@ -111,6 +116,10 @@ return new class extends Migration
         Schema::dropIfExists('payslip_lines');
         Schema::dropIfExists('payslips');
         Schema::dropIfExists('pay_runs');
-        Schema::table('statutory_rate_sets', fn (Blueprint $table) => $table->dropColumn('non_resident_rate'));
+        // Only the columns there: this migration was edited after some databases ran it (payroll migrations are rerun).
+        $columns = array_values(array_filter(['non_resident_rate', 'non_resident_special_rate'], fn ($c) => Schema::hasColumn('statutory_rate_sets', $c)));
+        if ($columns) {
+            Schema::table('statutory_rate_sets', fn (Blueprint $table) => $table->dropColumn($columns));
+        }
     }
 };

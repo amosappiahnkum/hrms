@@ -141,9 +141,19 @@ class Controller extends BaseController
                 ->orWhereIn('department_id', $me ? $this->getManagedDepartmentIds() : []));
     }
 
-    protected function approvesLeave(\App\Models\LeaveRequest $leaveRequest): bool
+    /**
+     * Whether the signed-in head acts on this leave request. `$toDecide`: approving or rejecting it, which on a
+     * request with a chain of heads is only for the head whose turn it is.
+     */
+    protected function approvesLeave(?\App\Models\LeaveRequest $leaveRequest, bool $toDecide = false): bool
     {
         $me = Auth::user()?->employee?->id;
+        if (!$leaveRequest) {
+            return false;
+        }
+        if ($toDecide && $leaveRequest->approval_chain) {
+            return $me !== null && (int) $leaveRequest->employee_id !== (int) $me && (int) $leaveRequest->supervisor_id === (int) $me;
+        }
 
         return $me !== null
             && (int) $leaveRequest->employee_id !== (int) $me

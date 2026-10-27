@@ -8,12 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ApprovalWorkflowStep extends AppModel
 {
-    protected $fillable = ['approval_workflow_id', 'position', 'name', 'approver_type', 'approver_value', 'can_adjust'];
+    protected $fillable = ['approval_workflow_id', 'position', 'name', 'approver_type', 'approver_value', 'can_adjust', 'questions'];
 
     protected $casts = [
         'approver_type'  => ApproverType::class,
         'approver_value' => 'array',
         'can_adjust'     => 'array',
+        'questions'      => 'array',
     ];
 
     public function workflow(): BelongsTo

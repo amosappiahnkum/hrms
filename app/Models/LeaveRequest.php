@@ -23,6 +23,9 @@ class LeaveRequest extends AppModel
         'reliever_id',
         'department_id',
         'supervisor_id',
+        // The heads who approve, in order (employee ids), and whose turn it is (an index); supervisor_id is theirs.
+        'approval_chain',
+        'approval_step',
         'leave_type_id',
         'days_requested',
         'days_approved',
@@ -44,7 +47,18 @@ class LeaveRequest extends AppModel
 
     protected $casts = [
         'status' => Statuses::class,
+        'approval_chain' => 'array',
+        'approval_step' => 'integer',
     ];
+
+    /** The head after the current one, if the chain goes on. */
+    public function nextApproverId(): ?int
+    {
+        $chain = $this->approval_chain ?? [];
+        $next = ($this->approval_step ?? 0) + 1;
+
+        return isset($chain[$next]) ? (int) $chain[$next] : null;
+    }
 
     /**
      * @return BelongsTo
@@ -109,7 +123,8 @@ class LeaveRequest extends AppModel
     public function scopeForDepartment($query, ?int $departmentId)
     {
         return $query->when($departmentId, function ($q) use ($departmentId) {
-            $q->whereRelation('employee', 'department_id', $departmentId);
+            // The department and its sub-departments.
+            $q->whereHas('employee', fn ($e) => $e->whereIn('department_id', \App\Models\Config\Department::subtreeIds($departmentId)));
         });
     }
 

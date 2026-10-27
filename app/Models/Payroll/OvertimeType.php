@@ -11,7 +11,7 @@ class OvertimeType extends AppModel
 {
     use SoftDeletes;
 
-    public const APPLIES_ON = ['weekday' => 'Weekdays', 'weekend' => 'Weekends', 'holiday' => 'Public holidays', 'any' => 'Any day'];
+    public const APPLIES_ON = ['weekday' => 'Weekdays', 'weekend' => 'Weekends', 'holiday' => 'Public holidays', 'any' => 'Any day, on top of the day\'s overtime (e.g. offshore)'];
 
     protected $fillable = ['name', 'pay_component_id', 'applies_on', 'active', 'sort_order'];
 

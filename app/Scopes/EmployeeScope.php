@@ -14,7 +14,8 @@ trait EmployeeScope
     public function scopeDepartment(Builder $query, ?string $department): Builder
     {
         return $department && $department !== 'all'
-            ? $query->where('department_id', $department)
+            // The department and its sub-departments.
+            ? $query->whereIn('department_id', \App\Models\Config\Department::subtreeIds((int) $department))
             : $query;
     }
 

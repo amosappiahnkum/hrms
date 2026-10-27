@@ -64,7 +64,7 @@ class EmployeeController extends Controller
         // Everything the list shows at a glance, loaded up front (no query per row).
         $query->with([
             'department', 'rank', 'gtecPlacement', 'contactDetail', 'userAccount', 'informationUpdate',
-            'jobDetail.position', 'jobDetail.jobCategory', 'employeeSupervisor.supervisor', 'currentLeave.leaveType',
+            'jobDetail.position', 'jobDetail.jobCategory', 'reportsTo', 'currentLeave.leaveType',
         ]);
 
         if ($request->boolean('export')) {
@@ -109,23 +109,26 @@ class EmployeeController extends Controller
 
         if ($request->filled('department') && $request->department !== 'all') {
             $department = Department::where('uuid', $request->department)->firstOrFail();
-            $employeesQuery->where('department_id', $department->id);
+            $employeesQuery->whereIn('department_id', Department::subtreeIds($department->id));
         }
 
 
         return \App\Http\Resources\StaffDirectory\EmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
     }
 
-    public function getMyTeam(Request $request): AnonymousResourceCollection
+    /**
+     * The signed-in employee's colleagues: the others in their department (not themselves). Not who they report to
+     * (that's the reporting line).
+     */
+    public function getMyColleagues(Request $request): AnonymousResourceCollection
     {
         $employee = Auth::user()?->employee;
 
-        $employeesQuery = Employee::query();
+        $colleagues = Employee::query()
+            ->where('department_id', $employee?->department_id ?? 0)
+            ->whereKeyNot($employee?->id ?? 0);
 
-        $employeesQuery->where('department_id', $employee->department_id);
-
-
-        return \App\Http\Resources\StaffDirectory\EmployeeResource::collection($employeesQuery->paginate($request->per_page ?? 10));
+        return \App\Http\Resources\StaffDirectory\EmployeeResource::collection($colleagues->paginate($request->per_page ?? 10));
     }
 
     /**
@@ -642,7 +645,13 @@ class EmployeeController extends Controller
      */
     public function getBiography(Employee $employee)
     {
-        return ApiResponse::success($employee->bio, 'Biography');
+        $pending = $employee->informationUpdate?->new_info ?? [];
+
+        return ApiResponse::success([
+            'bio' => $employee->bio,
+            // A professional summary awaiting approval, if any.
+            'pending_bio' => $pending['bio'] ?? null,
+        ], 'Biography');
     }
 
     public function updateBiography(Request $request, Employee $employee)
@@ -651,9 +660,19 @@ class EmployeeController extends Controller
             'biography' => 'required|string|max:1500'
         ]);
 
-        $employee->update(['bio' => $validated['biography']]);
+        try {
+            if ($this->can('edit-employee')) {
+                $employee->update(['bio' => $validated['biography']]);
 
-        return ApiResponse::success($employee->bio, 'Specializations updated successfully');
+                return ApiResponse::success(null, 'Professional summary updated successfully');
+            }
+
+            app(UpdateApprovalService::class)->update($employee, ['bio' => $validated['biography']], Auth::id());
+
+            return ApiResponse::success(null, 'Professional summary submitted for approval');
+        } catch (Exception $exception) {
+            return ApiResponse::fromException($exception);
+        }
     }
 
     public function profileCompletion(Employee $employee): JsonResponse

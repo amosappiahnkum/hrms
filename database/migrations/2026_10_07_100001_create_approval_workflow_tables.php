@@ -39,6 +39,8 @@ return new class extends Migration
             $table->json('approver_value')->nullable();
             // Fields this step may change on the request, e.g. ["approved_hours"].
             $table->json('can_adjust')->nullable();
+            // Questions this step's approver answers, from the process's list, e.g. ["can_postpone"].
+            $table->json('questions')->nullable();
             $table->timestamps();
         });
 
@@ -75,6 +77,8 @@ return new class extends Migration
             $table->text('comment')->nullable();
             // Values the approver changed, e.g. {"approved_hours": {"from": 6, "to": 4}}.
             $table->json('adjustments')->nullable();
+            // The approver's answers to the step's questions, e.g. {"can_postpone": false}.
+            $table->json('answers')->nullable();
             $table->timestamps();
         });
     }

@@ -31,8 +31,8 @@ class StatutoryRatesTest extends TestCase
         $set = StatutoryRateSet::first();
 
         return $overrides + [
-            'name'           => 'Ghana 2026',
-            'effective_from' => '2026-01-01',
+            'name'           => 'Ghana 2027',
+            'effective_from' => '2027-01-01',
             'ssnit'          => $set->ssnit,
             'paye_bands'     => $set->paye_bands,
             'reliefs'        => $set->reliefs,
@@ -62,18 +62,18 @@ class StatutoryRatesTest extends TestCase
             ->assertUnprocessable()->assertJsonValidationErrors('paye_bands.1.limit');
         $this->postJson('/api/v1/payroll/statutory-rates', $this->rates(['ssnit' => ['employee_rate' => 5.5, 'employer_rate' => 13, 'tier1_rate' => 13.5, 'tier2_rate' => 4, 'max_insurable_earnings' => 61000]]))
             ->assertUnprocessable()->assertJsonValidationErrors('ssnit.tier2_rate');
-        $this->postJson('/api/v1/payroll/statutory-rates', $this->rates(['effective_from' => '2024-01-01']))
+        $this->postJson('/api/v1/payroll/statutory-rates', $this->rates(['effective_from' => '2026-01-01']))
             ->assertUnprocessable()->assertJsonValidationErrors('effective_from');
 
         $uuid = $this->postJson('/api/v1/payroll/statutory-rates', $this->rates())->assertCreated()->json('data.uuid');
-        $this->travelTo('2026-03-15');
+        $this->travelTo('2027-03-15');
         $this->getJson('/api/v1/payroll/statutory-rates')->assertJsonPath('data.current_uuid', $uuid)->assertJsonPath('data.sets.0.uuid', $uuid);
-        $this->assertSame('Ghana (starting set: verify before use)', StatutoryRateSet::inForceOn('2025-06-30')->name);
+        $this->assertSame('Ghana (starting set: verify before use)', StatutoryRateSet::inForceOn('2026-06-30')->name);
 
         $this->postJson("/api/v1/payroll/statutory-rates/{$uuid}/confirm")->assertOk()->assertJsonPath('data.confirmed_by', fn ($n) => $n !== null);
         $this->deleteJson("/api/v1/payroll/statutory-rates/{$uuid}")->assertStatus(422);
 
-        $this->putJson("/api/v1/payroll/statutory-rates/{$uuid}", $this->rates(['name' => 'Ghana 2026 (revised)']))->assertOk()->assertJsonPath('data.confirmed_at', null);
+        $this->putJson("/api/v1/payroll/statutory-rates/{$uuid}", $this->rates(['name' => 'Ghana 2027 (revised)']))->assertOk()->assertJsonPath('data.confirmed_at', null);
         $this->deleteJson("/api/v1/payroll/statutory-rates/{$uuid}")->assertOk();
     }
 

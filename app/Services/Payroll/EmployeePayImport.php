@@ -2,6 +2,7 @@
 
 namespace App\Services\Payroll;
 
+use App\Models\Payroll\Bank;
 use App\Models\Payroll\EmployeePayProfile;
 use App\Models\SelfService\Employee;
 use App\Models\User;
@@ -131,7 +132,7 @@ class EmployeePayImport
     /**
      * Import rows (after the headings). All or nothing.
      *
-     * @return array{created: int, corrected: int, changed: int, unchanged: int, errors: array<int, string>}
+     * @return array{created: int, corrected: int, changed: int, unchanged: int, errors: array<int, string>, new_banks: array<string>}
      */
     public function import(array $rows, User $user, bool $apply = true): array
     {
@@ -172,13 +173,18 @@ class EmployeePayImport
             }
         }
 
+        $plans = $this->oneSpellingForNewBanks($plans);
+        $this->checkSharedAccounts($rows, $employees, $plans, $errors);
+
         $counts = ['created' => 0, 'corrected' => 0, 'changed' => 0];
         foreach ($plans as $plan) {
             $counts[$plan['action']]++;
         }
         $preview = $errors ? [] : $this->preview($plans);
+        // Banks the import adds (by name, case and spaces aside).
+        $newBanks = collect($plans)->pluck('new_bank')->filter()->unique(fn ($n) => Bank::key($n))->values()->all();
         if (!$apply || $errors) {
-            return $counts + ['unchanged' => count($seen) - count($plans), 'errors' => $errors, 'changes' => $preview];
+            return $counts + ['unchanged' => count($seen) - count($plans), 'errors' => $errors, 'changes' => $preview, 'new_banks' => $newBanks];
         }
 
         $counts = ['created' => 0, 'corrected' => 0, 'changed' => 0];
@@ -191,7 +197,7 @@ class EmployeePayImport
             });
         }
 
-        return $counts + ['unchanged' => count($seen) - count($plans), 'errors' => $errors, 'changes' => $preview];
+        return $counts + ['unchanged' => count($seen) - count($plans), 'errors' => $errors, 'changes' => $preview, 'new_banks' => $newBanks];
     }
 
     /**
@@ -228,6 +234,10 @@ class EmployeePayImport
                 default                                 => filled($v) ? (string) $v : '—',
             };
             foreach ($data as $field => $value) {
+                // The bank and branch show as their names (bank_name, bank_branch); their ids aren't columns.
+                if (in_array($field, ['bank_id', 'bank_branch_id'], true)) {
+                    continue;
+                }
                 $old = $c?->{$field};
                 if ($action !== 'created' && $this->equal($old, $value)) {
                     continue;
@@ -270,6 +280,12 @@ class EmployeePayImport
             } elseif ($c && (!$this->equal($c->account_number, $data['account_number']) || !$this->equal($c->mobile_money_number, $data['mobile_money_number']))) {
                 $warnings[] = 'Paid into a different account (' . $mask($data['account_number'] ?? $data['mobile_money_number']) . ').';
             }
+            if ($plan['new_bank'] ?? null) {
+                $warnings[] = "Adds the bank \"{$plan['new_bank']}\" to the banks list (if it's another name for a listed bank, merge it in Payroll → Settings → Banks).";
+            }
+            if ($plan['new_branch'] ?? null) {
+                $warnings[] = "Adds the branch \"{$plan['new_branch']}\" to " . ($data['bank_name'] ?? 'the bank') . "'s branches.";
+            }
             if ($c && !$this->equal($c->currency ?: $base, $data['currency'] ?: $base)) {
                 $warnings[] = 'Currency changes from ' . ($c->currency ?: $base) . ' to ' . ($data['currency'] ?: $base) . '.';
             }
@@ -289,6 +305,55 @@ class EmployeePayImport
                 'warnings' => $warnings,
             ];
         })->values()->all();
+    }
+
+    /**
+     * Nobody paid into the same account as someone else: two rows of the file (as they'd be after the import), or a
+     * changed row and someone not in the file. Only rows that change are refused: two unchanged rows already sharing
+     * an account don't stop an import.
+     */
+    private function checkSharedAccounts(\Illuminate\Support\Collection $rows, \Illuminate\Support\Collection $employees, array $plans, array &$errors): void
+    {
+        $planned = collect($plans)->keyBy(fn ($p) => $p['employee']->id);
+        $inFile = [];
+        foreach ($rows as $i => $row) {
+            $employee = $row['uuid'] ? $employees->get((string) $row['uuid']) : null;
+            if ($employee && !isset($errors[$i + 2])) {
+                $inFile[$employee->id] = [$i + 2, $employee];
+            }
+        }
+        $byKey = [];
+        foreach ($inFile as $employeeId => [$line, $employee]) {
+            $plan = $planned->get($employeeId);
+            $current = $employee->payProfiles->filter(fn ($p) => $p->effective_from->lte(now()))->last() ?? $employee->payProfiles->last();
+            $data = $plan['data'] ?? $current?->only(['payment_method', 'bank_id', 'account_number', 'mobile_money_number']) ?? [];
+            $newBank = $plan['new_bank'] ?? null;
+            if (!($key = EmployeePayProfile::paymentKey($newBank ? ['bank_id' => 'new:' . Bank::key($newBank)] + $data : $data))) {
+                continue;
+            }
+            $who = $employee->staff_id ?: $this->name($employee);
+            $label = $this->name($employee) . ($employee->staff_id ? ", {$employee->staff_id}" : '');
+            if (isset($byKey[$key])) {
+                [$otherLine, $otherWho, $otherLabel, $otherChanged] = $byKey[$key];
+                // Both already saved like this (before duplicates were refused): not this import's doing; the pay
+                // run warns about it and `payroll:account-fingerprints` lists it.
+                if (!$plan && !$otherChanged) {
+                    continue;
+                }
+                // The problem is on the row that changed (the other one keeps the account it has).
+                [$at, $whoAt, $against, $againstLine] = !$plan && $otherChanged
+                    ? [$otherLine, $otherWho, $label, $line]
+                    : [$line, $who, $otherLabel, $otherLine];
+                $errors[$at] = "{$whoAt}: " . EmployeePayProfile::sharedMessage($data['payment_method'], "{$against} (row {$againstLine})");
+                continue;
+            }
+            $byKey[$key] = [$line, $who, $label, (bool) $plan];
+            // A bank the import adds has nobody on it yet.
+            if ($plan && !$newBank && ($problem = EmployeePayProfile::sharedProblem($data, array_keys($inFile)))) {
+                $errors[$line] = "{$who}: {$problem}";
+            }
+        }
+        ksort($errors);
     }
 
     /** What a row would do, a problem in words, or null when it changes nothing. */
@@ -328,8 +393,8 @@ class EmployeePayImport
             // Old codes are read as current ones (GHC is GHS).
             'currency'              => filled($cells['currency']) ? \App\Support\Currencies::normalize((string) $cells['currency']) : \App\Support\Currencies::normalize($current?->currency),
             'payment_method'        => $method,
-            'bank_name'             => $pick('bank_name'),
-            'bank_branch'           => $pick('bank_branch'),
+            'bank_id'               => filled($cells['bank_name']) ? Bank::findByName((string) $cells['bank_name'])?->id : $current?->bank_id,
+            'bank_branch_id'        => $current?->bank_branch_id,
             'account_name'          => $pick('account_name'),
             'account_number'        => filled($cells['account_number']) ? (string) $cells['account_number'] : $current?->account_number,
             'mobile_money_provider' => $pick('mobile_money_provider'),
@@ -340,6 +405,23 @@ class EmployeePayImport
         ];
         $ssnit = filled($cells['ssnit_number']) ? (string) $cells['ssnit_number'] : $employee->ssnit_number;
 
+        // The bank is matched against the banks list by name or code; one that isn't on it is added when the import is
+        // saved (once, however many rows name it), for HR to merge later if it's a copy of one listed.
+        $newBank = filled($cells['bank_name']) && !$data['bank_id'] ? $this->tidy((string) $cells['bank_name']) : null;
+        if ($method === 'bank' && !$data['bank_id'] && !$newBank) {
+            return 'Choose the bank.';
+        }
+        $data['bank_name'] = $newBank ?? ($data['bank_id'] ? Bank::find($data['bank_id'])?->name : null);
+        // The branch: one of the bank's, by name or sort code; added like a bank when it isn't on the bank's list.
+        $newBranch = null;
+        if (filled($cells['bank_branch'])) {
+            $branch = $data['bank_id'] ? \App\Models\Payroll\BankBranch::findFor($data['bank_id'], (string) $cells['bank_branch']) : null;
+            $data['bank_branch_id'] = $branch?->id;
+            $newBranch = $branch ? null : $this->tidy((string) $cells['bank_branch']);
+        } elseif ($data['bank_branch_id'] && $data['bank_id'] !== $current?->bank_id) {
+            $data['bank_branch_id'] = null; // a new bank: the old bank's branch doesn't apply
+        }
+        $data['bank_branch'] = $newBranch ?? ($data['bank_branch_id'] ? \App\Models\Payroll\BankBranch::find($data['bank_branch_id'])?->name : null);
         $v = Validator::make($data + ['ssnit_number' => $ssnit], collect(EmployeePayProfile::rules())->only(array_keys($data + ['ssnit_number' => 1]))->all());
         if ($v->fails()) {
             return implode(' ', $v->errors()->all());
@@ -353,12 +435,64 @@ class EmployeePayImport
         $same = $current && $action === 'corrected' && $ssnit === $employee->ssnit_number
             && collect($data)->every(fn ($value, $field) => $this->equal($current->{$field}, $value));
 
-        return $same ? null : compact('employee', 'current', 'action', 'from', 'data', 'ssnit');
+        $new = $data['payment_method'] === 'bank' ? ['new_bank' => $newBank, 'new_branch' => $newBranch] : ['new_bank' => null, 'new_branch' => null];
+
+        return $same ? null : compact('employee', 'current', 'action', 'from', 'data', 'ssnit') + $new;
+    }
+
+    /**
+     * Rows naming the same new bank (or new branch of a bank) differently ("fidelity bank", "Fidelity Bank") use one
+     * name for it: capitalised as a name before all lower or upper case, else the first row's.
+     */
+    private function oneSpellingForNewBanks(array $plans): array
+    {
+        $best = fn (\Illuminate\Support\Collection $names) => $names->sortBy(fn ($n) => in_array($n, [mb_strtolower($n), mb_strtoupper($n)], true) ? 1 : 0)->first();
+        $banks = collect($plans)->pluck('new_bank')->filter()->groupBy(fn ($n) => Bank::key($n))->map($best);
+        $bankKey = fn (array $p) => $p['new_bank'] ? 'new:' . Bank::key($p['new_bank']) : (string) $p['data']['bank_id'];
+        $branches = collect($plans)->filter(fn ($p) => $p['new_branch'] ?? null)->groupBy(fn ($p) => $bankKey($p) . '|' . Bank::key($p['new_branch']))
+            ->map(fn ($group) => $best($group->pluck('new_branch')));
+
+        return array_map(function (array $p) use ($banks, $branches, $bankKey) {
+            if ($p['new_branch'] ?? null) {
+                $p['new_branch'] = $p['data']['bank_branch'] = $branches[$bankKey($p) . '|' . Bank::key($p['new_branch'])];
+            }
+            if ($p['new_bank'] ?? null) {
+                $p['new_bank'] = $p['data']['bank_name'] = $banks[Bank::key($p['new_bank'])];
+            }
+
+            return $p;
+        }, $plans);
+    }
+
+    /** A bank or branch name as typed, spaces tidied. */
+    private function tidy(string $name): string
+    {
+        return mb_substr(trim(preg_replace('/\s+/', ' ', $name)), 0, 255);
+    }
+
+    /** A bank (or branch) the import adds: found if an earlier row (or HR meanwhile) added it, else created. */
+    private function resolveNewBank(array $plan): array
+    {
+        $data = $plan['data'];
+        if ($plan['new_bank'] ?? null) {
+            $bank = Bank::findByName($plan['new_bank']) ?? Bank::create(['name' => $plan['new_bank'], 'active' => true]);
+            $data['bank_id'] = $bank->id;
+            $data['bank_name'] = $bank->name;
+        }
+        if ($plan['new_branch'] ?? null) {
+            $branch = \App\Models\Payroll\BankBranch::findFor($data['bank_id'], $plan['new_branch'])
+                ?? \App\Models\Payroll\BankBranch::create(['bank_id' => $data['bank_id'], 'name' => $plan['new_branch'], 'active' => true]);
+            $data['bank_branch_id'] = $branch->id;
+            $data['bank_branch'] = $branch->name;
+        }
+
+        return $data;
     }
 
     private function apply(array $plan, User $user): void
     {
-        ['employee' => $employee, 'current' => $current, 'action' => $action, 'from' => $from, 'data' => $data, 'ssnit' => $ssnit] = $plan;
+        ['employee' => $employee, 'current' => $current, 'action' => $action, 'from' => $from, 'ssnit' => $ssnit] = $plan;
+        $data = $this->resolveNewBank($plan);
         if ($ssnit !== $employee->ssnit_number) {
             $employee->update(['ssnit_number' => $ssnit]);
         }

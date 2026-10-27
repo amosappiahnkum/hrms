@@ -25,11 +25,11 @@ class PayrollAuditTest extends TestCase
 
         $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", [
             'mode' => 'correct', 'effective_from' => '2026-01-01', 'basic_salary' => 5000, 'payment_method' => 'bank',
-            'bank_name' => 'GCB', 'account_name' => 'X', 'account_number' => '1234567890',
+            'bank_uuid' => $this->bank('GCB')->uuid, 'account_name' => 'X', 'account_number' => '1234567890',
         ])->assertOk();
         $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", [
             'mode' => 'correct', 'effective_from' => '2026-01-01', 'basic_salary' => 5500, 'payment_method' => 'bank',
-            'bank_name' => 'GCB', 'account_name' => 'X', 'account_number' => '1234567890',
+            'bank_uuid' => $this->bank('GCB')->uuid, 'account_name' => 'X', 'account_number' => '1234567890',
         ])->assertOk();
         $this->putJson('/api/v1/payroll/settings', ['working_days_per_month' => 21])->assertOk();
 
@@ -44,5 +44,11 @@ class PayrollAuditTest extends TestCase
 
         $this->getJson('/api/v1/payroll/audit?subject=Setting')->assertOk()->assertJsonPath('data.data.0.what', 'Payroll setting');
         $this->get('/api/v1/payroll/audit/export')->assertOk();
+    }
+
+    /** A bank on the banks list (made the first time). */
+    private function bank(string $name): \App\Models\Payroll\Bank
+    {
+        return \App\Models\Payroll\Bank::firstOrCreate(['name' => $name], ['active' => true]);
     }
 }

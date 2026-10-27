@@ -25,7 +25,8 @@ class PayrollCalculatorTest extends TestCase
             'reliefs'    => [['code' => 'marriage', 'name' => 'Marriage', 'annual_amount' => 1200, 'max_units' => null, 'percent_of_income' => null]],
             'tier3_relief_limit_percent' => 16.5,
             'non_resident_rate' => 25,
-            'overtime_tax' => ['annual_basic_threshold' => 18000, 'percent_of_basic' => 50, 'lower_rate' => 5, 'higher_rate' => 10],
+            'non_resident_special_rate' => 20,
+            'overtime_tax' => ['annual_income_threshold' => 18000, 'percent_of_basic' => 50, 'lower_rate' => 5, 'higher_rate' => 10],
             'bonus_tax'    => ['rate' => 5, 'percent_of_annual_basic' => 15],
         ]);
     }
@@ -86,12 +87,12 @@ class PayrollCalculatorTest extends TestCase
         $this->assertSame(round(61000 * 0.055, 2), $r['ssnit_employee']);
     }
 
-    public function test_pay_in_another_currency_is_converted_at_the_years_rate(): void
+    public function test_pay_in_another_currency_is_converted_at_the_runs_rate(): void
     {
-        $r = $this->calculator(rates: ['USD' => 15])->calculate($this->profile(['basic_salary' => 1000, 'currency' => 'USD']), collect(), [], null, null, true);
+        $r = $this->calculator(rates: ['USD' => ['standard' => ['rate' => 15, 'date' => '2026-06-01'], 'basic' => null]])->calculate($this->profile(['basic_salary' => 1000, 'currency' => 'USD']), collect(), [], null, null, true);
 
         $this->assertSame(15000.0, $r['basic_salary']);
-        $this->assertSame(['USD', 1000.0, 15], [$r['lines'][0]['original_currency'], $r['lines'][0]['original_amount'], $r['lines'][0]['exchange_rate']]);
+        $this->assertSame(['USD', 1000.0, 15.0], [$r['lines'][0]['original_currency'], $r['lines'][0]['original_amount'], $r['lines'][0]['exchange_rate']]);
 
         $this->expectException(UserFacingException::class);
         $this->expectExceptionMessage('no USD exchange rate');
@@ -127,9 +128,45 @@ class PayrollCalculatorTest extends TestCase
         // Taxable 1,085.23 − 55 = 1,030.23 → PAYE 71.04
         $this->assertSame(71.04, $asIncome['paye']);
 
-        // Junior staff (annual basic 12,000 ≤ 18,000): overtime apart at 5% (under 50% of basic) → 56.13 + 4.26
+        // Junior staff (taxable income 12,000 a year ≤ 18,000): overtime apart at 5% (under 50% of basic) → 56.13 + 4.26
         $junior = $this->calculator(['overtime_tax_method' => 'gra_junior'])->calculate($profile, collect(), $inputs, null, null, true);
         $this->assertSame(60.39, $junior['paye']);
+    }
+
+    public function test_junior_staff_are_judged_by_taxable_employment_income_not_basic(): void
+    {
+        $ot = new PayComponent(['code' => 'OT_WD', 'name' => 'Weekday overtime', 'kind' => 'earning', 'calculation' => 'hourly_multiplier', 'rate' => 1.5, 'taxable' => true]);
+        $allowance = $this->input(['code' => 'TRANSPORT', 'name' => 'Transport'], 600);
+        $inputs = [['component' => $ot, 'quantity' => 10, 'amount' => null, 'source' => 'overtime'], $allowance];
+        $profile = $this->profile(['basic_salary' => 1000]);
+
+        // Basic 12,000 a year, but with a taxable allowance the year's income is 19,200 > 18,000: overtime as income.
+        $junior = $this->calculator(['overtime_tax_method' => 'gra_junior'])->calculate($profile, collect(), $inputs, null, null, true);
+        $asIncome = $this->calculator()->calculate($profile, collect(), $inputs, null, null, true);
+        $this->assertSame($asIncome['paye'], $junior['paye']);
+
+        // A non-taxable allowance doesn't count towards it: the junior rates apply.
+        $untaxed = $this->input(['code' => 'TRANSPORT', 'name' => 'Transport', 'taxable' => false], 600);
+        $withUntaxed = [$inputs[0], $untaxed];
+        $this->assertLessThan(
+            $this->calculator()->calculate($profile, collect(), $withUntaxed, null, null, true)['paye'],
+            $this->calculator(['overtime_tax_method' => 'gra_junior'])->calculate($profile, collect(), $withUntaxed, null, null, true)['paye'],
+        );
+    }
+
+    public function test_non_residents_overtime_and_bonus_are_taxed_at_their_own_flat_rate(): void
+    {
+        $ot = new PayComponent(['code' => 'OT_WD', 'name' => 'Weekday overtime', 'kind' => 'earning', 'calculation' => 'hourly_multiplier', 'rate' => 1.5, 'taxable' => true]);
+        $bonus = $this->input(['code' => 'BONUS', 'name' => 'Bonus', 'is_bonus' => true], 1000);
+        $inputs = [['component' => $ot, 'quantity' => 10, 'amount' => null, 'source' => 'overtime'], $bonus];
+        $profile = $this->profile(['tax_resident' => false]);
+
+        // Even with the junior rates on, a non-resident's overtime and bonus are 20%; the rest 25%.
+        $r = $this->calculator(['overtime_tax_method' => 'gra_junior'])->calculate($profile, collect(), $inputs, null, null, true);
+        $overtime = collect($r['lines'])->firstWhere('code', 'OT_WD')['amount'];
+        $this->assertSame(round((5000 - 275) * 0.25 + ($overtime + 1000) * 0.20, 2), $r['paye']);
+        $this->assertSame(0.0, $r['bonus_tax']); // no resident bonus concession
+        $this->assertSame(4725.0, $r['taxable_income']);
     }
 
     public function test_missing_ssnit_numbers_and_negative_net_pay_are_flagged(): void

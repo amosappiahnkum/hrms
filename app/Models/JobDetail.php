@@ -24,6 +24,7 @@ class JobDetail extends ApplicationModel
         'contract_start_date',
         'contract_end_date',
         'employee_id',
+        'cost_centre_id',
         'room',
         'user_id',
         'job_category_id',
@@ -43,7 +44,8 @@ class JobDetail extends ApplicationModel
             'room' => ['show_in_diff' => true],
             'user_id' => ['show_in_diff' => false],
             'job_category_id' => ['show_in_diff' => true],
-            'sub_unit_id' => ['show_in_diff' => true],
+            // Sub-units are sub-departments now (2026-10-16): no longer shown or changed.
+            'sub_unit_id' => ['show_in_diff' => false],
         ];
     }
 
@@ -75,6 +77,12 @@ class JobDetail extends ApplicationModel
     public function photo(): MorphOne
     {
         return $this->morphOne(Photo::class, 'photoable');
+    }
+
+    /** Set by payroll, not by the employee (it isn't one of the approvable fields). */
+    public function costCentre(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Payroll\CostCentre::class)->withTrashed();
     }
 
     public function subUnit(): BelongsTo

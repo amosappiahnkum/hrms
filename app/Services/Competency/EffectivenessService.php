@@ -59,7 +59,8 @@ class EffectivenessService
 
         $employee = $action->employee;
 
-        return $employee?->employeeSupervisor?->supervisor?->userAccount ?? $employee?->hodUser();
+        // Their supervisor ("Reports to", else the head of their unit), else their department's head.
+        return ($employee ? app(\App\Services\Org\ReportingLine::class)->supervisorOf($employee)?->userAccount : null) ?? $employee?->hodUser();
     }
 
     /**

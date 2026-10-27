@@ -40,7 +40,7 @@ class EmployeePayTest extends TestCase
     {
         return $overrides + [
             'mode' => 'correct', 'basic_salary' => 4500, 'payment_method' => 'bank',
-            'bank_name' => 'GCB Bank', 'bank_branch' => 'Takoradi', 'account_name' => 'Ama Mensah', 'account_number' => '1011223344556',
+            'bank_uuid' => $this->bank('GCB Bank')->uuid, 'bank_branch' => 'Takoradi', 'account_name' => 'Ama Mensah', 'account_number' => '1011223344556',
         ];
     }
 
@@ -84,11 +84,11 @@ class EmployeePayTest extends TestCase
         Sanctum::actingAs($this->hr);
         $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", $this->details(['effective_from' => '2026-01-01']))->assertOk();
 
-        $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", ['mode' => 'change', 'effective_from' => '2025-12-01', 'basic_salary' => 5000, 'payment_method' => 'bank', 'bank_name' => 'GCB Bank', 'account_number' => '1'])
+        $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", ['mode' => 'change', 'effective_from' => '2025-12-01', 'basic_salary' => 5000, 'payment_method' => 'bank', 'bank_uuid' => $this->bank('GCB Bank')->uuid, 'account_number' => '1'])
             ->assertUnprocessable()->assertJsonValidationErrors('effective_from');
 
         $this->travelTo('2026-05-10');
-        $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", ['mode' => 'change', 'effective_from' => '2026-07-01', 'basic_salary' => 5200, 'payment_method' => 'bank', 'bank_name' => 'GCB Bank', 'account_number' => '1011223344556'])
+        $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", ['mode' => 'change', 'effective_from' => '2026-07-01', 'basic_salary' => 5200, 'payment_method' => 'bank', 'bank_uuid' => $this->bank('GCB Bank')->uuid, 'account_number' => '1011223344556'])
             ->assertOk()
             ->assertJsonPath('data.profile.basic_salary', 4500)
             ->assertJsonPath('data.history.0.effective_from', '2026-07-01')
@@ -98,6 +98,39 @@ class EmployeePayTest extends TestCase
         $this->travelTo('2026-07-15');
         $this->getJson("/api/v1/payroll/employees/{$employee->uuid}")->assertJsonPath('data.profile.basic_salary', 5200);
         $this->assertEquals(4500, EmployeePayProfile::inForceOn('2026-06-30')->value('basic_salary'));
+    }
+
+    public function test_an_account_already_used_for_someone_else_is_refused(): void
+    {
+        $this->turnOn();
+        Sanctum::actingAs($this->hr);
+        $ama = $this->staff->employee;
+        $kofi = $this->userWithRole('staff')->employee;
+        $kofi->update(['staff_id' => 'K01']);
+        $save = fn ($employee, array $details) => $this->putJson("/api/v1/payroll/employees/{$employee->uuid}/profile", $this->details($details));
+
+        $save($kofi, [])->assertOk();
+        // The same account at the same bank, however it's typed: refused, naming who has it.
+        $save($ama, ['account_number' => '1011-2233 44556'])->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_number' => 'already used for']);
+        $this->assertStringContainsString('(K01)', $save($ama, [])->json('errors.account_number.0'));
+        // The same number at another bank is another account.
+        $save($ama, ['bank_uuid' => $this->bank('Ecobank')->uuid])->assertOk();
+        // Saving your own details again (or a raise) is fine.
+        $save($kofi, ['basic_salary' => 4600])->assertOk();
+
+        // Mobile money: +233 and 0 are the same number.
+        $save($kofi, ['payment_method' => 'mobile_money', 'mobile_money_provider' => 'MTN', 'mobile_money_number' => '0244123456'])->assertOk();
+        $save($ama, ['payment_method' => 'mobile_money', 'mobile_money_provider' => 'MTN', 'mobile_money_number' => '+233 244 123 456'])
+            ->assertJsonValidationErrors('mobile_money_number');
+
+        // Once Kofi's details move to another account, his old one is free.
+        $save($kofi, ['payment_method' => 'cash'])->assertOk();
+        $save($ama, ['payment_method' => 'mobile_money', 'mobile_money_provider' => 'MTN', 'mobile_money_number' => '0244123456'])->assertOk();
+
+        // The fingerprints are one-way and never sent out.
+        $this->assertNotNull(EmployeePayProfile::where('employee_id', $ama->id)->value('mobile_money_fingerprint'));
+        $this->assertStringNotContainsString('fingerprint', $this->getJson("/api/v1/payroll/employees/{$ama->uuid}")->getContent());
     }
 
     public function test_reliefs_must_exist_in_the_statutory_rates_within_their_limits(): void
@@ -144,5 +177,11 @@ class EmployeePayTest extends TestCase
         Sanctum::actingAs($viewer);
         $this->getJson("/api/v1/payroll/employees/{$employee->uuid}")->assertOk();
         $this->postJson("/api/v1/payroll/employees/{$employee->uuid}/components", ['pay_component_uuid' => $transport->uuid, 'effective_from' => '2026-01-01'])->assertForbidden();
+    }
+
+    /** A bank on the banks list (made the first time). */
+    private function bank(string $name): \App\Models\Payroll\Bank
+    {
+        return \App\Models\Payroll\Bank::firstOrCreate(['name' => $name], ['active' => true]);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -23,11 +24,11 @@ class EmployeeExport implements FromCollection, WithMapping, WithHeadings, Shoul
     }
 
     /**
-     * @return AnonymousResourceCollection
+     * @return Collection
      */
-    public function collection(): AnonymousResourceCollection
+    public function collection(): Collection
     {
-        return $this->data;
+        return $this->data->collection;
     }
 
     /**

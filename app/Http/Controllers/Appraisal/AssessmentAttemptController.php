@@ -323,12 +323,9 @@ class AssessmentAttemptController extends Controller
                 'employee_comment' => ['nullable', 'string', 'max:2000'],
             ]);
 
-            $employee   = $attempt->user->employee;
-            $department = $employee?->department;
-            $isHod      = $department && (int) $department->hod === (int) $employee?->id;
-
-            // HOD with no parent department → auto-confirm, skip supervisor step
-            if ($isHod && !$department->parent_department_id) {
+            $employee = $attempt->user->employee;
+            // Nobody above them (the top of the organization): straight to HR, no appraiser step.
+            if ($employee && !app(\App\Services\Appraisal\AppraisalEndorsement::class)->appraiserOf($employee)) {
                 DB::transaction(function () use ($attempt, $request) {
                     $attempt->update([
                         'status'           => AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
@@ -337,7 +334,7 @@ class AssessmentAttemptController extends Controller
                     ]);
 
                     $this->recordEvent($attempt, 'submitted', $request->employee_comment);
-                    $this->recordEvent($attempt, 'supervisor_confirmed', 'Auto-confirmed (top-level HOD)');
+                    $this->recordEvent($attempt, 'supervisor_confirmed', 'Auto-confirmed (nobody above them)');
 
                     activity('appraisals')->performedOn($attempt)->log("Appraisal auto-confirmed (top-level HOD): {$attempt->user->name}");
                 });
@@ -373,9 +370,7 @@ class AssessmentAttemptController extends Controller
                 ));
             }
 
-            $message = $isHod
-                ? 'Submitted for your Dean\'s review.'
-                : 'Submitted for supervisor review.';
+            $message = $supervisor ? "Submitted for {$supervisor->name}'s review." : 'Submitted for supervisor review.';
 
             return ApiResponse::success(AssessmentAttemptResource::make($attempt), $message);
         }
@@ -400,37 +395,22 @@ class AssessmentAttemptController extends Controller
      */
     public function supervisorPending(Request $request): AnonymousResourceCollection
     {
-        $supervisorEmployeeId = DB::table('employees')
-            ->join('users', 'users.employee_id', '=', 'employees.id')
-            ->where('users.id', auth()->id())
-            ->value('employees.id');
-
-        // Departments where the logged-in user is HOD
-        $myDeptIds = DB::table('departments')
-            ->where('hod', $supervisorEmployeeId)
-            ->pluck('id');
+        // The people the signed-in user appraises: those whose supervisor they are (set as Reports to, or in a unit
+        // they head).
+        $me = auth()->user()?->employee;
+        $reportIds = $me ? app(\App\Services\Org\ReportingLine::class)->reportsOf($me)->pluck('id')->all() : [];
 
         $query = AssessmentAttempt::whereIn('status', [
                 AssessmentAttempt::STATUS_PENDING_SUPERVISOR,
                 AssessmentAttempt::STATUS_PENDING_EMPLOYEE_ACKNOWLEDGMENT,
+                AssessmentAttempt::STATUS_PENDING_ENDORSEMENT,
                 AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
                 AssessmentAttempt::STATUS_PENDING_SIGNATURES,
                 AssessmentAttempt::STATUS_RETURNED,
                 AssessmentAttempt::STATUS_COMPLETED,
             ])
             ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
-            ->where(function ($q) use ($supervisorEmployeeId, $myDeptIds) {
-                $q->whereHas('user.employee', function ($e) use ($myDeptIds, $supervisorEmployeeId) {
-                    $e->whereIn('department_id', $myDeptIds)
-                      ->where('id', '!=', $supervisorEmployeeId);
-                });
-                $q->orWhereHas('user.employee', function ($e) use ($myDeptIds) {
-                    $e->whereHas('department', function ($d) use ($myDeptIds) {
-                        $d->whereColumn('hod', 'employees.id')
-                          ->whereIn('parent_department_id', $myDeptIds);
-                    });
-                });
-            })
+            ->whereHas('user.employee', fn ($e) => $e->whereIn('id', $reportIds ?: [0]))
             ->with(['user.employee.department', 'user.employee.photo', 'user.employee.rank', 'window.assessment', 'window.questionUsages', 'responses.question.questionCategory', 'events.actor', 'kpis', 'nextKpis', 'trainings'])
             ->latest('submitted_at');
 
@@ -693,28 +673,23 @@ class AssessmentAttemptController extends Controller
             return response()->json(['message' => 'No supervisor changes are pending your acknowledgment.'], 422);
         }
 
-        DB::transaction(function () use ($attempt) {
-            $attempt->update([
-                'status'                  => AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
-                'supervisor_confirmed_at' => now(),
-            ]);
+        $this->recordEvent($attempt, 'employee_acknowledged');
+        activity('appraisals')->performedOn($attempt)->log("Employee acknowledged supervisor changes: {$attempt->user->name}");
 
-            $this->recordEvent($attempt, 'employee_acknowledged');
-
-            activity('appraisals')->performedOn($attempt)->log("Employee acknowledged supervisor changes: {$attempt->user->name}");
-        });
-
-        $hrUsers = User::whereHas('roles', fn ($q) => $q->where('name', 'hr'))->get();
-        if ($hrUsers->isNotEmpty()) {
-            Notification::send($hrUsers, new AppraisalNotification(
-                type:     'appraisal_forwarded_to_hr',
-                subject:  "Appraisal Ready for Finalization: {$attempt->user->name}",
-                greeting: 'Hello,',
-                lines:    [
-                    "{$attempt->user->name}'s appraisal for \"{$attempt->window->title}\" has been confirmed and is ready for finalization.",
-                ],
-            ));
+        // The heads above the appraiser endorse it first, when set up; else straight to HR.
+        $endorsement = app(\App\Services\Appraisal\AppraisalEndorsement::class);
+        if ($endorsement->start($attempt->loadMissing('user.employee', 'supervisor', 'window'), auth()->user())) {
+            return ApiResponse::success(
+                AssessmentAttemptResource::make($attempt->fresh()),
+                'Changes acknowledged. Your appraisal has gone to the heads above your supervisor for endorsement.'
+            );
         }
+
+        $attempt->update([
+            'status'                  => AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED,
+            'supervisor_confirmed_at' => now(),
+        ]);
+        $endorsement->notifyHr($attempt);
 
         return ApiResponse::success(
             AssessmentAttemptResource::make($attempt),
@@ -1123,9 +1098,15 @@ class AssessmentAttemptController extends Controller
             return ApiResponse::success([]);
         }
 
-        $kpis = JobKpi::where('department_id', $departmentId)
-            ->orderBy('description')
-            ->get(['uuid', 'description']);
+        // The KPIs of their department, or (for a section or unit without its own) the nearest department above.
+        $department = \App\Models\Config\Department::find($departmentId);
+        $kpis = collect();
+        foreach ($department ? [$department, ...$department->ancestors()->reverse()->all()] : [] as $d) {
+            $kpis = JobKpi::where('department_id', $d->id)->orderBy('description')->get(['uuid', 'description']);
+            if ($kpis->isNotEmpty()) {
+                break;
+            }
+        }
 
         return ApiResponse::success($kpis);
     }
@@ -1378,21 +1359,13 @@ class AssessmentAttemptController extends Controller
      * the parent department. A top-level HOD (no parent) skips review and counts as
      * their own supervisor for the signature step.
      */
+    /** The appraiser: the employee's supervisor ("Reports to", else the head of their unit). */
     private function findSupervisorUser(AssessmentAttempt $attempt): ?User
     {
-        $attempt->loadMissing('user.employee.department.parent');
-        $employee   = $attempt->user?->employee;
-        $department = $employee?->department;
-        if (!$department) return null;
+        $attempt->loadMissing('user.employee');
+        $employee = $attempt->user?->employee;
 
-        $isHod = (int) $department->hod === (int) $employee->id;
-        $hodEmployeeId = ($isHod && $department->parent)
-            ? $department->parent->hod
-            : $department->hod;
-
-        if (!$hodEmployeeId) return null;
-
-        return User::whereHas('employee', fn ($q) => $q->where('id', $hodEmployeeId))->first();
+        return $employee ? app(\App\Services\Appraisal\AppraisalEndorsement::class)->appraiserOf($employee)?->userAccount : null;
     }
 
     /**

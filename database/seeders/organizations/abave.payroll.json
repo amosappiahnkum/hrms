@@ -1,35 +1,82 @@
 {
-    "_note": "Payroll setup for Apave (Abave Inspection Gh. Ltd), from how its old timesheet screens worked. Every rate marked CONFIRM is a placeholder: check it with Apave, then set confirmed to true and run: php artisan payroll:apply-preset abave",
+    "_note": "Payroll setup for Apave (Abave Inspection Gh. Ltd), from how its old timesheet screens worked. Every value marked CONFIRM is a placeholder (also confirm the settings payroll.exchange_rate_day = 22, payroll.time_source = timesheet (pay from approved FM-06 timesheets), the timesheet columns (night duty – RT pays nothing until it has a component), payroll.timesheet_worked_columns (which days count as worked), payroll.freelance_tax (D6: freelancers taxed as income or by withholding, whose rate goes on the statutory rates), from the sample payslip's rate date, and payroll.separate_basic_rate): check it with Apave, then set confirmed to true and run: php artisan payroll:apply-preset abave",
     "confirmed": true,
 
     "features": {
         "payroll.enabled": true,
         "payroll.overtime": true,
-        "payroll.time_inputs": true
+        "payroll.time_inputs": true,
+        "payroll.timesheets": true
     },
 
     "settings": {
         "payroll.base_currency": "GHS",
+        "payroll.period_start_day": 21,
+        "payroll.pay_day": 0,
         "payroll.working_days_per_month": 22,
         "payroll.hours_per_day": 8,
+        "payroll.work_day_start": "08:00",
+        "payroll.work_day_end": "17:00",
+        "payroll.work_day_break_minutes": 60,
+        "payroll.separate_basic_rate": true,
+        "payroll.exchange_rate_day": 22,
         "payroll.overtime_tax_method": "income",
         "payroll.overtime_auto_type": true,
         "payroll.overtime_require_reason": true,
-        "payroll.time_inputs_require_approval": true
+        "payroll.overtime_mode": "before",
+        "payroll.overtime_advance_days": 30,
+        "payroll.overtime_advance_for": ["weekend", "holiday"],
+        "payroll.overtime_pay_basis": "lower",
+        "payroll.time_inputs_require_approval": true,
+        "payroll.payslip_account_number": "full",
+        "payroll.time_source": "timesheet",
+        "payroll.timesheet_worked_columns": ["normal_hours"],
+        "payroll.freelance_tax": "paye",
+        "payroll.freelance_worked_columns": ["working_day"],
+        "payroll.freelance_timesheet_columns": [
+            { "key": "working_day", "label": "Working day", "type": "check", "feeds": "time_input", "component": "FL_WORKING_DAY" },
+            { "key": "standby_day", "label": "Standby day", "type": "check", "feeds": "time_input", "component": "FL_STANDBY_DAY" },
+            { "key": "travel_day", "label": "Travel day", "type": "check", "feeds": "time_input", "component": "FL_TRAVEL_DAY" }
+        ],
+        "payroll.timesheet_columns": [
+            { "key": "normal_hours", "label": "Normal 8–5 (8 hrs)", "type": "hours", "normal": true, "sheet_column": "D" },
+            { "key": "ot_weekday", "label": "Overtime hrs (Mon–Fri)", "type": "hours", "feeds": "overtime", "day_kind": "weekday", "sheet_column": "E" },
+            { "key": "ot_weekend", "label": "Weekend overtime", "type": "hours", "feeds": "overtime", "day_kind": "weekend", "sheet_column": "F" },
+            { "key": "ot_holiday", "label": "Holiday overtime hrs", "type": "hours", "feeds": "overtime", "day_kind": "holiday", "sheet_column": "G" },
+            { "key": "offshore", "label": "Offshore days", "type": "check", "feeds": "time_input", "component": "OFFSHORE_DAY", "requires_offshore": true, "sheet_column": "H" },
+            { "key": "rope_offshore", "label": "Rope access offshore", "type": "check", "feeds": "time_input", "component": "ROPE_OFFSHORE", "requires_offshore": true, "sheet_column": "I" },
+            { "key": "rope_onshore", "label": "Rope access onshore", "type": "check", "feeds": "time_input", "component": "ROPE_ONSHORE", "sheet_column": "J" },
+            { "key": "night_duty", "label": "Night duty – RT", "type": "check", "sheet_column": "K" }
+        ],
+        "payroll.payslip_fixed_lines": ["LUNCH", "TRANSPORT", "OT_WEEKDAY", "OT_WEEKEND", "OT_HOLIDAY", "OFFSHORE_DAY", "ROPE_OFFSHORE", "ROPE_ONSHORE", "OT_OFFSHORE", "TIER3", "LOAN_REPAY"]
     },
 
     "exchange_rates": [
-        { "currency": "USD", "year": 2026, "rate": 12, "notes": "CONFIRM: the year's USD → GHS rate" }
+        { "currency": "USD", "rate_type": "standard", "effective_date": "2026-09-22", "rate": 11.3933, "notes": "CONFIRM: allowances' rate from the Sept 2026 payslip (rate date 22.09.2026); HR adds each month's rate" },
+        { "currency": "USD", "rate_type": "basic", "effective_date": "2026-01-01", "rate": 13, "notes": "CONFIRM: basic salary's rate from the Sept 2026 payslip; a company rate, or a contract rate per employee (then set it on their pay details instead)" }
+    ],
+
+    "work_sites": [
+        { "code": "TC", "name": "TC", "is_offshore": false, "_confirm": "Site code from the Nov–Dec 2025 timesheet; CONFIRM its name and whether it is offshore" },
+        { "code": "ARD", "name": "ARD", "is_offshore": false, "_confirm": "Site code from the Nov–Dec 2025 timesheet; CONFIRM its name" },
+        { "code": "MV25", "name": "MV25", "is_offshore": true, "_confirm": "Site code from the timesheet (offshore days were worked there); CONFIRM its name" }
+    ],
+
+    "cost_centres": [
+        { "code": "NDT", "name": "NDT", "_confirm": "Cost centre from the Sept 2026 payslip; CONFIRM the others" }
     ],
 
     "components": [
-        { "code": "LUNCH", "name": "Lunch allowance", "kind": "earning", "calculation": "manual", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 20 },
-        { "code": "TRANSPORT", "name": "Transport allowance", "kind": "earning", "calculation": "manual", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 21 },
+        { "code": "FL_WORKING_DAY", "name": "Working day", "kind": "earning", "calculation": "rate_per_unit", "rate": 0, "unit": "day", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 60, "_confirm": "Freelance day rate: give it to each freelancer with their own rate on their pay details" },
+        { "code": "FL_STANDBY_DAY", "name": "Standby day", "kind": "earning", "calculation": "rate_per_unit", "rate": 0, "unit": "day", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 61, "_confirm": "Freelance standby rate, per freelancer" },
+        { "code": "FL_TRAVEL_DAY", "name": "Travel day", "kind": "earning", "calculation": "rate_per_unit", "rate": 0, "unit": "day", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 62, "_confirm": "Freelance travel rate, per freelancer" },
+        { "code": "LUNCH", "name": "Lunch allowance", "kind": "earning", "calculation": "rate_per_unit", "rate": 70, "unit": "day", "quantity_source": "days_worked", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 20, "_confirm": "GHS 70 per day worked (days worked are entered as a time input until timesheets feed them). CONFIRM: which days count (leave, offshore, travel?)" },
+        { "code": "TRANSPORT", "name": "Transport allowance", "kind": "earning", "calculation": "fixed", "rate": 1500, "recurring": true, "prorate": true, "prorate_basis": "days_worked", "taxable": true, "ssnit_applicable": false, "sort_order": 21, "_confirm": "GHS 1,500 a month × days worked ÷ working days in the period (sample: 1,500 × 18/21 = 1,285.71). CONFIRM: which days count" },
         { "code": "OTHER_ALW", "name": "Other allowance", "kind": "earning", "calculation": "manual", "recurring": true, "taxable": true, "ssnit_applicable": false, "sort_order": 22 },
 
-        { "code": "OT_WEEKDAY", "name": "Weekday overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 1.5, "taxable": true, "sort_order": 40, "_confirm": "CONFIRM multiplier" },
-        { "code": "OT_WEEKEND", "name": "Weekend overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 2, "taxable": true, "sort_order": 41, "_confirm": "CONFIRM multiplier" },
-        { "code": "OT_HOLIDAY", "name": "Public holiday overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 2, "taxable": true, "sort_order": 42, "_confirm": "CONFIRM multiplier" },
+        { "code": "OT_WEEKDAY", "name": "Weekday overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 1.25, "taxable": true, "sort_order": 40 },
+        { "code": "OT_WEEKEND", "name": "Weekend overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 1.5, "taxable": true, "sort_order": 41 },
+        { "code": "OT_HOLIDAY", "name": "Public holiday overtime", "kind": "earning", "calculation": "hourly_multiplier", "rate": 2, "taxable": true, "sort_order": 42 },
         { "code": "OT_OFFSHORE", "name": "Offshore overtime", "kind": "earning", "calculation": "rate_per_unit", "rate": 5, "currency": "USD", "unit": "hour", "taxable": true, "sort_order": 43, "_confirm": "CONFIRM: the offshore day rate ÷ 12" },
 
         { "code": "OFFSHORE_DAY", "name": "Offshore day", "kind": "earning", "calculation": "rate_per_unit", "rate": 3, "currency": "USD", "unit": "day", "taxable": true, "sort_order": 50, "_confirm": "CONFIRM: rate per offshore day" },
@@ -47,12 +94,20 @@
     "workflows": [
         {
             "process": "overtime",
-            "name": "Supervisor, unit manager, then HR",
+            "name": "Supervisor, then Operations Manager / CEO (FM-07)",
             "distinct_approvers": true,
             "steps": [
-                { "name": "Supervisor", "approver_type": "supervisor", "can_adjust": ["approved_hours"] },
-                { "name": "Unit manager", "approver_type": "department_head", "can_adjust": ["approved_hours"] },
-                { "name": "HR", "approver_type": "permission", "approver_value": ["configure-payroll"], "can_adjust": [] }
+                { "name": "Department supervisor on duty", "approver_type": "supervisor", "can_adjust": ["approved_hours"], "questions": ["can_postpone", "on_client_timesheet"] },
+                { "name": "Operations Manager / CEO", "approver_type": "role", "approver_value": ["operations-manager"], "can_adjust": ["approved_hours"] }
+            ]
+        },
+        {
+            "process": "timesheet",
+            "name": "Supervisor, then Operations Manager / CEO (FM-06)",
+            "distinct_approvers": true,
+            "steps": [
+                { "name": "Supervisor", "approver_type": "supervisor" },
+                { "name": "Operations Manager / CEO", "approver_type": "role", "approver_value": ["operations-manager"] }
             ]
         },
         {

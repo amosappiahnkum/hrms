@@ -54,6 +54,9 @@ class TimeInputController extends Controller
                 'pending'  => $base()->where('status', 'pending')->count(),
             ] : null,
             'requires_approval' => (bool) setting('payroll.time_inputs_require_approval', true),
+            // The pay period the month covers (e.g. 21 Aug – 20 Sep), for days entered against it.
+            'period'     => (fn ($p) => ['label' => $p->label(), 'start' => $p->start->toDateString(), 'end' => $p->end->toDateString(), 'working_days' => $p->workingDays()])
+                (\App\Services\Payroll\PayPeriod::forMonth($data['year'], $data['month'])),
         ]);
     }
 

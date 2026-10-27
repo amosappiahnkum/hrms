@@ -6,6 +6,7 @@ use App\Exceptions\UserFacingException;
 use App\Helpers\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\Payroll\EmployeePayComponent;
+use App\Models\Payroll\CostCentre;
 use App\Models\Payroll\EmployeePayProfile;
 use App\Models\Payroll\PayComponent;
 use App\Models\Payroll\StatutoryRateSet;
@@ -31,7 +32,7 @@ class EmployeePayController extends Controller
         $page = Employee::query()
             ->with(['department', 'jobDetail.position', 'contactDetail', 'payProfiles' => fn ($q) => $q->inForceOn($today)])
             ->when($request->search, fn ($q, $v) => $q->where(fn ($w) => $w->where('first_name', 'like', "%{$v}%")->orWhere('last_name', 'like', "%{$v}%")->orWhere('staff_id', 'like', "%{$v}%")))
-            ->when($request->department_uuid, fn ($q, $v) => $q->whereHas('department', fn ($d) => $d->where('uuid', $v)))
+            ->when($request->department_uuid, fn ($q, $v) => $q->whereIn('department_id', \App\Models\Config\Department::subtreeIdsByUuid($v)))
             ->when($request->status === 'no_profile', fn ($q) => $q->whereDoesntHave('payProfiles'))
             ->when($request->status === 'with_profile', fn ($q) => $q->whereHas('payProfiles'))
             ->orderBy('first_name')->orderBy('last_name')
@@ -92,8 +93,10 @@ class EmployeePayController extends Controller
         }
         $saved = $result['created'] + $result['corrected'] + $result['changed'];
 
+        $banks = $result['new_banks'] ? ' Added to the banks list: ' . implode(', ', $result['new_banks']) . '.' : '';
+
         return ApiResponse::success($result, $saved
-            ? "Saved {$saved}: {$result['created']} new, {$result['corrected']} corrected, {$result['changed']} changed from a date."
+            ? "Saved {$saved}: {$result['created']} new, {$result['corrected']} corrected, {$result['changed']} changed from a date.{$banks}"
             : 'Nothing to change: every row matches what is saved.');
     }
 
@@ -105,6 +108,12 @@ class EmployeePayController extends Controller
     {
         $current = $employee->payProfiles()->inForceOn(now())->first() ?? $employee->payProfiles()->latest('effective_from')->first();
         $data = $this->validatedProfile($request, $current);
+
+        // Nobody else may be paid into the same account (a typo, or a copied row, would pay two salaries into one).
+        $payment = $data + ($current?->only(['payment_method', 'bank_id', 'account_number', 'mobile_money_number']) ?? []);
+        if ($problem = EmployeePayProfile::sharedProblem($payment, $employee->id)) {
+            throw ValidationException::withMessages([($payment['payment_method'] === 'bank' ? 'account_number' : 'mobile_money_number') => $problem]);
+        }
 
         DB::transaction(function () use ($request, $employee, $current, $data) {
             if (array_key_exists('ssnit_number', $data)) {
@@ -122,6 +131,20 @@ class EmployeePayController extends Controller
         });
 
         return ApiResponse::success($this->detail($employee->fresh(), masked: false), $request->input('mode') === 'change' ? 'Change saved from ' . Carbon::parse($data['effective_from'])->format('j M Y') . '.' : 'Pay details saved.');
+    }
+
+    /** The cost centre their pay is charged to (kept on job details; empty: their department). */
+    public function saveCostCentre(Request $request, Employee $employee): JsonResponse
+    {
+        $data = $request->validate([
+            'cost_centre_uuid' => ['nullable', Rule::exists('cost_centres', 'uuid')->where('active', true)->whereNull('deleted_at')],
+        ], ['cost_centre_uuid.exists' => 'Choose an active cost centre.']);
+
+        $employee->jobDetail()->updateOrCreate([], [
+            'cost_centre_id' => isset($data['cost_centre_uuid']) ? CostCentre::where('uuid', $data['cost_centre_uuid'])->value('id') : null,
+        ]);
+
+        return ApiResponse::success($this->detail($employee->fresh(), masked: true), 'Cost centre saved.');
     }
 
     public function addComponent(Request $request, Employee $employee): JsonResponse
@@ -177,9 +200,13 @@ class EmployeePayController extends Controller
             }
         }
 
-        $data = EmployeePayProfile::withoutUnusedPayment($data);
+        $data = EmployeePayProfile::withoutUnusedPayment(EmployeePayProfile::withBank($data));
         if ($data['currency'] === $this->base()) {
             $data['currency'] = null;
+        }
+        // A fixed rate only means something for pay in another currency.
+        if (!$data['currency']) {
+            $data['fixed_exchange_rate'] = null;
         }
 
         return $data;
@@ -222,9 +249,13 @@ class EmployeePayController extends Controller
             'effective_from'        => $p->effective_from->toDateString(),
             'basic_salary'          => (float) $p->basic_salary,
             'currency'              => $p->currency ?? $this->base(),
+            'fixed_exchange_rate'   => $p->fixed_exchange_rate !== null ? (float) $p->fixed_exchange_rate : null,
             'payment_method'        => ['value' => $p->payment_method, 'label' => EmployeePayProfile::PAYMENT_METHODS[$p->payment_method] ?? $p->payment_method],
             'bank_name'             => $p->bank_name,
+            // The bank from the list (for the picker); bank_name is its name as saved.
+            'bank'                  => $p->bank ? \App\Http\Controllers\Payroll\BankController::row($p->bank) : null,
             'bank_branch'           => $p->bank_branch,
+            'branch'                => $p->branch ? \App\Http\Controllers\Payroll\BankBranchController::row($p->branch) : null,
             'account_name'          => $p->account_name,
             'account_number'        => $mask($p->account_number),
             'mobile_money_provider' => $p->mobile_money_provider,
@@ -275,6 +306,8 @@ class EmployeePayController extends Controller
             'staff_id'   => $e->staff_id,
             'department' => $e->department?->name,
             'position'   => $e->jobDetail?->position?->name,
+            // Null: charged to their department.
+            'cost_centre' => ($c = $e->jobDetail?->costCentre) ? ['uuid' => $c->uuid, 'code' => $c->code, 'name' => $c->name] : null,
         ];
     }
 

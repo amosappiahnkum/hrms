@@ -59,7 +59,9 @@ class EmployeeResource extends JsonResource
                 'until' => Carbon::parse($this->currentLeave->end_date)->toDateString(),
             ] : null,
             'pending_update'    => $this->informationUpdate !== null,
-            'supervisor'   => $this->employeeSupervisor?->supervisor->name,
+            // Their "Reports to", else the head of their unit (by default).
+            'supervisor'   => ($supervisor = app(\App\Services\Org\ReportingLine::class)->supervisorOf($this->resource))?->name,
+            'supervisor_by_default' => $supervisor !== null && $this->reports_to_id !== $supervisor->id,
             'has_account'  => $this->userAccount !== null,
             'work_email'   => $this->contactDetail?->work_email,
             'other_email'  => $this->contactDetail?->other_email,

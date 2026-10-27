@@ -38,15 +38,20 @@ class ApprovalWorkflowService
     {
         $type = $step instanceof ApprovalWorkflowStep ? $step->approver_type : ApproverType::from($step['approver_type']);
         $value = $step instanceof ApprovalWorkflowStep ? $step->approver_value : ($step['approver_value'] ?? null);
-        $employee?->loadMissing('employeeSupervisor.supervisor.userAccount', 'department.parent');
+        $employee?->loadMissing('department.parent');
 
         $users = match ($type) {
-            ApproverType::SUPERVISOR             => collect([$employee?->employeeSupervisor?->supervisor?->userAccount]),
+            // Their "Reports to", else the head of their unit.
+            ApproverType::SUPERVISOR             => collect([$employee ? app(\App\Services\Org\ReportingLine::class)->supervisorOf($employee)?->userAccount : null]),
             ApproverType::DEPARTMENT_HEAD        => collect([$employee?->hodUser()]),
             ApproverType::PARENT_DEPARTMENT_HEAD => collect([$this->parentHead($employee)]),
             ApproverType::ROLE                   => $value ? User::role($value[0] ?? $value)->get() : collect(),
             ApproverType::PERMISSION             => $value ? User::permission($value[0] ?? $value)->get() : collect(),
             ApproverType::USERS                  => User::whereIn('id', (array) $value)->get(),
+            // Expanded into one step per head when a request starts (stepsFor); every head, for anything else.
+            ApproverType::HEADS_CHAIN            => $employee
+                ? app(\App\Services\Org\ReportingLine::class)->headsAbove($employee, (array) $value)->map(fn ($e) => $e->userAccount)
+                : collect(),
         };
 
         return $users->filter()->unique('id')->values();
@@ -58,13 +63,16 @@ class ApprovalWorkflowService
         $workflow ??= $this->defaultFor($process);
         $workflow?->loadMissing('steps');
 
-        $steps = ($workflow?->steps ?? collect())->map(fn (ApprovalWorkflowStep $s) => [
-            'position'       => $s->position,
-            'name'           => $s->name,
-            'approver_type'  => $s->approver_type->value,
-            'approver_value' => $s->approver_value,
-            'can_adjust'     => array_values(array_intersect($s->can_adjust ?? [], array_keys($process->adjustable()))),
-        ])->values()->all();
+        return $this->startWith($subject, $process, $employee, $startedBy, $this->stepsFor($workflow?->steps ?? collect(), $process, $employee), $workflow);
+    }
+
+    /**
+     * Start a request on steps worked out elsewhere (each: name, approver_type, approver_value, can_adjust,
+     * questions), e.g. appraisal endorsement's heads. No steps: the fallback approvers decide.
+     */
+    public function startWith(Model&ApprovalSubject $subject, ApprovalProcess $process, ?Employee $employee, ?User $startedBy, array $steps, ?ApprovalWorkflow $workflow = null): Approval
+    {
+        $steps = array_values(array_map(fn ($s, $i) => ['position' => $i + 1] + $s + ['can_adjust' => [], 'questions' => []], $steps, array_keys($steps)));
 
         // No workflow set up: the fallback approvers decide, rather than nobody.
         $steps = $steps ?: [[
@@ -88,6 +96,69 @@ class ApprovalWorkflowService
         $this->moveTo($approval, $steps[0]['position']);
 
         return $approval;
+    }
+
+    /**
+     * The workflow's steps for this employee, as a request will follow them (kept on the request when it starts):
+     * - a "heads up the chain" step becomes one step per head above them, named after the department each heads
+     *   ("Head of Engineering"); with `skip_supervisor` (default on) the head who is also their supervisor, asked in
+     *   an earlier supervisor step, is left out; no heads: the step is dropped;
+     * - a step whose only approver is the same person as the step before is folded into it (one decision; what
+     *   either may change or answer, the folded step may);
+     * - positions run 1, 2, 3…
+     *
+     * @param Collection<int, ApprovalWorkflowStep> $workflowSteps
+     */
+    public function stepsFor(Collection $workflowSteps, ApprovalProcess $process, ?Employee $employee): array
+    {
+        $line = app(\App\Services\Org\ReportingLine::class);
+        $expanded = [];
+        foreach ($workflowSteps as $s) {
+            $step = [
+                'name'           => $s->name,
+                'approver_type'  => $s->approver_type->value,
+                'approver_value' => $s->approver_value,
+                'can_adjust'     => array_values(array_intersect($s->can_adjust ?? [], array_keys($process->adjustable()))),
+                'questions'      => array_values(array_intersect($s->questions ?? [], array_keys($process->questions()))),
+            ];
+            if ($s->approver_type !== ApproverType::HEADS_CHAIN) {
+                $expanded[] = $step;
+                continue;
+            }
+            if (!$employee) {
+                continue;
+            }
+            $rule = (array) $s->approver_value;
+            $supervisor = ($rule['skip_supervisor'] ?? true) && collect($expanded)->contains('approver_type', ApproverType::SUPERVISOR->value)
+                ? $line->supervisorOf($employee) : null;
+            // "After N heads" counts the heads asked here, not the supervisor left out.
+            $links = $line->chainAbove($employee, ($rule['stop'] ?? 'top') === 'level' ? $rule : [])->reject(fn ($l) => $l['head']->id === $supervisor?->id || !$l['head']->userAccount);
+            if (($rule['stop'] ?? 'top') === 'count') {
+                $links = $links->take(max(1, (int) ($rule['count'] ?? 1)));
+            }
+            foreach ($links as ['head' => $head, 'department' => $department]) {
+                $expanded[] = ['name' => "Head of {$department->name}", 'approver_type' => ApproverType::USERS->value, 'approver_value' => [$head->userAccount->id]]
+                    + $step;
+            }
+        }
+
+        $steps = [];
+        $previous = null;
+        foreach ($expanded as $step) {
+            $users = $employee ? $this->resolve($step, $employee) : collect();
+            $only = $users->count() === 1 ? $users->first()->id : null;
+            if ($only !== null && $only === $previous) {
+                $last = array_key_last($steps);
+                foreach (['can_adjust', 'questions'] as $key) {
+                    $steps[$last][$key] = array_values(array_unique(array_merge($steps[$last][$key], $step[$key])));
+                }
+                continue;
+            }
+            $steps[] = $step;
+            $previous = $only;
+        }
+
+        return array_map(fn ($step, $i) => ['position' => $i + 1] + $step, $steps, array_keys($steps));
     }
 
     /** Users who may decide the current step. */
@@ -139,7 +210,7 @@ class ApprovalWorkflowService
      * Approve or reject the current step. Adjustments are allowed only for the fields the step
      * permits; approving the last step approves the request.
      */
-    public function decide(Approval $approval, User $user, string $decision, ?string $comment = null, array $adjustments = []): Approval
+    public function decide(Approval $approval, User $user, string $decision, ?string $comment = null, array $adjustments = [], array $answers = []): Approval
     {
         if (!$this->canDecide($approval, $user)) {
             throw new UserFacingException('This request isn\'t waiting for your decision.', 403);
@@ -156,8 +227,9 @@ class ApprovalWorkflowService
         if ($notAllowed) {
             throw new UserFacingException('This step can\'t change: ' . implode(', ', $notAllowed) . '.');
         }
+        $answers = $this->answers($approval, $step, $answers, $decision === 'approved');
 
-        return DB::transaction(function () use ($approval, $user, $decision, $comment, $adjustments, $step) {
+        return DB::transaction(function () use ($approval, $user, $decision, $comment, $adjustments, $step, $answers) {
             $subject = $approval->subject;
             $changes = [];
             if ($adjustments && $decision === 'approved' && $subject instanceof ApprovalSubject) {
@@ -177,7 +249,12 @@ class ApprovalWorkflowService
                 'decided_by'  => $user->id,
                 'comment'     => $comment,
                 'adjustments' => $changes ?: null,
+                'answers'     => $answers ?: null,
             ]);
+            // The answers become part of the request (e.g. the supervisor's FM-07 answers on overtime).
+            if ($answers && method_exists($subject, 'applyAnswers')) {
+                $subject->applyAnswers($answers);
+            }
 
             if ($decision === 'rejected') {
                 $this->finish($approval, Approval::REJECTED);
@@ -189,6 +266,34 @@ class ApprovalWorkflowService
 
             return $approval->fresh();
         });
+    }
+
+    /**
+     * The step's questions answered yes or no: all of them to approve; any given when rejecting are kept.
+     *
+     * @return array<string, bool>
+     */
+    private function answers(Approval $approval, array $step, array $given, bool $approving): array
+    {
+        $questions = array_intersect_key($approval->process->questions(), array_flip($step['questions'] ?? []));
+        if ($unknown = array_diff(array_keys($given), array_keys($questions))) {
+            throw new UserFacingException('This step doesn\'t ask: ' . implode(', ', $unknown) . '.');
+        }
+
+        $answers = [];
+        foreach ($questions as $key => $question) {
+            $value = $given[$key] ?? null;
+            $bool = is_bool($value) ? $value : filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+            if ($bool === null || $value === null || $value === '') {
+                if ($approving) {
+                    throw new UserFacingException("Answer: {$question}");
+                }
+                continue;
+            }
+            $answers[$key] = $bool;
+        }
+
+        return $answers;
     }
 
     /** Withdrawn by the requester (or HR) while still pending. */
@@ -254,7 +359,11 @@ class ApprovalWorkflowService
     /** Who decides when a workflow has nobody: payroll approvers for pay runs, payroll configurers otherwise. */
     private function fallbackPermission(ApprovalProcess $process): string
     {
-        return $process === ApprovalProcess::PAY_RUN ? 'approve-payroll' : 'configure-payroll';
+        return match ($process) {
+            ApprovalProcess::PAY_RUN   => 'approve-payroll',
+            ApprovalProcess::APPRAISAL => 'finalize-appraisals',
+            default                    => 'configure-payroll',
+        };
     }
 
     private function parentHead(?Employee $employee): ?User

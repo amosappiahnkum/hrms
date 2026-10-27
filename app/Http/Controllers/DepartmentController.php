@@ -231,6 +231,32 @@ class DepartmentController extends Controller
      * @param Department $department
      * @return JsonResponse
      */
+    /** The level names, top first (e.g. Directorate, Department, Section, Unit). */
+    public function levels(): JsonResponse
+    {
+        return response()->json(['data' => Department::levels()]);
+    }
+
+    /**
+     * Rename, add or remove levels. Departments keep their level index, so removing one from the middle shifts
+     * the ones below up: refused while a department is at a level that would go.
+     */
+    public function saveLevels(Request $request): JsonResponse
+    {
+        $levels = $request->validate([
+            'levels'   => ['required', 'array', 'min:1', 'max:8'],
+            'levels.*' => ['required', 'string', 'max:40', 'distinct'],
+        ], ['levels.*.distinct' => 'Each level needs its own name.'])['levels'];
+        $levels = array_values(array_map(fn ($l) => trim($l), $levels));
+        if (($deepest = Department::whereNotNull('level')->max('level')) !== null && $deepest >= count($levels)) {
+            return response()->json(['message' => 'Some departments are at level ' . ($deepest + 1) . '. Change their level before removing it.'], 422);
+        }
+        app(\App\Services\SettingService::class)->set('org.department_levels', $levels);
+        activity('departments')->causedBy($request->user())->withProperties(['levels' => $levels])->log('Department levels: ' . implode(' › ', $levels));
+
+        return response()->json(['data' => $levels, 'message' => 'Levels saved.']);
+    }
+
     public function destroy(string $uuid): JsonResponse
     {
         $department = Department::withCount(['children', 'employees'])->where('uuid', $uuid)->firstOrFail();

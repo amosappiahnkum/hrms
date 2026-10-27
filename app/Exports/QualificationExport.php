@@ -2,15 +2,16 @@
 
 namespace App\Exports;
 
+use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 
 class QualificationExport implements FromCollection
 {
     /**
-    * @return \Illuminate\Support\Collection
+    * @return Collection
     */
-    public function collection()
+    public function collection(): Collection
     {
-        //
+        return collect();
     }
 }

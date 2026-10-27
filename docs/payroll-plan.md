@@ -35,7 +35,7 @@ to fit its own rules, without code changes per organization.
 | # | Question | Decision |
 |---|---|---|
 | 1 | Tenancy | One deployment per organization. |
-| 2 | Currency | Pay may be defined in a foreign currency (e.g. USD); an **exchange rate is entered per year** and used by every run that year. |
+| 2 | Currency | Pay may be defined in a foreign currency (e.g. USD). ~~One exchange rate per year~~ → **dated rates** (2026-10-15, [timesheet-payroll-completion-plan.md](timesheet-payroll-completion-plan.md) Phase 6): a run uses the rate in force on its rate date, with an optional separate rate for basic salary and a per-employee fixed rate. |
 | 3 | Overtime approval | Configurable chain, not code. Apave preset: supervisor → unit manager → HR. |
 | 4 | Overtime tax | Organization setting: tax as ordinary income (default) or GRA junior-staff concessionary rates. |
 | 5 | Loans | No interest by default; interest, limits and approval chain are configurable per loan type. |
@@ -116,6 +116,8 @@ plan's approval levels so HR defines chains instead of code.
 - **Frontend:** Settings → Currencies & rates.
 - **As built**: `exchange_rates` only (no currency table: the base currency plus those with rates);
   `ExchangeRate::for($currency, $year)` (1 for the base currency, null when missing).
+- **Superseded** by Phase 6 of `timesheet-payroll-completion-plan.md`: rates are dated (`effective_date`) and typed
+  (`standard` | `basic`); `ExchangeRate::for($currency, $date, $type)`.
 
 ### 0.5 Pay components — [x]
 The building blocks of a payslip, defined by HR.

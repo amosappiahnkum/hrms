@@ -52,7 +52,7 @@ class PayrollReportsTest extends TestCase
             ->assertJsonPath('data.previous.name', 'Payroll · May 2026')
             ->assertJsonPath('data.change.employees', -1)
             ->assertJsonCount(1, 'data.movements.left')
-            ->assertJsonPath('data.movements.changed.0.from', 3945.25)
+            ->assertJsonPath('data.movements.changed.0.from', 3939.25)
             ->assertJsonCount(2, 'data.trend')
             ->assertJsonPath('data.by_component.0.code', 'BASIC');
 

@@ -18,7 +18,6 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 use Throwable;
@@ -90,9 +89,7 @@ class EmergencyContactController extends Controller
             );
 
         } catch (Throwable $e) {
-            Log::error('Add EmergencyContact Error', ['error' => $e]);
-
-            return ApiResponse::error('Something went wrong');
+            return ApiResponse::fromException($e);
         }
     }
 
@@ -120,8 +117,8 @@ class EmergencyContactController extends Controller
             DB::commit();
             return new EmergencyContactResource($emergencyContact);
         } catch (Exception $exception) {
-            Log::error('Update Dependant Error', ['error' => $exception]);
-            return response()->json(['message' => 'Something went wrong'], 400);
+            DB::rollBack();
+            return ApiResponse::fromException($exception);
         }
     }
 
@@ -152,9 +149,8 @@ class EmergencyContactController extends Controller
 
             return ApiResponse::success(null, 'Delete request submitted for approval', ResponseAlias::HTTP_OK);
         } catch (Exception $exception) {
-
-            Log::error('Delete EmergencyContact Error: ', [$exception]);
-            return ApiResponse::error('Something went wrong', [], ResponseAlias::HTTP_OK);
+            DB::rollBack();
+            return ApiResponse::fromException($exception);
         }
     }
 }

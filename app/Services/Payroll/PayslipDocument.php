@@ -11,7 +11,21 @@ use Illuminate\Http\Response;
 /** A payslip as a PDF: lines as calculated, optionally employer contributions and year-to-date totals. */
 class PayslipDocument
 {
+    public function __construct(private readonly PayslipPresenter $presenter)
+    {
+    }
+
     public function download(Payslip $payslip): Response
+    {
+        $payslip->loadMissing('run');
+        $run = $payslip->run;
+
+        return Pdf::loadHTML($this->html($payslip))->setPaper('a4')
+            ->download('payslip-' . str($payslip->employee_snapshot['name'] ?? 'employee')->slug() . "-{$run->year}-" . str_pad($run->month, 2, '0', STR_PAD_LEFT) . '.pdf');
+    }
+
+    /** The payslip as HTML (what the PDF is made from). */
+    public function html(Payslip $payslip): string
     {
         $payslip->loadMissing(['run', 'lines']);
         $run = $payslip->run;
@@ -26,14 +40,13 @@ class PayslipDocument
                 ->first()
             : null;
 
-        return Pdf::loadView('payroll.payslip', [
+        return view('payroll.payslip', $this->presenter->present($payslip) + [
             'payslip'      => $payslip,
             'run'          => $run,
-            'currency'     => $run->settings['base_currency'] ?? setting('payroll.base_currency', 'GHS'),
             'showEmployer' => (bool) setting('payroll.payslip_show_employer', true),
             'ytd'          => $ytd,
             'company'      => $letterhead['company'],
             'logo'         => $letterhead['logo'],
-        ])->setPaper('a4')->download('payslip-' . str($payslip->employee_snapshot['name'] ?? 'employee')->slug() . "-{$run->year}-" . str_pad($run->month, 2, '0', STR_PAD_LEFT) . '.pdf');
+        ])->render();
     }
 }

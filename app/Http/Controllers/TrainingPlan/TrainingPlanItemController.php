@@ -390,7 +390,7 @@ class TrainingPlanItemController extends Controller
             ->when($request->training, fn ($q, $key) => $this->forTraining($q, $key))
             ->when($request->search, fn ($q, $v) => $q->where(fn ($q) => $q->where('title', 'like', "%{$v}%")
                 ->orWhereHas('employee', fn ($e) => $e->search($v))))
-            ->when($request->department_uuid, fn ($q, $v) => $q->whereHas('employee.department', fn ($d) => $d->where('uuid', $v)))
+            ->when($request->department_uuid, fn ($q, $v) => $q->whereHas('employee', fn ($e) => $e->whereIn('department_id', \App\Models\Config\Department::subtreeIdsByUuid($v))))
             ->when($request->employee_uuid, fn ($q, $v) => $q->whereHas('employee', fn ($e) => $e->where('uuid', $v)))
             ->when($request->quarter, fn ($q, $v) => $q->where('quarter', $v))
             ->when($request->status, fn ($q, $v) => $q->where('status', $v))

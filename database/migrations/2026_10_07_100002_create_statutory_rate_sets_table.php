@@ -25,6 +25,8 @@ return new class extends Migration
             // [{code, name, annual_amount, max_units, percent_of_income}]
             $table->json('reliefs')->nullable();
             $table->decimal('tier3_relief_limit_percent', 5, 2)->nullable();
+            // Freelancers taxed by withholding (setting payroll.freelance_tax): a flat % of what they're paid.
+            $table->decimal('freelance_withholding_rate', 5, 2)->nullable();
             // {annual_basic_threshold, percent_of_basic, lower_rate, higher_rate} (GRA junior-staff rules)
             $table->json('overtime_tax')->nullable();
             // {rate, percent_of_annual_basic}

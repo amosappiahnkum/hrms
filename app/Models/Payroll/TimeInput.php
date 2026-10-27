@@ -10,14 +10,13 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 
 /** Units for one employee in a month (offshore days, shifts…), priced by a per-unit pay component. */
 class TimeInput extends AppModel implements ApprovalSubject
 {
     use SoftDeletes;
 
-    protected $fillable = ['employee_id', 'pay_component_id', 'year', 'month', 'quantity', 'notes', 'status', 'entered_by', 'pay_run_id'];
+    protected $fillable = ['employee_id', 'pay_component_id', 'year', 'month', 'quantity', 'notes', 'status', 'entered_by', 'pay_run_id', 'timesheet_id'];
 
     protected $casts = ['quantity' => 'decimal:2', 'year' => 'integer', 'month' => 'integer'];
 
@@ -48,7 +47,7 @@ class TimeInput extends AppModel implements ApprovalSubject
 
     public function periodLabel(): string
     {
-        return Carbon::create($this->year, $this->month, 1)->format('F Y');
+        return \App\Services\Payroll\PayPeriod::forMonth($this->year, $this->month)->label();
     }
 
     public function adjustableValues(): array

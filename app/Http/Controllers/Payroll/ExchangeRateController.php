@@ -9,20 +9,27 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
-/** Yearly exchange rates: pay set in another currency is converted at its year's rate. */
+/**
+ * Dated exchange rates: pay set in another currency is converted at the rate in force on the run's rate date.
+ * A `basic` rate (optional) converts basic salary.
+ */
 class ExchangeRateController extends Controller
 {
     public function index(): JsonResponse
     {
         return ApiResponse::success([
             'base_currency' => strtoupper((string) setting('payroll.base_currency', 'GHS')),
-            'rates'         => ExchangeRate::orderBy('currency')->orderByDesc('year')->get()->map(fn ($r) => $this->row($r))->values(),
+            'rates'         => ExchangeRate::orderBy('currency')->orderBy('rate_type')->orderByDesc('effective_date')->get()->map(fn ($r) => $this->row($r))->values(),
+            'types'         => [
+                ['value' => ExchangeRate::STANDARD, 'label' => 'Standard (allowances and everything else)'],
+                ['value' => ExchangeRate::BASIC, 'label' => 'Basic salary'],
+            ],
         ]);
     }
 
     public function store(Request $request): JsonResponse
     {
-        $rate = ExchangeRate::create($this->validated($request) + ['created_by' => $request->user()->id]);
+        $rate = ExchangeRate::create($this->validated($request) + ['rate_type' => ExchangeRate::STANDARD, 'created_by' => $request->user()->id]);
 
         return ApiResponse::success($this->row($rate), 'Rate added.', 201);
     }
@@ -46,9 +53,11 @@ class ExchangeRateController extends Controller
     /** A rate an approved or paid pay run used is part of its record. */
     private function ensureNotUsed(ExchangeRate $rate): void
     {
-        if (\App\Models\Payroll\PayRun::where('year', $rate->year)->whereIn('status', ['approved', 'paid'])->get()
-            ->contains(fn ($run) => isset(($run->exchange_rates ?? [])[$rate->currency]))) {
-            throw new \App\Exceptions\UserFacingException("An approved pay run in {$rate->year} used this rate, so it can't change.");
+        $date = $rate->effective_date->toDateString();
+        $run = \App\Models\Payroll\PayRun::whereIn('status', ['approved', 'paid'])->whereNotNull('exchange_rates')->get()
+            ->first(fn ($run) => (($run->exchange_rates[$rate->currency][$rate->rate_type]['date'] ?? null) === $date));
+        if ($run) {
+            throw new \App\Exceptions\UserFacingException("{$run->name} used this rate and has been approved, so it can't change. Add a new rate from a later date instead.");
         }
     }
 
@@ -59,18 +68,24 @@ class ExchangeRateController extends Controller
 
         return $request->validate([
             'currency' => ['required', \App\Support\Currencies::rule(), Rule::notIn([$base])],
-            'year'     => ['required', 'integer', 'between:2000,2100',
-                Rule::unique('exchange_rates', 'year')->where('currency', $request->input('currency'))->ignore($rate?->id)->whereNull('deleted_at')],
+            'rate_type'      => ['sometimes', Rule::in(ExchangeRate::TYPES)],
+            'effective_date' => ['required', 'date',
+                Rule::unique('exchange_rates', 'effective_date')
+                    ->where('currency', $request->input('currency'))->where('rate_type', $request->input('rate_type', $rate?->rate_type ?? ExchangeRate::STANDARD))
+                    ->ignore($rate?->id)->whereNull('deleted_at')],
             'rate'     => ['required', 'numeric', 'gt:0'],
             'notes'    => ['nullable', 'string', 'max:255'],
         ], [
             'currency.not_in' => "{$base} is the base currency: it needs no rate.",
-            'year.unique'     => 'There is already a rate for this currency and year. Edit it instead.',
+            'effective_date.unique' => 'There is already a rate of this type for this currency from that date. Edit it instead.',
         ]);
     }
 
     private function row(ExchangeRate $r): array
     {
-        return ['uuid' => $r->uuid, 'currency' => $r->currency, 'year' => $r->year, 'rate' => (float) $r->rate, 'notes' => $r->notes];
+        return [
+            'uuid' => $r->uuid, 'currency' => $r->currency, 'rate_type' => $r->rate_type, 'effective_date' => $r->effective_date->toDateString(),
+            'rate' => (float) $r->rate, 'notes' => $r->notes,
+        ];
     }
 }

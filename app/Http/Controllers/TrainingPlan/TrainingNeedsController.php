@@ -41,7 +41,7 @@ class TrainingNeedsController extends Controller
 
         $actions = DevelopmentAction::awaitingTraining()
             ->with(['employee.department', 'employee.jobDetail.position', 'competency'])
-            ->when($request->department_uuid, fn ($q, $v) => $q->whereHas('employee.department', fn ($d) => $d->where('uuid', $v)))
+            ->when($request->department_uuid, fn ($q, $v) => $q->whereHas('employee', fn ($e) => $e->whereIn('department_id', \App\Models\Config\Department::subtreeIdsByUuid($v))))
             ->when($request->competency_uuid, fn ($q, $v) => $q->whereHas('competency', fn ($c) => $c->where('uuid', $v)))
             ->when($request->catalogue_item_uuid, fn ($q, $v) => $q->whereHas('competency.courseLinks.catalogueItem', fn ($c) => $c->where('uuid', $v)))
             ->when($request->search, fn ($q, $v) => $q->whereHas('employee', fn ($e) => $e

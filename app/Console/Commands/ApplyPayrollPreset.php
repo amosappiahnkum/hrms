@@ -6,7 +6,9 @@ use App\Enums\Payroll\ApprovalProcess;
 use App\Enums\Payroll\ApproverType;
 use App\Enums\Payroll\ComponentCalculation;
 use App\Models\Payroll\ApprovalWorkflow;
+use App\Models\Payroll\CostCentre;
 use App\Models\Payroll\ExchangeRate;
+use App\Models\Payroll\WorkSite;
 use App\Models\Payroll\OvertimeType;
 use App\Models\Payroll\PayComponent;
 use App\Services\SettingService;
@@ -57,7 +59,16 @@ class ApplyPayrollPreset extends Command
                 $settings->set($key, $value);
             }
             foreach ($preset['exchange_rates'] ?? [] as $r) {
-                ExchangeRate::updateOrCreate(['currency' => strtoupper($r['currency']), 'year' => $r['year']], ['rate' => $r['rate'], 'notes' => $r['notes'] ?? null]);
+                ExchangeRate::updateOrCreate(
+                    ['currency' => strtoupper($r['currency']), 'rate_type' => $r['rate_type'] ?? ExchangeRate::STANDARD, 'effective_date' => $r['effective_date']],
+                    ['rate' => $r['rate'], 'notes' => $r['notes'] ?? null],
+                );
+            }
+            foreach ($preset['work_sites'] ?? [] as $site) {
+                WorkSite::withTrashed()->updateOrCreate(['code' => strtoupper($site['code'])], collect($site)->except(['code', '_confirm'])->all() + ['active' => true, 'deleted_at' => null]);
+            }
+            foreach ($preset['cost_centres'] ?? [] as $centre) {
+                CostCentre::withTrashed()->updateOrCreate(['code' => strtoupper($centre['code'])], collect($centre)->except(['code', '_confirm'])->all() + ['active' => true, 'deleted_at' => null]);
             }
             foreach ($preset['components'] ?? [] as $c) {
                 PayComponent::withTrashed()->updateOrCreate(['code' => $c['code']], collect($c)->except(['code', '_confirm'])->all() + ['active' => true, 'deleted_at' => null]);
@@ -80,6 +91,7 @@ class ApplyPayrollPreset extends Command
                     $workflow->steps()->create([
                         'position' => $i + 1, 'name' => $s['name'], 'approver_type' => $s['approver_type'],
                         'approver_value' => $s['approver_value'] ?? null, 'can_adjust' => $s['can_adjust'] ?? [],
+                        'questions' => array_values(array_intersect($s['questions'] ?? [], array_keys($process->questions()))),
                     ]);
                 }
             }
@@ -99,8 +111,36 @@ class ApplyPayrollPreset extends Command
             $problems[] = 'It isn\'t confirmed: check every CONFIRM value with the organization, then set "confirmed": true.';
         }
         foreach ($preset['exchange_rates'] ?? [] as $r) {
+            $label = "Exchange rate {$r['currency']} " . ($r['rate_type'] ?? ExchangeRate::STANDARD) . ' from ' . ($r['effective_date'] ?? '?');
             if (!is_numeric($r['rate'] ?? null) || $r['rate'] <= 0) {
-                $problems[] = "Exchange rate {$r['currency']} {$r['year']} has no rate.";
+                $problems[] = "{$label} has no rate.";
+            }
+            if (empty($r['effective_date']) || strtotime((string) $r['effective_date']) === false) {
+                $problems[] = "{$label} needs an effective_date (YYYY-MM-DD).";
+            }
+            if (!in_array($r['rate_type'] ?? ExchangeRate::STANDARD, ExchangeRate::TYPES, true)) {
+                $problems[] = "{$label}: rate_type must be standard or basic.";
+            }
+        }
+        foreach (['work_sites' => 'Site', 'cost_centres' => 'Cost centre'] as $list => $label) {
+            foreach ($preset[$list] ?? [] as $i => $item) {
+                if (blank($item['code'] ?? null) || blank($item['name'] ?? null)) {
+                    $problems[] = "{$label} " . ($i + 1) . ' needs a code and a name.';
+                }
+            }
+        }
+        // A step for a role or permission needs one that exists here.
+        foreach ($preset['workflows'] ?? [] as $w) {
+            foreach ($w['steps'] ?? [] as $step) {
+                $model = match ($step['approver_type'] ?? null) {
+                    'role' => \Spatie\Permission\Models\Role::class,
+                    'permission' => \Spatie\Permission\Models\Permission::class,
+                    default => null,
+                };
+                $name = $step['approver_value'][0] ?? null;
+                if ($model && (!$name || !$model::where('name', $name)->where('guard_name', 'web')->exists())) {
+                    $problems[] = "Workflow \"{$w['name']}\", step \"{$step['name']}\": there is no {$step['approver_type']} \"{$name}\". Create it first (Employee management › System & Access › Roles & permissions), or change the step.";
+                }
             }
         }
         $codes = [];

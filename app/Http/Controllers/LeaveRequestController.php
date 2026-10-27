@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Statuses;
 use App\Services\Leave\LeaveApprover;
 
 use App\Exports\LeaveRequestExport;
@@ -91,9 +92,11 @@ class LeaveRequestController extends Controller
         try {
             $employee = Auth::user()->employee;
 
-            // The nearest head above them; a department head with no one above goes straight to HR.
+            // Their supervisor, then any heads above (setting leave.approval_chain); a department head with no one
+            // above goes straight to HR.
             $approvers = app(LeaveApprover::class);
-            $hod = $approvers->for($employee) ?? ($approvers->headsOwnChain($employee) ? $employee : null);
+            $chain = $approvers->chainFor($employee);
+            $hod = $chain->first() ?? ($approvers->headsOwnChain($employee) ? $employee : null);
 
             if (empty($hod)) {
                 return response()->json([
@@ -157,6 +160,8 @@ class LeaveRequestController extends Controller
                 'employee_id' => $employee->id,
                 'reliever_id' => $relieverId,
                 'supervisor_id' => $hod->id,
+                'approval_chain' => $chain->isNotEmpty() ? $chain->pluck('id')->all() : null,
+                'approval_step' => $chain->isNotEmpty() ? 0 : null,
                 'department_id' => $employee->department->id,
                 'leave_type_id' => $leaveType->id,
                 'days_requested' => $daysRequested,
@@ -191,15 +196,17 @@ class LeaveRequestController extends Controller
                     'decided_at' => Carbon::now(),
                     'days_approved' => $daysRequested,
                 ]);
-                $leaveRequest->update(['status' => 'hod_approved']);
+                // Nobody above them: HR decides; without an HR step (leave.hr_approval off) it's approved as asked.
+                $hrStep = feature('leave.hr_approval');
+                $leaveRequest->update(['status' => $hrStep ? Statuses::HOD_APPROVED->value : Statuses::HR_APPROVED->value, 'days_approved' => $daysRequested]);
 
-                $mailData['lines'] = [
-                    "Your $daysRequested day(s) leave request has been sent, pending HR decision."
-                ];
+                $mailData['lines'] = [$hrStep
+                    ? "Your $daysRequested day(s) leave request has been sent, pending HR decision."
+                    : "Your $daysRequested day(s) leave request has been recorded as approved."];
 
-                $hrMailData['lines'] = [
-                    "Please note that $employee->name has submitted a $daysRequested day leave request, which is currently pending your action."
-                ];
+                $hrMailData['lines'] = [$hrStep
+                    ? "Please note that $employee->name has submitted a $daysRequested day leave request, which is currently pending your action."
+                    : "Please note that $employee->name has taken $daysRequested day(s) of leave, starting $startDate (approved automatically: there's no one above them)."];
             } else {
                 $mailData['lines'] = [
                     "$employee->name has requested $daysRequested day(s) off,",
@@ -258,9 +265,11 @@ class LeaveRequestController extends Controller
         try {
             $leaveRequest = LeaveRequest::where('uuid', $request->id)->first();
 
-            if (!$this->approvesLeave($leaveRequest)) {
+            if (!$this->approvesLeave($leaveRequest, true)) {
                 return response()->json([
-                    'message' => 'You can only approve leave requests sent to you or from departments you head.',
+                    'message' => $leaveRequest?->approval_chain
+                        ? 'This leave request is waiting for someone else\'s decision.'
+                        : 'You can only approve leave requests sent to you or from departments you head.',
                 ], 403);
             }
 
@@ -278,10 +287,18 @@ class LeaveRequestController extends Controller
             }
 
             $daysApproved = $decision == 'approved' ? $daysApproved : 0;
+            // Approved with more heads to go: it moves to the next one instead of HR.
+            $step = (int) ($leaveRequest->approval_step ?? 0);
+            $next = $decision === 'approved' ? $leaveRequest->nextApproverId() : null;
+            $nextHead = $next ? Employee::with('contactDetail')->find($next) : null;
+            // Without an HR step (feature leave.hr_approval off), the last head's approval is the final one.
+            $final = $decision === 'approved' && !$nextHead && !feature('leave.hr_approval');
             $leaveRequest->update([
                 'days_approved' => $daysApproved,
                 'start_date' => Carbon::parse($request->start_date)->format('Y-m-d'),
-                'status' => $request->status,
+                'status' => $nextHead ? 'pending' : ($final ? Statuses::HR_APPROVED->value : ($decision === 'approved' ? Statuses::HOD_APPROVED->value : Statuses::HOD_REJECTED->value)),
+                'supervisor_id' => $nextHead?->id ?? $leaveRequest->supervisor_id,
+                'approval_step' => $nextHead ? $leaveRequest->approval_step + 1 : $leaveRequest->approval_step,
                 'sup_reason' => $request->sup_reason,
                 'end_date' => $this->leaveHelper->lastDate ?: $leaveRequest->end_date,
                 'sup_approval' => $date,
@@ -293,6 +310,8 @@ class LeaveRequestController extends Controller
             $leaveRequest->approvals()->create([
                 'approved_by' => $hod->id,
                 'role' => 'hod',
+                // Which head in the chain (0 = the supervisor).
+                'step' => $step,
                 'decision' => $decision,
                 'comment' => $request->sup_reason,
                 'decided_at' => Carbon::now(),
@@ -318,7 +337,29 @@ class LeaveRequestController extends Controller
                 'greeting' => "Dear $emp!",
             ];
 
-            if ($decision == 'approved') {
+            if ($nextHead) {
+                $mailData['lines'] = [
+                    "Your leave request has been approved by $hodName and is now with {$nextHead->name} for approval.",
+                ];
+                if ($nextHead->contactDetail?->work_email) {
+                    Notification::route('mail', $nextHead->contactDetail->work_email)->notify(new LeaveRequestNotification([
+                        'subject'  => 'Time off Request',
+                        'greeting' => "Dear {$nextHead->first_name}!",
+                        'lines'    => [
+                            "$emp has requested $daysApproved day(s) off, approved by $hodName.",
+                            "Starting from " . Carbon::parse($request->start_date)->format('l, M d Y') . ". It's waiting for your decision.",
+                        ],
+                    ]));
+                }
+            } elseif ($final) {
+                $start = Carbon::parse($request->start_date)->format('F d, Y');
+                $end = Carbon::parse($leaveRequest->end_date)->format('F d, Y');
+                $mailData['lines'] = [
+                    "We are pleased to inform you that your leave request has been approved by $hodName.",
+                    "Your approved leave period will commence on $start, and conclude on $end.",
+                    "If you have any questions or require further clarification, please do not hesitate to reach out."
+                ];
+            } elseif ($decision == 'approved') {
                 $mailData['lines'] = [
                     "We are pleased to inform you that your leave request has been $decision by $hodName,pending HR decision.",
                     "If you have any questions or require further clarification, please do not hesitate to reach out."

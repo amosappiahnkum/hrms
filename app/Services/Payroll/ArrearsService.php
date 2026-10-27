@@ -46,8 +46,10 @@ class ArrearsService
                     continue;
                 }
                 $currency = strtoupper($profile->currency ?: (string) ($slip->run->settings['base_currency'] ?? setting('payroll.base_currency', 'GHS')));
-                $base = strtoupper((string) ($slip->run->settings['base_currency'] ?? setting('payroll.base_currency', 'GHS')));
-                $rate = $currency === $base ? 1.0 : ($slip->run->exchange_rates[$currency] ?? null);
+                // The rate that run converted basic at: the employee's fixed rate, else the run's basic or standard rate.
+                $rate = $profile->fixed_exchange_rate !== null && $profile->currency
+                    ? (float) $profile->fixed_exchange_rate
+                    : $slip->run->rateFor($currency, \App\Models\Payroll\ExchangeRate::BASIC);
                 if ($rate === null) {
                     continue;
                 }

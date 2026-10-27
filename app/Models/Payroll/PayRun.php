@@ -77,4 +77,20 @@ class PayRun extends AppModel implements ApprovalSubject
 
         return "{$this->name}: {$this->totals['employees']} employees, net pay {$net}";
     }
+
+    /**
+     * The rate this run used to convert a currency (1 for the base currency, null when it had none). A basic
+     * rate falls back to the standard one.
+     */
+    public function rateFor(string $currency, string $type = ExchangeRate::STANDARD): ?float
+    {
+        $currency = strtoupper($currency);
+        if ($currency === strtoupper((string) ($this->settings['base_currency'] ?? setting('payroll.base_currency', 'GHS')))) {
+            return 1.0;
+        }
+        $rates = $this->exchange_rates[$currency] ?? [];
+        $rate = ($type === ExchangeRate::BASIC ? ($rates[ExchangeRate::BASIC]['rate'] ?? null) : null) ?? ($rates[ExchangeRate::STANDARD]['rate'] ?? null);
+
+        return $rate === null ? null : (float) $rate;
+    }
 }

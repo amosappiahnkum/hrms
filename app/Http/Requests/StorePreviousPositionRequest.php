@@ -68,13 +68,14 @@ class StorePreviousPositionRequest extends FormRequest
             ]);
         }
 
-        $this->merge([
-            'start' => Carbon::parse($this->date)->format('Y-m-d'),
-        ]);
-
+        if ($this->start) {
+            $this->merge([
+                'start' => Carbon::parse($this->start)->format('Y-m-d'),
+            ]);
+        }
         if ($this->end) {
             $this->merge([
-                'end' => Carbon::parse($this->date)->format('Y-m-d'),
+                'end' => Carbon::parse($this->end)->format('Y-m-d'),
             ]);
         }
     }

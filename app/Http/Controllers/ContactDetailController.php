@@ -14,7 +14,6 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ContactDetailController extends Controller
@@ -69,8 +68,8 @@ class ContactDetailController extends Controller
             DB::commit();
             return ApiResponse::success([]);
         } catch (Exception $exception) {
-            Log::error('Update Contact Error', ['error' => $exception]);
-            return response()->json(['message' => 'Something went wrong'], 400);
+            DB::rollBack();
+            return ApiResponse::fromException($exception);
         }
     }
 }

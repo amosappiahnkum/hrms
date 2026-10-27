@@ -9,6 +9,7 @@ use App\Models\Payroll\Approval;
 use App\Models\Payroll\PayRun;
 use App\Models\Payroll\Payslip;
 use App\Services\Payroll\ApprovalWorkflowService;
+use App\Services\Payroll\PayPeriod;
 use App\Services\Payroll\PayRunService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -47,6 +48,24 @@ class PayRunController extends Controller
         $run = $this->runs->create($data['year'], $data['month'], $data['type'] ?? 'regular', $data['pay_date'] ?? null, $request->user());
 
         return ApiResponse::success($this->summary($run), 'Pay run created.', 201);
+    }
+
+    /** The dates a new run for a month would cover, and its default pay date. */
+    public function period(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'year'  => ['required', 'integer', 'between:2000,2100'],
+            'month' => ['required', 'integer', 'between:1,12'],
+        ]);
+        $period = PayPeriod::forMonth($data['year'], $data['month']);
+
+        return ApiResponse::success([
+            'period_start' => $period->start->toDateString(),
+            'period_end'   => $period->end->toDateString(),
+            'label'        => $period->label(),
+            'working_days' => $period->workingDays(),
+            'pay_date'     => $this->runs->defaultPayDate($data['year'], $data['month'])->toDateString(),
+        ]);
     }
 
     public function show(Request $request, PayRun $payRun): JsonResponse
@@ -193,11 +212,22 @@ class PayRunController extends Controller
     {
         $num = fn ($v) => $v === null ? null : (float) $v;
 
+        $presented = app(\App\Services\Payroll\PayslipPresenter::class)->present($p);
+
         return [
             'uuid'     => $p->uuid,
             'employee' => $p->employee_snapshot,
-            'figures'  => collect(['proration', 'basic_salary', 'gross_pay', 'taxable_income', 'ssnit_employee', 'ssnit_employer', 'tier1', 'tier2', 'tier3', 'paye', 'total_deductions', 'net_pay', 'employer_cost'])
+            // As the payslip prints it: period, engagement date, cost centre, exchange rates, payment; and its totals.
+            'header'   => $presented['header'],
+            'totals'   => $presented['totals'],
+            // The lines as printed (always-printed ones at "–"), for the payslip view; `lines` below has every line.
+            'earnings'   => $presented['earnings'],
+            'deductions' => $presented['deductions'],
+            'employer'   => $presented['employer'],
+            'figures'  => collect(['proration', 'basic_salary', 'gross_pay', 'taxable_income', 'ssnit_employee', 'ssnit_employer', 'tier1', 'tier2', 'tier3', 'paye', 'withholding_tax', 'total_deductions', 'net_pay', 'employer_cost'])
                 ->mapWithKeys(fn ($f) => [$f => (float) $p->{$f}])->all(),
+            // When components followed days worked: the period's working days and the days worked.
+            'days'     => $p->days_worked !== null ? ['working' => (int) $p->working_days, 'worked' => (float) $p->days_worked] : null,
             'warnings' => $p->warnings ?? [],
             'lines'    => $p->lines->map(fn ($l) => [
                 'code' => $l->code, 'name' => $l->name, 'kind' => $l->kind, 'source' => $l->source,

@@ -36,6 +36,10 @@ class PayrollAudit
         Payroll\LoanType::class             => 'Loan type',
         Payroll\Loan::class                 => 'Loan',
         Payroll\LoanRepayment::class        => 'Loan repayment',
+        Payroll\WorkSite::class             => 'Site',
+        Payroll\Client::class               => 'Client',
+        Payroll\WorkOrder::class            => 'Work order',
+        Payroll\CostCentre::class           => 'Cost centre',
         Setting::class                      => 'Payroll setting',
     ];
 

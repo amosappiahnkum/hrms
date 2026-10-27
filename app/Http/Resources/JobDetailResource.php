@@ -4,6 +4,8 @@ namespace App\Http\Resources;
 
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Services\InfoDifferenceService;
+use App\Services\UpdateApprovalService;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class JobDetailResource extends JsonResource
@@ -28,6 +30,17 @@ class JobDetailResource extends JsonResource
             'job_category_uuid' => $this->jobCategory->uuid,
             'job_category' => $this->jobCategory->name,
             'info_update' => $this->informationUpdate,
+            // A pending change, shaped for the form (uuids) and for display (names).
+            'pending_values' => $this->informationUpdate
+                ? app(UpdateApprovalService::class)->formValues($this->resource, $this->informationUpdate->new_info ?? [])
+                : null,
+            'pending_changes' => $this->informationUpdate
+                ? app(InfoDifferenceService::class)->buildDiff(
+                    $this->resource,
+                    $this->informationUpdate->old_info ?? [],
+                    $this->informationUpdate->new_info ?? []
+                )
+                : [],
         ];
     }
 }

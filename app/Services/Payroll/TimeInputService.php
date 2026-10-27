@@ -27,12 +27,20 @@ class TimeInputService
     {
     }
 
-    /** Components entered as units: active, priced per unit. */
+    /**
+     * Components entered as units: active, priced per unit, with an entered quantity. Days worked comes
+     * first when a component follows it; components priced per day worked take it from there instead.
+     */
     public function components(): Collection
     {
-        return PayComponent::where('active', true)->where('is_system', false)
+        $units = PayComponent::where('active', true)->where('is_system', false)
             ->where('calculation', ComponentCalculation::RATE_PER_UNIT)
+            ->where('quantity_source', PayComponent::QUANTITY_INPUT)
             ->orderBy('sort_order')->orderBy('name')->get();
+
+        $daysWorked = PayComponent::daysWorkedInUse() ? PayComponent::where('code', PayComponent::DAYS_WORKED)->first() : null;
+
+        return $daysWorked ? $units->prepend($daysWorked)->values() : $units;
     }
 
     /** The entry that counts for an employee, component and month (pending or approved). */
@@ -91,6 +99,41 @@ class TimeInputService
     }
 
     /**
+     * Set a quantity from an approved timesheet (approved already: the timesheet went through its own
+     * workflow). Replaces what's entered for that employee, component and month.
+     */
+    public function fromTimesheet(\App\Models\Payroll\Timesheet $sheet, PayComponent $component, float $quantity): ?TimeInput
+    {
+        $employee = $sheet->employee;
+        // What's entered by hand, or by this sheet before, is replaced; a freelancer's other sheets that month add up.
+        $existing = TimeInput::where(['employee_id' => $employee->id, 'pay_component_id' => $component->id, 'year' => $sheet->year, 'month' => $sheet->month])
+            ->whereIn('status', ['pending', 'approved'])
+            ->where(fn ($q) => $q->whereNull('timesheet_id')->orWhere('timesheet_id', $sheet->id))
+            ->latest('id')->first();
+        if ($existing?->payRun && !$existing->payRun->status->isOpen()) {
+            throw new UserFacingException("{$employee->name}'s {$component->name} for {$sheet->label()} is in {$existing->payRun->name}, which has been sent for approval, so it can't change.");
+        }
+        if ($existing) {
+            if ($existing->payRun?->status === \App\Enums\Payroll\PayRunStatus::CALCULATED) {
+                $existing->payRun->update(['status' => \App\Enums\Payroll\PayRunStatus::DRAFT]);
+            }
+            if ($existing->approval?->isPending()) {
+                $this->approvals->cancel($existing->approval);
+            }
+            $existing->update(['status' => Approval::CANCELLED]);
+            $existing->delete();
+        }
+        if ($quantity <= 0) {
+            return null;
+        }
+
+        return TimeInput::create([
+            'employee_id' => $employee->id, 'pay_component_id' => $component->id, 'year' => $sheet->year, 'month' => $sheet->month,
+            'quantity' => round($quantity, 2), 'notes' => "Timesheet {$sheet->label()}", 'status' => 'approved', 'timesheet_id' => $sheet->id,
+        ]);
+    }
+
+    /**
      * The month's sheet: every employee by every per-unit component, filled with what's entered.
      * Entries already in a pay run sent for approval are locked.
      */
@@ -100,7 +143,7 @@ class TimeInputService
         $employees = Employee::with('department')->orderBy('first_name')->orderBy('last_name')->get();
         $entries = TimeInput::where(['year' => $year, 'month' => $month])->whereIn('status', ['pending', 'approved'])
             ->with(['payRun', 'employee:id,uuid'])->get();
-        $period = Carbon::create($year, $month, 1)->format('F Y');
+        $period = PayPeriod::forMonth($year, $month)->label();
 
         $columns = $components->map(fn (PayComponent $c) => [
             'ref'     => $c->uuid,
@@ -126,7 +169,8 @@ class TimeInputService
      */
     public function importGrid(int $year, int $month, string $path, User $user, bool $apply = true): array
     {
-        $days = Carbon::create($year, $month, 1)->daysInMonth;
+        $payPeriod = PayPeriod::forMonth($year, $month);
+        $days = (int) $payPeriod->start->diffInDays($payPeriod->end) + 1;
         $grid = Sheets\EmployeeGrid::read($path);
         $expected = 'time-inputs:' . sprintf('%04d-%02d', $year, $month);
         if ($grid['reference'] !== $expected) {
@@ -177,7 +221,7 @@ class TimeInputService
                 $plans[] = [$employee, $component, $quantity ?: null];
                 $fields[] = ['label' => $component->name, 'from' => $existing ? (string) (float) $existing->quantity : '—', 'to' => $quantity ? $quantity . ' ' . ($component->unit ?: 'units') : 'removed'];
                 if ($quantity && str_starts_with((string) $component->unit, 'day') && $quantity > $days) {
-                    $warnings[] = "{$quantity} days of {$component->name}, more than the month's {$days}.";
+                    $warnings[] = "{$quantity} days of {$component->name}, more than the period's {$days}.";
                 }
                 if ($existing && $quantity && setting('payroll.time_inputs_require_approval', true)) {
                     $warnings[] = "{$component->name} changes, so it goes for approval again.";

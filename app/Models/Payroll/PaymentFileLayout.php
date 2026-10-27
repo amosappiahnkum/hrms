@@ -18,6 +18,8 @@ class PaymentFileLayout extends AppModel
         'account_number'        => 'Account number',
         'bank_name'             => 'Bank',
         'bank_branch'           => 'Branch',
+        'bank_code'             => 'Bank code',
+        'bank_branch_sort_code' => 'Branch sort code',
         'mobile_money_provider' => 'Mobile money provider',
         'mobile_money_number'   => 'Mobile money number',
         'amount'                => 'Amount (net pay)',
@@ -26,7 +28,13 @@ class PaymentFileLayout extends AppModel
         'pay_date'              => 'Pay date',
     ];
 
-    protected $fillable = ['name', 'payment_method', 'bank_name', 'format', 'delimiter', 'include_header', 'columns'];
+    protected $fillable = ['name', 'payment_method', 'bank_id', 'format', 'delimiter', 'include_header', 'columns'];
+
+    /** Only employees paid through this bank; none: everyone paid by the method. */
+    public function bank(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Bank::class)->withTrashed();
+    }
 
     protected $casts = ['include_header' => 'boolean', 'columns' => 'array'];
 }

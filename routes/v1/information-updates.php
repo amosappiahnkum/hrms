@@ -7,6 +7,7 @@ Route::middleware('feature:information_updates.enabled')->group(function () {
     // The requester can see their own requests; show() checks ownership.
     Route::get('approvals/mine', [InformationUpdateController::class, 'myRequest']);
     Route::get('approvals/{information_update}', [InformationUpdateController::class, 'show']);
+    Route::put('approvals/{information_update}', [InformationUpdateController::class, 'updatePending']);
 
     Route::middleware('permission:approve-employee-update')->group(function () {
         Route::apiResource('information-updates', InformationUpdateController::class);

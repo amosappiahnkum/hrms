@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Mail\SupportReceiptMail;
+use App\Mail\SupportRequestMail;
 use App\Mail\SupportResolutionMail;
 use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
@@ -34,8 +35,19 @@ class SupportController extends Controller
             ticketNo:    $ticketNo,
         );
 
+        // The support team gets the message itself, ready to reply to; the person asking gets a receipt.
+        if ($supportMail = config('app.support_mail')) {
+            Mail::to($supportMail)->queue(new SupportRequestMail(
+                name:         $user->name,
+                email:        $user->email,
+                organization: $company['name'] ?? config('app.name'),
+                ticketNo:     $ticketNo,
+                description:  $request->description,
+                submittedAt:  now()->format('D, d M Y \a\t g:i A'),
+            ));
+        }
+
         Mail::to($user->email)
-            ->bcc(config('app.support_mail'))
             ->queue(new SupportReceiptMail(
             name:           $user->name,
             requestSubject: ($company['name'] ?? 'Kazi360'),

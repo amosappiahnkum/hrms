@@ -18,7 +18,7 @@ class EmployeeAnalyticsController extends Controller
         if ($request->filled('department')) {
             $dept = Department::where('uuid', $request->department)->first();
             if ($dept) {
-                $base->where('department_id', $dept->id);
+                $base->whereIn('department_id', Department::subtreeIds($dept->id));
             }
         }
 
@@ -246,7 +246,7 @@ class EmployeeAnalyticsController extends Controller
         // New hires per month via job_details.joined_date
         $hires = Employee::query()
             ->join('job_details', 'employees.id', '=', 'job_details.employee_id')
-            ->when($deptId, fn($q) => $q->where('employees.department_id', $deptId))
+            ->when($deptId, fn($q) => $q->whereIn('employees.department_id', Department::subtreeIds($deptId)))
             ->whereYear('job_details.joined_date', $year)
             ->selectRaw('MONTH(app_job_details.joined_date) as month_num, COUNT(*) as count')
             ->groupBy('month_num')
@@ -254,7 +254,7 @@ class EmployeeAnalyticsController extends Controller
 
         // Terminations per month via employees.termination_date (including soft-deleted)
         $terminations = Employee::withTrashed()
-            ->when($deptId, fn($q) => $q->where('department_id', $deptId))
+            ->when($deptId, fn($q) => $q->whereIn('department_id', Department::subtreeIds($deptId)))
             ->whereNotNull('termination_date')
             ->whereYear('termination_date', $year)
             ->selectRaw('MONTH(termination_date) as month_num, COUNT(*) as count')

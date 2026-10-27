@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\LeaveRequestResource;
-use App\Http\Resources\MyTeamResource;
-use App\Models\EmployeeSupervisor;
 use App\Models\LeaveRequest;
 use App\Models\SelfService\Employee;
 use Illuminate\Contracts\Foundation\Application;
@@ -54,13 +52,6 @@ class HomeController extends Controller
         return response()->json([
             'leaveRequest' => LeaveRequestResource::collection($leaveRequest->limit(2)->get())
         ]);
-    }
-
-    public function getMyTeam(): JsonResponse
-    {
-        $myTeam = EmployeeSupervisor::where('supervisor_id', Auth::user()->employee->id)->get();
-
-        return response()->json(MyTeamResource::collection($myTeam));
     }
 
     public function getWhoIsOut(): JsonResponse

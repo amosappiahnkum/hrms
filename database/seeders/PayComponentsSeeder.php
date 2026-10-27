@@ -38,6 +38,13 @@ class PayComponentsSeeder extends Seeder
             'taxable' => true, 'ssnit_applicable' => true, 'recurring' => false, 'prorate' => false,
             'show_on_payslip' => true, 'sort_order' => 5, 'is_system' => true,
         ]);
+        // Days worked in the period: entered like a time input, never paid itself. Components that follow
+        // days worked (prorated by them, or priced per day worked) read it.
+        PayComponent::withTrashed()->firstOrCreate(['code' => PayComponent::DAYS_WORKED], [
+            'name' => 'Days worked', 'kind' => ComponentKind::EARNING, 'calculation' => ComponentCalculation::RATE_PER_UNIT,
+            'rate' => 0, 'unit' => 'day', 'taxable' => false, 'ssnit_applicable' => false, 'recurring' => false, 'prorate' => false,
+            'show_on_payslip' => false, 'sort_order' => 0, 'is_system' => true,
+        ]);
         PayComponent::withTrashed()->firstOrCreate(['code' => PayComponent::LOAN_DISBURSEMENT], [
             'name' => 'Loan paid out', 'kind' => ComponentKind::EARNING, 'calculation' => ComponentCalculation::MANUAL,
             'taxable' => false, 'ssnit_applicable' => false, 'recurring' => false, 'prorate' => false,

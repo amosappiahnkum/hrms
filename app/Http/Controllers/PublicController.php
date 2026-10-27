@@ -27,7 +27,7 @@ class PublicController extends Controller
         $employees = Employee::query()
             ->with('highestQualification')
             ->when($request->department, function ($q, $uuid) {
-                $q->whereHas('department', fn($d) => $d->where('uuid', $uuid));
+                $q->whereIn('department_id', \App\Models\Config\Department::subtreeIdsByUuid($uuid));
             })
             ->when($request->rank, function ($q, $uuid) {
                 $q->whereHas('rank', fn($r) => $r->where('uuid', $uuid));

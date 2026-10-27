@@ -64,6 +64,10 @@ class AssessmentAttemptResource extends JsonResource
                 ])
             ),
             'responses_count' => $this->when(isset($this->responses_count), $this->responses_count),
+            // The heads endorsing it before HR: each step, who decided and when (when loaded).
+            'endorsement'     => $this->whenLoaded('approval', fn () => $this->approval
+                ? \App\Http\Controllers\Payroll\ApprovalController::summary($this->approval->loadMissing('decisions.decider'))
+                : null),
             'events'          => $this->whenLoaded('events', fn () =>
                 AssessmentAttemptEventResource::collection($this->events)
             ),

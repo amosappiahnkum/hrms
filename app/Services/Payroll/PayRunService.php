@@ -15,6 +15,7 @@ use App\Models\Payroll\StatutoryRateSet;
 use App\Models\SelfService\Employee;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /** A pay run's life: created, calculated (as often as needed), sent for approval, approved, paid. */
@@ -29,19 +30,28 @@ class PayRunService
         if ($type === 'regular' && PayRun::where('year', $year)->where('month', $month)->where('type', 'regular')->exists()) {
             throw new UserFacingException('There is already a pay run for this month. Use an off-cycle run for extra payments.');
         }
-        $start = Carbon::create($year, $month, 1)->startOfDay();
+        $period = PayPeriod::forMonth($year, $month);
 
         return PayRun::create([
             'year'         => $year,
             'month'        => $month,
             'type'         => $type,
-            'name'         => ($type === 'off_cycle' ? 'Off-cycle payroll · ' : 'Payroll · ') . $start->format('F Y'),
-            'period_start' => $start->toDateString(),
-            'period_end'   => $start->copy()->endOfMonth()->toDateString(),
-            'pay_date'     => $payDate ?? $start->copy()->endOfMonth()->toDateString(),
+            'name'         => ($type === 'off_cycle' ? 'Off-cycle payroll · ' : 'Payroll · ') . Carbon::create($year, $month, 1)->format('F Y'),
+            'period_start' => $period->start->toDateString(),
+            'period_end'   => $period->end->toDateString(),
+            'pay_date'     => $payDate ?? $this->defaultPayDate($year, $month)->toDateString(),
             'status'       => PayRunStatus::DRAFT,
             'prepared_by'  => $user->id,
         ]);
+    }
+
+    /** The pay day in the run's month (setting `payroll.pay_day`; 0: the last day). */
+    public function defaultPayDate(int $year, int $month): Carbon
+    {
+        $month = Carbon::create($year, $month, 1)->startOfDay();
+        $day = (int) setting('payroll.pay_day', 0);
+
+        return $day > 0 ? $month->day(min($day, $month->daysInMonth)) : $month->endOfMonth()->startOfDay();
     }
 
     /** (Re)calculate every payslip. Refuses without confirmed statutory rates, or with a currency missing its rate. */
@@ -61,24 +71,34 @@ class PayRunService
             throw new UserFacingException("The statutory rates \"{$statutory->name}\" haven't been confirmed. Check and confirm them in Payroll → Settings first.");
         }
 
+        $rateDate = $this->rateDate($run);
         $settings = [
             'base_currency'          => strtoupper((string) setting('payroll.base_currency', 'GHS')),
             'working_days_per_month' => (int) setting('payroll.working_days_per_month', 22),
             'hours_per_day'          => (float) setting('payroll.hours_per_day', 8),
             'overtime_tax_method'    => (string) setting('payroll.overtime_tax_method', 'income'),
             'bonus_tax_method'       => (string) setting('payroll.bonus_tax_method', 'gra_bonus'),
+            'working_days'           => PayPeriod::ofRun($run)->workingDays(),
+            'overtime_hourly_basis'  => (string) setting('payroll.overtime_hourly_basis', 'fixed_days'),
+            'overtime_monthly_hours' => (float) setting('payroll.overtime_monthly_hours', 173.33),
+            // Which rate converts a foreign-currency basic for overtime's hourly rate: basic's own, or the standard rate.
+            'overtime_rate_type'     => (string) setting('payroll.overtime_rate_type', ExchangeRate::BASIC),
+            'rate_date'              => $rateDate->toDateString(),
+            // Freelancers: taxed as usual (paye) or by a flat withholding rate.
+            'freelance_tax'          => (string) setting('payroll.freelance_tax', 'paye'),
         ];
         $offCycle = $run->type === 'off_cycle';
         $regular = $offCycle ? PayRun::where(['year' => $run->year, 'month' => $run->month, 'type' => 'regular'])->first() : null;
         if ($offCycle && (!$regular || $regular->status === PayRunStatus::DRAFT)) {
             throw new UserFacingException('Calculate this month\'s regular pay run first: an off-cycle run is taxed on top of it.');
         }
-        $rates = ExchangeRate::where('year', $run->year)->pluck('rate', 'currency')->map(fn ($r) => (float) $r)->all();
+        $rates = $this->ratesOn($rateDate);
         $basic = PayComponent::where('code', PayComponent::BASIC)->firstOrFail();
         $calculator = new PayrollCalculator(['start' => $start, 'end' => $end], $statutory, $rates, $settings, $basic);
 
         // Approved overtime and time inputs, and due loan instalments, join the run (again on each calculation, so they are current).
-        app(OvertimeService::class)->claimFor($run);
+        // Overtime approved in advance and still waiting for its hours worked is noted on the payslip.
+        $overtimeWaiting = app(OvertimeService::class)->claimFor($run);
         app(TimeInputService::class)->claimFor($run);
         app(LoanService::class)->claimFor($run);
         $inputs = app(PayRunInputs::class)->forRun($run);
@@ -93,7 +113,7 @@ class PayRunService
             ->whereIn('id', $profiles->keys())
             ->where(fn ($q) => $q->whereNull('deleted_at')->orWhereDate('termination_date', '>=', $start))
             ->where(fn ($q) => $q->whereNull('termination_date')->orWhereDate('termination_date', '>=', $start))
-            ->with(['jobDetail.position', 'department', 'contactDetail'])
+            ->with(['jobDetail.position', 'jobDetail.costCentre', 'department', 'contactDetail'])
             ->get()
             ->filter(fn (Employee $e) => !$e->jobDetail?->joined_date || Carbon::parse($e->jobDetail->joined_date)->lte($end));
 
@@ -108,7 +128,10 @@ class PayRunService
         $inputs = app(PayRunInputs::class)->forRun($run);
 
         $paidIds = $employees->pluck('id')->flip();
-        $this->ensureRates($profiles->filter(fn ($p, $employeeId) => $paidIds->has($employeeId)), $components->flatten(), $inputs, $rates, $settings['base_currency'], $run->year);
+        // With pay from timesheets, note who has no approved timesheet for the month.
+        $noTimesheet = array_flip(app(TimesheetService::class)->missingFor($run, $employees->pluck('id')));
+        $sharedAccount = $this->sharedAccounts($employees, $profiles);
+        $this->ensureRates($profiles->filter(fn ($p, $employeeId) => $paidIds->has($employeeId)), $components->flatten(), $inputs, $rates, $settings['base_currency'], $rateDate);
 
         // Work everything out first: a missing rate stops the run before anything is saved.
         $results = $employees->mapWithKeys(fn (Employee $e) => [$e->id => $calculator->calculate(
@@ -118,10 +141,10 @@ class PayRunService
             $e->jobDetail?->joined_date ? Carbon::parse($e->jobDetail->joined_date) : null,
             $e->termination_date ? Carbon::parse($e->termination_date) : null,
             (bool) $e->ssnit_number,
-            ($prior[$e->id] ?? []) + ['off_cycle' => $offCycle],
+            ($prior[$e->id] ?? []) + ['off_cycle' => $offCycle, 'freelance' => $e->job_type === 'freelance'],
         )]);
 
-        DB::transaction(function () use ($run, $employees, $profiles, $results, $statutory, $rates, $settings, $user) {
+        DB::transaction(function () use ($run, $employees, $profiles, $results, $statutory, $rates, $settings, $user, $overtimeWaiting, $noTimesheet, $sharedAccount) {
             $run->payslips()->delete();
 
             foreach ($employees as $e) {
@@ -133,14 +156,21 @@ class PayRunService
                     'employee_snapshot' => [
                         'name' => trim(preg_replace('/\s+/', ' ', $e->name)), 'staff_id' => $e->staff_id,
                         'position' => $e->jobDetail?->position?->name, 'department' => $e->department?->name,
+                        'engagement_date' => $e->jobDetail?->joined_date ? Carbon::parse($e->jobDetail->joined_date)->toDateString() : null,
+                        // Their cost centre, else their department.
+                        'cost_centre' => $e->jobDetail?->costCentre?->name ?? $e->department?->name,
                         'ssnit_number' => $e->ssnit_number, 'tin' => $profile->tin ?? $e->contactDetail?->ghana_card_number,
                         'tier2_scheme' => $profile->tier2_scheme,
                     ],
-                    'payment_snapshot'  => collect($profile->only(['payment_method', 'bank_name', 'bank_branch', 'account_name', 'account_number', 'mobile_money_provider', 'mobile_money_number']))->all(),
+                    // With the bank's code and the branch's sort code as they are now (for payment files).
+                    'payment_snapshot'  => collect($profile->only(['payment_method', 'bank_name', 'bank_branch', 'account_name', 'account_number', 'mobile_money_provider', 'mobile_money_number']))
+                        ->merge($profile->payment_method === 'bank' ? ['bank_code' => $profile->bank?->code, 'bank_branch_sort_code' => $profile->branch?->sort_code] : [])->all(),
                     // Plain copies for filtering (the snapshot is encrypted).
                     'payment_method'    => $profile->payment_method,
+                    'bank_id'           => $profile->payment_method === 'bank' ? $profile->bank_id : null,
                     'bank_name'         => $profile->payment_method === 'bank' ? $profile->bank_name : null,
-                    'warnings'          => array_values(array_unique(array_merge($result['warnings'], array_diff($gaps, ['SSNIT number', 'TIN / Ghana Card'])))),
+                    'warnings'          => array_values(array_unique(array_merge($result['warnings'], $overtimeWaiting[$e->id] ?? [],
+                        isset($noTimesheet[$e->id]) ? ['No approved timesheet for this month.'] : [], $sharedAccount[$e->id] ?? [], array_diff($gaps, ['SSNIT number', 'TIN / Ghana Card'])))),
                 ]);
                 $payslip->lines()->createMany($result['lines']);
             }
@@ -158,6 +188,7 @@ class PayRunService
                     'employees'        => $slips->count(),
                     'gross_pay'        => $sum('gross_pay'),
                     'paye'             => $sum('paye'),
+                    'withholding_tax'  => $sum('withholding_tax'),
                     'ssnit_employee'   => $sum('ssnit_employee'),
                     'ssnit_employer'   => $sum('ssnit_employer'),
                     'tier2'            => $sum('tier2'),
@@ -172,16 +203,47 @@ class PayRunService
         return $run->fresh();
     }
 
-    /**
-     * Stop with a clear message when pay is set in a currency that has no rate for the year: which
-     * currency, and who or what uses it, so it can be fixed (add the rate, or correct the currency).
-     */
-    private function ensureRates($profiles, $components, array $inputs, array $rates, string $base, int $year): void
+    /** The date a run takes its exchange rates on (setting `payroll.exchange_rate_day` in the run's month; 0: the period's last day). */
+    public function rateDate(PayRun $run): Carbon
     {
-        $missing = fn (?string $c) => $c && strtoupper($c) !== $base && !isset($rates[strtoupper($c)]);
+        $day = (int) setting('payroll.exchange_rate_day', 0);
+        if ($day <= 0) {
+            return $run->period_end->copy()->startOfDay();
+        }
+        $month = Carbon::create($run->year, $run->month, 1)->startOfDay();
+
+        return $month->day(min($day, $month->daysInMonth));
+    }
+
+    /**
+     * Each currency's rates in force on a date, as the run records them:
+     * {"USD": {"standard": {"rate": 11.3933, "date": "2026-09-22"}, "basic": {"rate": 13, "date": "2026-09-01"}}}.
+     * The basic rate only when the organization uses one (setting `payroll.separate_basic_rate`).
+     */
+    public function ratesOn(Carbon $on): array
+    {
+        $separate = (bool) setting('payroll.separate_basic_rate', false);
+        $pick = fn (string $currency, string $type) => ($r = ExchangeRate::inForceOn($currency, $on, $type))
+            ? ['rate' => (float) $r->rate, 'date' => $r->effective_date->toDateString()] : null;
+
+        return ExchangeRate::query()->distinct()->orderBy('currency')->pluck('currency')
+            ->mapWithKeys(fn ($c) => [$c => ['standard' => $pick($c, ExchangeRate::STANDARD), 'basic' => $separate ? $pick($c, ExchangeRate::BASIC) : null]])
+            ->filter(fn ($r) => $r['standard'] || $r['basic'])
+            ->all();
+    }
+
+    /**
+     * Stop with a clear message when pay is set in a currency that has no rate in force: which currency, and
+     * who or what uses it, so it can be fixed (add the rate, or correct the currency). Basic salary needs a
+     * basic or standard rate (or the employee's fixed rate); everything else the standard rate.
+     */
+    private function ensureRates($profiles, $components, array $inputs, array $rates, string $base, Carbon $on): void
+    {
+        $missing = fn (?string $c) => $c && strtoupper($c) !== $base && empty($rates[strtoupper($c)]['standard']);
         $byCurrency = [];
         foreach ($profiles as $p) {
-            if ($missing($p->currency)) {
+            $foreign = $p->currency && strtoupper($p->currency) !== $base;
+            if ($foreign && $p->fixed_exchange_rate === null && empty($rates[strtoupper($p->currency)]['basic']) && empty($rates[strtoupper($p->currency)]['standard'])) {
                 $byCurrency[strtoupper($p->currency)]['employees'][$p->employee_id] = true;
             }
         }
@@ -201,13 +263,13 @@ class PayRunService
             return;
         }
 
-        $parts = collect($byCurrency)->map(function ($uses, $currency) use ($year) {
+        $parts = collect($byCurrency)->map(function ($uses, $currency) use ($on) {
             $who = array_filter([
                 isset($uses['employees']) ? count($uses['employees']) . ' employee' . (count($uses['employees']) === 1 ? "'s pay details" : "s' pay details") : null,
                 isset($uses['components']) ? 'the component' . (count($uses['components']) > 1 ? 's ' : ' ') . implode(', ', array_keys($uses['components'])) : null,
             ]);
 
-            return "no {$currency} exchange rate for {$year} (used by " . implode(' and ', $who) . ')';
+            return "no {$currency} exchange rate on or before {$on->format('j M Y')} (used by " . implode(' and ', $who) . ')';
         })->implode('; ');
 
         throw new UserFacingException('There is ' . $parts . '. Add the rate in Payroll → Settings → Exchange rates, or correct the currency on the pay details or component.');
@@ -259,6 +321,28 @@ class PayRunService
         });
 
         return $run->fresh();
+    }
+
+    /**
+     * Employees in the run paid into the same account (bank and number, or mobile money number) as someone else in it:
+     * a warning each, naming the others (details saved before duplicates were refused, or a mistake to fix first).
+     *
+     * @return array<int, array<string>>
+     */
+    private function sharedAccounts(Collection $employees, Collection $profiles): array
+    {
+        $names = $employees->mapWithKeys(fn (Employee $e) => [$e->id => trim(preg_replace('/\s+/', ' ', $e->name)) . ($e->staff_id ? " ({$e->staff_id})" : '')]);
+        $warnings = [];
+        $employees->groupBy(fn (Employee $e) => EmployeePayProfile::paymentKey($profiles[$e->id]->only(['payment_method', 'bank_id', 'account_number', 'mobile_money_number'])) ?? "none:{$e->id}")
+            ->filter(fn ($group) => $group->count() > 1)
+            ->each(function ($group) use ($names, &$warnings) {
+                foreach ($group as $e) {
+                    $others = $group->where('id', '!=', $e->id)->map(fn ($o) => $names[$o->id])->join(', ');
+                    $warnings[$e->id] = ["Paid into the same account as {$others}."];
+                }
+            });
+
+        return $warnings;
     }
 
     /**

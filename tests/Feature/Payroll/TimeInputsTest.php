@@ -108,7 +108,7 @@ class TimeInputsTest extends TestCase
         $sheet = $this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Offshore day' => 31] : null);
         $this->post('/api/v1/payroll/time-inputs/import', ['year' => 2026, 'month' => 6, 'file' => $sheet, 'check' => 1], ['Accept' => 'application/json'])
             ->assertOk()->assertJsonPath('data.changes.0.fields.0.to', '31 days')
-            ->assertJsonPath('data.changes.0.warnings.0', fn ($w) => str_contains($w, "more than the month's 30"));
+            ->assertJsonPath('data.changes.0.warnings.0', fn ($w) => str_contains($w, "more than the period's 30"));
         $this->assertSame(0, TimeInput::count());
 
         $import($this->fillGrid($template(), fn ($staff) => $staff === 'AI001' ? ['Offshore day' => 8] : null))

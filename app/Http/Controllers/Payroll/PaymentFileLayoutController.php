@@ -41,10 +41,11 @@ class PaymentFileLayoutController extends Controller
 
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'name'              => ['required', 'string', 'max:255'],
             'payment_method'    => ['required', Rule::in(['bank', 'mobile_money'])],
-            'bank_name'         => ['nullable', 'string', 'max:255'],
+            // A bank from the banks list: only the people paid through it.
+            'bank_uuid'         => ['nullable', 'uuid', Rule::exists('banks', 'uuid')->whereNull('deleted_at')],
             'format'            => ['required', Rule::in(['csv', 'xlsx'])],
             'delimiter'         => ['required_if:format,csv', 'nullable', Rule::in([',', ';', '|', '\t'])],
             'include_header'    => ['boolean'],
@@ -52,10 +53,16 @@ class PaymentFileLayoutController extends Controller
             'columns.*.field'   => ['required', Rule::in(array_keys(PaymentFileLayout::FIELDS))],
             'columns.*.heading' => ['required', 'string', 'max:100'],
         ]) + ['delimiter' => ','];
+        $data['bank_id'] = $data['payment_method'] === 'bank' && !empty($data['bank_uuid'])
+            ? \App\Models\Payroll\Bank::where('uuid', $data['bank_uuid'])->value('id') : null;
+        unset($data['bank_uuid']);
+
+        return $data;
     }
 
     private function row(PaymentFileLayout $l): array
     {
-        return $l->only(['uuid', 'name', 'payment_method', 'bank_name', 'format', 'delimiter', 'include_header', 'columns']);
+        return $l->only(['uuid', 'name', 'payment_method', 'format', 'delimiter', 'include_header', 'columns'])
+            + ['bank' => $l->bank ? BankController::row($l->bank) : null];
     }
 }

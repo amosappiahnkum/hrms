@@ -34,6 +34,20 @@ All models use UUID primary keys (see `app/Models/AppModel.php`), route model bi
 - **Permissions**: Check via Spatie: `$user->hasPermissionTo('edit employee')`.
 - **External Integrations**: Sync with SRMS via `Helper::updateSRMS()` (HTTP call to external API).
 
+## Reporting Lines & Approvals
+- **Who approves**: `App\Services\Org\ReportingLine` is the one answer. `supervisorOf()` = the employee's
+  `reports_to_id` (employee profile › Reporting line), else the head of their unit (nearest department above with a head
+  other than themselves); `chainAbove()` / `headsAbove()` = heads further up, with a stop rule (`top`, `count`,
+  `level`); `reportsOf()` = their direct reports. Don't walk `departments.hod` / `parent_department_id` yourself.
+- **Department filters include sub-departments**: use `Department::subtreeIds()` / `subtreeIdsByUuid()`. Levels:
+  `Department::levels()` (setting `org.department_levels`).
+- **Approval engine** (`App\Services\Payroll\ApprovalWorkflowService`): payroll workflows, and appraisal
+  endorsement (process `appraisal`, started with `startWith()` from `App\Services\Appraisal\AppraisalEndorsement`).
+  Steps are fixed on the request when it starts (`stepsFor()` expands "Heads up the chain").
+- **Leave** (`App\Services\Leave\LeaveApprover`, setting `leave.approval_chain`) keeps its own flow: the chain is on
+  `leave_requests.approval_chain`, `supervisor_id` is whose turn it is.
+- User guide: `docs/reporting-lines-guide.md`; design and as-built notes: `docs/reporting-lines-and-approval-chains-plan.md`.
+
 ## Common Tasks
 - Add new employee field: Update `Employee` model fillable, migration, and `EmployeeExport` map.
 - New leave type: Create in `LeaveType` model, update config in `LeaveTypeLevelConfig`.

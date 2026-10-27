@@ -20,14 +20,24 @@ return new class extends Migration
             $table->date('effective_from');
             $table->decimal('basic_salary', 14, 2);
             $table->string('currency', 3)->nullable(); // null: the base currency
+            // A contract rate for converting this employee's basic salary; null: the pay run's rate.
+            $table->decimal('fixed_exchange_rate', 14, 6)->nullable();
             $table->string('payment_method')->default('bank'); // bank | mobile_money | cash | cheque
+            // The bank (from the banks list), and its name as it was when saved (for display and payslips).
+            $table->foreignId('bank_id')->nullable()->constrained(indexName: 'pay_profiles_bank_fk')->nullOnDelete();
             $table->string('bank_name')->nullable();
+            // The branch (from the bank's branches), and its name as it was when saved.
+            $table->foreignId('bank_branch_id')->nullable()->constrained(indexName: 'pay_profiles_branch_fk')->nullOnDelete();
             $table->string('bank_branch')->nullable();
             $table->string('account_name')->nullable();
             // Encrypted at rest.
             $table->text('account_number')->nullable();
             $table->string('mobile_money_provider')->nullable();
             $table->text('mobile_money_number')->nullable();
+            // Keyed hashes of the numbers (see EmployeePayProfile::fingerprint): find two employees paid into the same
+            // account without decrypting every number. One-way: they can't give the number back.
+            $table->string('account_fingerprint', 64)->nullable()->index();
+            $table->string('mobile_money_fingerprint', 64)->nullable()->index();
             // Null: the Ghana Card PIN from contact details (the individual TIN since 2021).
             $table->string('tin')->nullable();
             $table->string('tier2_scheme')->nullable();

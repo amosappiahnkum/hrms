@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Config\Department;
-use App\Models\EmployeeSupervisor;
 use App\Models\Position;
 use App\Models\SelfService\Employee;
 use App\Models\TrainingPlan\TrainingPlan;
@@ -556,7 +555,7 @@ class CompetencyTest extends TestCase
         $employee = $this->employeeIn($this->officer);
         $this->assess($employee, [$ut => 2]);
         $leader = $this->userWithRole('staff');
-        EmployeeSupervisor::create(['supervisor_id' => $leader->employee_id, 'employee_id' => $employee->id]);
+        $employee->update(['reports_to_id' => $leader->employee_id]);
 
         // Not eligible yet: both requirements unmet.
         $this->getJson("/api/v1/competency/employees/{$employee->uuid}/authorization-options")->assertOk()
@@ -723,7 +722,7 @@ class CompetencyTest extends TestCase
 
         // A supervisor leads their direct reports.
         $supervisor = $this->userWithRole('staff');
-        EmployeeSupervisor::create(['supervisor_id' => $supervisor->employee_id, 'employee_id' => $inFinance->id]);
+        $inFinance->update(['reports_to_id' => $supervisor->employee_id]);
         Sanctum::actingAs($supervisor);
         $this->postJson("/api/v1/competency/employees/{$inFinance->uuid}/assessments")->assertOk();
         $this->assertSame(1, $this->getJson('/api/v1/competency/matrix')->json('data.meta.total'));

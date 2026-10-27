@@ -413,7 +413,7 @@ class TrainingPlanTest extends TestCase
         $item = $this->addItem($plan);
         $trainee = $item->employee->userAccount;
         $supervisor = $this->userWithRole('staff');
-        \App\Models\EmployeeSupervisor::create(['supervisor_id' => $supervisor->employee_id, 'employee_id' => $item->employee_id]);
+        \App\Models\SelfService\Employee::whereKey($item->employee_id)->update(['reports_to_id' => $supervisor->employee_id]);
         $this->approvePlan($plan);
 
         Sanctum::actingAs($this->hr);

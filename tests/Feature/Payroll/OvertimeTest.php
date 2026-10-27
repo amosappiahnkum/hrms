@@ -97,7 +97,8 @@ class OvertimeTest extends TestCase
 
         // HR (the fallback approver with no workflow set up) cuts the weekday hours to 8.
         Sanctum::actingAs($this->hr);
-        $inbox = $this->getJson('/api/v1/payroll/approvals')->assertOk()->assertJsonPath('data.meta.waiting_count', 2)->json('data.data');
+        $inbox = $this->getJson('/api/v1/payroll/approvals')->assertOk()->assertJsonPath('data.meta.waiting_count', 2)
+            ->assertJsonPath('data.meta.waiting_by_process', ['overtime' => 2])->json('data.data');
         $this->assertSame('approved_hours', $inbox[0]['adjustable'][0]['field']);
         $this->postJson("/api/v1/payroll/approvals/{$inbox[0]['uuid']}/decide", ['decision' => 'approved', 'adjustments' => ['approved_hours' => 12]])->assertStatus(422);
         $this->postJson("/api/v1/payroll/approvals/{$inbox[0]['uuid']}/decide", ['decision' => 'approved', 'adjustments' => ['approved_hours' => 8]])->assertOk();
@@ -125,5 +126,32 @@ class OvertimeTest extends TestCase
         // Removing the run hands the overtime back for the next one.
         $this->deleteJson("/api/v1/payroll/runs/{$run}")->assertOk();
         $this->assertSame(0, OvertimeRequest::whereNotNull('pay_run_id')->count());
+    }
+
+    public function test_offshore_is_paid_on_top_of_the_days_overtime(): void
+    {
+        Sanctum::actingAs($this->hr);
+        $off = PayComponent::create(['code' => 'OT_OFF', 'name' => 'Offshore overtime', 'kind' => 'earning', 'calculation' => 'rate_per_unit', 'rate' => 10, 'unit' => 'hour', 'taxable' => true]);
+        $offshore = $this->postJson('/api/v1/payroll/overtime-types', ['name' => 'Offshore', 'pay_component_uuid' => $off->uuid, 'applies_on' => 'any'])->assertCreated()->json('data.uuid');
+
+        Sanctum::actingAs($this->staff);
+        // Only an any-day type can be paid on top.
+        $this->request(['work_date' => '2026-06-26', 'hours' => 4, 'addon_type_uuid' => $this->weekend])->assertStatus(422);
+        $this->request(['work_date' => '2026-06-26', 'hours' => 4, 'addon_type_uuid' => $offshore])->assertCreated()
+            ->assertJsonPath('data.type.name', 'Weekday')->assertJsonPath('data.addon_type.name', 'Offshore');
+        // Older screens sent the any-day type as the type: it goes on top of the date's type.
+        $this->request(['work_date' => '2026-06-27', 'hours' => 2, 'overtime_type_uuid' => $offshore])->assertCreated()
+            ->assertJsonPath('data.type.name', 'Weekend & holiday')->assertJsonPath('data.addon_type.name', 'Offshore');
+
+        Sanctum::actingAs($this->hr);
+        foreach ($this->getJson('/api/v1/payroll/approvals')->json('data.data') as $approval) {
+            $this->postJson("/api/v1/payroll/approvals/{$approval['uuid']}/decide", ['decision' => 'approved'])->assertOk();
+        }
+
+        // 25 an hour: weekday 4 × 1.5 × 25 = 150, weekend 2 × 2 × 25 = 100, offshore (4 + 2) × 10 = 60.
+        $run = $this->postJson('/api/v1/payroll/runs', ['year' => 2026, 'month' => 6])->json('data.uuid');
+        $this->postJson("/api/v1/payroll/runs/{$run}/calculate")->assertOk()->assertJsonPath('data.totals.gross_pay', 4710);
+        $inputs = collect($this->getJson("/api/v1/payroll/runs/{$run}/inputs")->json('data'));
+        $this->assertCount(3, $inputs);
     }
 }

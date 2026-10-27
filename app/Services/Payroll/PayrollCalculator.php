@@ -7,6 +7,7 @@ use App\Enums\Payroll\ComponentKind;
 use App\Exceptions\UserFacingException;
 use App\Models\Payroll\EmployeePayComponent;
 use App\Models\Payroll\EmployeePayProfile;
+use App\Models\Payroll\ExchangeRate;
 use App\Models\Payroll\PayComponent;
 use App\Models\Payroll\StatutoryRateSet;
 use Illuminate\Support\Carbon;
@@ -23,8 +24,12 @@ class PayrollCalculator
 {
     /**
      * @param array{start: Carbon, end: Carbon} $period
-     * @param array<string, float> $rates exchange rates to the base currency, by currency
-     * @param array{base_currency: string, working_days_per_month: int, hours_per_day: float, overtime_tax_method: string, bonus_tax_method?: string} $settings
+     * @param array<string, array{standard: ?array{rate: float, date: string}, basic: ?array{rate: float, date: string}}> $rates
+     *        exchange rates to the base currency in force for the run, by currency (as `PayRunService::ratesOn()` gives them)
+     * @param array{base_currency: string, working_days_per_month: int, hours_per_day: float, overtime_tax_method: string, bonus_tax_method?: string,
+     *              working_days?: int, overtime_hourly_basis?: string, overtime_monthly_hours?: float, overtime_rate_type?: string,
+     *              rate_date?: string} $settings
+     *        `working_days`: the period's working days (for components that follow days worked).
      */
     public function __construct(
         private readonly array $period,
@@ -38,32 +43,93 @@ class PayrollCalculator
     /**
      * @param Collection<EmployeePayComponent> $components recurring components active in the period
      * @param array<array{component: PayComponent, quantity: ?float, amount: ?float, source: string}> $inputs per-run items (overtime, one-offs…)
-     * @param array{off_cycle?: bool, taxable?: float, ssnit_base?: float, bonus_concession_ytd?: float} $prior
+     * @param array{off_cycle?: bool, taxable?: float, ssnit_base?: float, bonus_concession_ytd?: float, freelance?: bool} $prior
      *        Off-cycle: only the inputs are paid, taxed on top of what the month's earlier runs taxed (`taxable`,
      *        `ssnit_base`). Bonus taxed at the bonus rate earlier in the year (`bonus_concession_ytd`).
+     *        `freelance`: no SSNIT, and taxed by withholding when the organization chooses (setting `freelance_tax`).
      */
     public function calculate(EmployeePayProfile $profile, Collection $components, array $inputs, ?Carbon $joined, ?Carbon $left, bool $hasSsnitNumber, array $prior = []): array
     {
         $warnings = [];
         $offCycle = (bool) ($prior['off_cycle'] ?? false);
+        $freelance = (bool) ($prior['freelance'] ?? false);
+        // A per-unit component given to the employee with their own amount: that amount is their rate (e.g. a
+        // freelancer's day rate), paid on the month's quantity.
+        $ownRates = $components
+            ->filter(fn ($given) => $given->amount !== null && $given->component->calculation === ComponentCalculation::RATE_PER_UNIT
+                && $given->component->quantity_source === PayComponent::QUANTITY_INPUT)
+            ->mapWithKeys(fn ($given) => [$given->pay_component_id => (float) $given->amount])->all();
         $factor = $offCycle ? 1.0 : $this->proration($joined, $left);
-        $basicMonthly = $this->convert((float) $profile->basic_salary, $profile->currency);
-        $hourly = $basicMonthly / max(1, $this->settings['working_days_per_month']) / max(0.5, $this->settings['hours_per_day']);
+        // Basic converts at the employee's fixed rate, else the basic rate (or the standard one).
+        $basicRate = $this->basicRate($profile);
+        $basicMonthly = (float) $profile->basic_salary * $basicRate;
+        // Overtime's hourly rate may convert basic at the standard rate instead (setting).
+        $overtimeBasic = ($this->settings['overtime_rate_type'] ?? ExchangeRate::BASIC) === ExchangeRate::STANDARD
+            ? $this->convert((float) $profile->basic_salary, $profile->currency)
+            : $basicMonthly;
+        $hourly = $overtimeBasic / $this->overtimeHours();
         $lines = [];
+
+        // Days worked aren't paid: they set the quantity or share of the components that follow them.
+        $daysWorked = null;
+        $inputs = array_values(array_filter($inputs, function ($input) use (&$daysWorked) {
+            if ($input['component']->code !== PayComponent::DAYS_WORKED) {
+                return true;
+            }
+            $daysWorked = ($daysWorked ?? 0) + (float) $input['quantity'];
+
+            return false;
+        }));
+        $workingDays = $this->settings['working_days'] ?? null;
+        $usedDaysWorked = false;
 
         // Basic salary (not in an off-cycle run, which pays only its inputs).
         if (!$offCycle) {
-            $lines[] = $this->line($this->basic, 'profile', round($basicMonthly * ($this->basic->prorate ? $factor : 1), 2), (float) $profile->basic_salary, $profile->currency);
+            $lines[] = $this->line($this->basic, 'profile', round($basicMonthly * ($this->basic->prorate ? $factor : 1), 2), (float) $profile->basic_salary, $profile->currency, $basicRate);
         }
 
         // Recurring components.
         foreach ($offCycle ? [] : $components as $given) {
             $c = $given->component;
             $override = $given->amount !== null ? (float) $given->amount : null;
+
+            // Per day worked (e.g. lunch), or shared by days worked ÷ working days (e.g. transport).
+            $perDayWorked = $c->calculation === ComponentCalculation::RATE_PER_UNIT && $c->quantity_source === PayComponent::FROM_DAYS_WORKED;
+            $byDaysWorked = !$perDayWorked && $c->prorate && $c->prorate_basis === PayComponent::FROM_DAYS_WORKED
+                && in_array($c->calculation, [ComponentCalculation::FIXED, ComponentCalculation::MANUAL, ComponentCalculation::PERCENT_OF_BASIC], true);
+            if ($perDayWorked || $byDaysWorked) {
+                if ($daysWorked === null) {
+                    $warnings[] = "{$c->name}: no days worked recorded, so it was left out.";
+                    continue;
+                }
+                $usedDaysWorked = true;
+                if ($perDayWorked) {
+                    $rate = $override ?? (float) $c->rate;
+                    $line = $this->line($c, 'component', round($this->convert($rate, $c->currency) * $daysWorked, 2), $rate * $daysWorked, $c->currency);
+                    $line['quantity'] = $daysWorked;
+                    $line['rate'] = $rate;
+                } else {
+                    $share = $workingDays ? min(1, $daysWorked / $workingDays) : 0.0;
+                    $full = $c->calculation === ComponentCalculation::PERCENT_OF_BASIC
+                        ? $basicMonthly * ($override ?? (float) $c->rate) / 100
+                        : $this->convert($override ?? (float) $c->rate, $c->currency);
+                    $original = $c->calculation === ComponentCalculation::PERCENT_OF_BASIC ? null : ($override ?? (float) $c->rate);
+                    $line = $this->line($c, 'component', round($full * $share, 2), $original, $c->currency);
+                    $line['quantity'] = $daysWorked;
+                }
+                $lines[] = $line;
+                continue;
+            }
+
+            // Per-unit items with an entered quantity are paid from the month's inputs (at the employee's rate).
+            if ($c->calculation === ComponentCalculation::RATE_PER_UNIT) {
+                continue;
+            }
+
             $amount = match ($c->calculation) {
                 ComponentCalculation::PERCENT_OF_BASIC => $basicMonthly * ($override ?? (float) $c->rate) / 100,
                 ComponentCalculation::FIXED, ComponentCalculation::MANUAL => $this->convert($override ?? (float) $c->rate, $c->currency),
-                // Per-hour or per-unit items need a quantity: a standing override amount is used as is.
+                // Per-hour items need a quantity: a standing override amount is used as is.
                 default => $override !== null ? $this->convert($override, $c->currency) : null,
             };
             if ($amount === null) {
@@ -78,16 +144,21 @@ class PayrollCalculator
         foreach ($inputs as $input) {
             $c = $input['component'];
             $quantity = $input['quantity'];
+            $rate = $c->calculation === ComponentCalculation::RATE_PER_UNIT ? ($ownRates[$c->id] ?? (float) $c->rate) : (float) $c->rate;
             $amount = match ($c->calculation) {
-                ComponentCalculation::HOURLY_MULTIPLIER => $hourly * (float) $c->rate * (float) $quantity,
-                ComponentCalculation::RATE_PER_UNIT     => $this->convert((float) $c->rate, $c->currency) * (float) $quantity,
+                ComponentCalculation::HOURLY_MULTIPLIER => $hourly * $rate * (float) $quantity,
+                ComponentCalculation::RATE_PER_UNIT     => $this->convert($rate, $c->currency) * (float) $quantity,
                 ComponentCalculation::PERCENT_OF_BASIC  => $basicMonthly * (float) ($input['amount'] ?? $c->rate) / 100,
                 default                                 => $this->convert((float) ($input['amount'] ?? $c->rate), $c->currency),
             };
             $line = $this->line($c, $input['source'], round($amount, 2), $input['amount'], $c->currency);
             $line['quantity'] = $quantity;
-            $line['rate'] = $c->rate;
+            $line['rate'] = $rate;
             $lines[] = $line;
+        }
+        // Freelancers on day rates have no basic salary: it isn't printed.
+        if (!$offCycle && (float) $profile->basic_salary == 0.0) {
+            $lines[0]['show_on_payslip'] = false;
         }
 
         $earnings = collect($lines)->where('kind', ComponentKind::EARNING->value);
@@ -96,7 +167,8 @@ class PayrollCalculator
 
         // SSNIT on SSNIT-able earnings, up to the maximum insurable earnings (less what the month's earlier runs used).
         $s = $this->statutory->ssnit;
-        $ssnitBase = $earnings->where('ssnit_applicable', true)->sum('amount');
+        // Freelancers aren't covered by SSNIT.
+        $ssnitBase = $freelance ? 0.0 : $earnings->where('ssnit_applicable', true)->sum('amount');
         if (!empty($s['max_insurable_earnings'])) {
             $ssnitBase = min($ssnitBase, max(0, (float) $s['max_insurable_earnings'] - (float) ($prior['ssnit_base'] ?? 0)));
         }
@@ -105,7 +177,7 @@ class PayrollCalculator
         $ssnitEmployer = round($ssnitBase * $s['employer_rate'] / 100, 2);
         $tier1 = round($ssnitBase * $s['tier1_rate'] / 100, 2);
         $tier2 = round($ssnitBase * $s['tier2_rate'] / 100, 2);
-        if (!$hasSsnitNumber) {
+        if (!$hasSsnitNumber && !$freelance) {
             $warnings[] = 'No SSNIT number.';
         }
 
@@ -116,14 +188,24 @@ class PayrollCalculator
             ? min($tier3, $gross * (float) $this->statutory->tier3_relief_limit_percent / 100)
             : 0.0;
 
-        // Overtime taxed apart (GRA junior staff) or as income.
-        $overtime = $earnings->filter(fn ($l) => $l['source'] === 'overtime' || $l['calculation'] === ComponentCalculation::HOURLY_MULTIPLIER->value)->sum('amount');
-        $ot = $this->statutory->overtime_tax;
-        $overtimeApart = $overtime > 0 && $this->settings['overtime_tax_method'] === 'gra_junior' && $ot
-            && $basicMonthly * 12 <= (float) $ot['annual_basic_threshold'];
-
-        // Bonus at the bonus rate, up to a share of annual basic in the year; the rest as income.
+        $isOvertime = fn ($l) => $l['source'] === 'overtime' || $l['calculation'] === ComponentCalculation::HOURLY_MULTIPLIER->value;
+        $overtime = $earnings->filter($isOvertime)->sum('amount');
         $bonus = $earnings->where('is_bonus', true)->where('taxable', true)->sum('amount');
+
+        // Overtime taxed apart (GRA junior staff: residents whose taxable employment income for the year is up to
+        // the threshold) or as income. The year's income: the month's taxable earnings without overtime and bonuses,
+        // times 12 (an off-cycle run, which pays only its inputs, goes by basic salary).
+        $ot = $this->statutory->overtime_tax;
+        $regularIncome = $offCycle ? $basicMonthly : $earnings->where('taxable', true)->reject($isOvertime)->where('is_bonus', '!=', true)->sum('amount');
+        $overtimeApart = $overtime > 0 && $profile->tax_resident && $this->settings['overtime_tax_method'] === 'gra_junior' && $ot
+            && $regularIncome * 12 <= (float) ($ot['annual_income_threshold'] ?? $ot['annual_basic_threshold'] ?? 0);
+
+        // Non-residents: overtime and bonuses at their own flat rate (GRA: 20%), apart from their income.
+        $nonResidentSpecial = !$profile->tax_resident
+            ? $earnings->filter($isOvertime)->where('taxable', true)->sum('amount') + $bonus
+            : 0.0;
+
+        // Bonus at the bonus rate, up to a share of annual basic in the year; the rest as income (residents).
         $bt = $this->statutory->bonus_tax;
         $bonusConcession = 0.0;
         if ($bonus > 0 && ($this->settings['bonus_tax_method'] ?? 'gra_bonus') === 'gra_bonus' && $bt && $profile->tax_resident) {
@@ -132,7 +214,7 @@ class PayrollCalculator
         }
         $bonusTax = round($bonusConcession * (float) ($bt['rate'] ?? 0) / 100, 2);
 
-        $taxableEarnings = $earnings->where('taxable', true)->sum('amount') - ($overtimeApart ? $overtime : 0) - $bonusConcession;
+        $taxableEarnings = $earnings->where('taxable', true)->sum('amount') - ($overtimeApart ? $overtime : 0) - $bonusConcession - $nonResidentSpecial;
         $preTax = $deductions->where('taxable', true)->sum('amount');
         $beforeReliefs = max(0, $taxableEarnings - $ssnitEmployee - $tier3Relief - $preTax);
         // Reliefs are given once a month, in the regular run.
@@ -142,7 +224,8 @@ class PayrollCalculator
         $earlier = (float) ($prior['taxable'] ?? 0);
         $paye = $profile->tax_resident
             ? $this->bands($earlier + $taxable) - $this->bands($earlier)
-            : $taxable * (float) $this->statutory->non_resident_rate / 100;
+            : $taxable * (float) $this->statutory->non_resident_rate / 100
+                + $nonResidentSpecial * (float) ($this->statutory->non_resident_special_rate ?? 20) / 100;
         $paye += $bonusTax;
         if ($overtimeApart) {
             $lowerCap = $basicMonthly * (float) $ot['percent_of_basic'] / 100;
@@ -150,15 +233,33 @@ class PayrollCalculator
         }
         $paye = round($paye, 2);
 
+        // Freelancers taxed by withholding: a flat rate on what they're paid, instead of PAYE.
+        $withholding = 0.0;
+        if ($freelance && ($this->settings['freelance_tax'] ?? 'paye') === 'withholding') {
+            $rate = $this->statutory->freelance_withholding_rate;
+            if ($rate === null) {
+                throw new UserFacingException("The statutory rates \"{$this->statutory->name}\" have no withholding rate for freelancers. Set it in Payroll → Settings → Statutory rates.");
+            }
+            $taxable = round(max(0, $earnings->where('taxable', true)->sum('amount') - $preTax), 2);
+            $withholding = round($taxable * (float) $rate / 100, 2);
+            $paye = 0.0;
+            $bonusConcession = 0.0;
+            $bonusTax = 0.0;
+        }
+
         // Statutory lines, so the payslip reads uniformly.
         $lines[] = $this->statutoryLine('SSNIT', 'SSNIT (employee)', ComponentKind::DEDUCTION, $ssnitEmployee, 900);
         if ($tier3 > 0) {
             $lines[] = $this->statutoryLine('TIER3', 'Tier 3 (voluntary)', ComponentKind::DEDUCTION, $tier3, 901);
         }
-        $lines[] = $this->statutoryLine('PAYE', 'Income tax (PAYE)', ComponentKind::DEDUCTION, $paye, 902);
+        if ($withholding > 0) {
+            $lines[] = $this->statutoryLine('WHT', 'Withholding tax', ComponentKind::DEDUCTION, $withholding, 902);
+        } else {
+            $lines[] = $this->statutoryLine('PAYE', 'Income tax (PAYE)', ComponentKind::DEDUCTION, $paye, 902);
+        }
         $lines[] = $this->statutoryLine('SSNIT_ER', 'SSNIT (employer)', ComponentKind::EMPLOYER_CONTRIBUTION, $ssnitEmployer, 950);
 
-        $totalDeductions = round($ssnitEmployee + $tier3 + $paye + $deductions->sum('amount'), 2);
+        $totalDeductions = round($ssnitEmployee + $tier3 + $paye + $withholding + $deductions->sum('amount'), 2);
         $net = round($gross - $totalDeductions, 2);
         if ($net < 0) {
             $warnings[] = 'Deductions exceed pay: net pay is negative.';
@@ -167,6 +268,8 @@ class PayrollCalculator
 
         return [
             'proration'        => round($factor, 4),
+            'working_days'     => $usedDaysWorked ? $workingDays : null,
+            'days_worked'      => $usedDaysWorked ? $daysWorked : null,
             'basic_salary'     => $basicPaid,
             'gross_pay'        => $gross,
             'taxable_income'   => $taxable,
@@ -177,6 +280,7 @@ class PayrollCalculator
             'tier2'            => $tier2,
             'tier3'            => $tier3,
             'paye'             => $paye,
+            'withholding_tax'  => $withholding,
             'bonus_concession' => $bonusConcession,
             'bonus_tax'        => $bonusTax,
             'total_deductions' => $totalDeductions,
@@ -200,6 +304,21 @@ class PayrollCalculator
         }
 
         return ($from->diffInDays($to) + 1) / ($start->diffInDays($end) + 1);
+    }
+
+    /**
+     * Hours in a month, for the hourly rate overtime is paid at (setting `payroll.overtime_hourly_basis`):
+     * fixed working days × hours a day (default), the period's working days × hours a day, or a fixed number of hours.
+     */
+    public function overtimeHours(): float
+    {
+        $hoursPerDay = max(0.5, (float) $this->settings['hours_per_day']);
+
+        return match ($this->settings['overtime_hourly_basis'] ?? 'fixed_days') {
+            'period_working_days' => max(1, (int) ($this->settings['working_days'] ?? $this->settings['working_days_per_month'])) * $hoursPerDay,
+            'fixed_hours'         => max(1, (float) ($this->settings['overtime_monthly_hours'] ?? 173.33)),
+            default               => max(1, (int) $this->settings['working_days_per_month']) * $hoursPerDay,
+        };
     }
 
     /** PAYE by the monthly bands. */
@@ -238,21 +357,42 @@ class PayrollCalculator
         });
     }
 
-    /** An amount in the base currency, at the run's rate. */
+    /** An amount in the base currency, at the run's standard rate. */
     private function convert(float $amount, ?string $currency): float
+    {
+        return $amount * $this->rate($currency);
+    }
+
+    /** The run's rate for a currency (1 for the base currency); a basic rate falls back to the standard one. */
+    private function rate(?string $currency, string $type = ExchangeRate::STANDARD): float
     {
         $currency = strtoupper($currency ?: $this->settings['base_currency']);
         if ($currency === strtoupper($this->settings['base_currency'])) {
-            return $amount;
+            return 1.0;
         }
-        if (!isset($this->rates[$currency])) {
-            throw new UserFacingException("There's no {$currency} exchange rate for {$this->period['start']->year}. Add it in Payroll → Settings → Exchange rates.");
+        $rates = $this->rates[$currency] ?? [];
+        $rate = ($type === ExchangeRate::BASIC ? ($rates[ExchangeRate::BASIC]['rate'] ?? null) : null) ?? ($rates[ExchangeRate::STANDARD]['rate'] ?? null);
+        if ($rate === null) {
+            $on = isset($this->settings['rate_date']) ? Carbon::parse($this->settings['rate_date'])->format('j M Y') : $this->period['end']->format('j M Y');
+            throw new UserFacingException("There's no {$currency} exchange rate on or before {$on}. Add it in Payroll → Settings → Exchange rates.");
         }
 
-        return $amount * $this->rates[$currency];
+        return (float) $rate;
     }
 
-    private function line(PayComponent $c, string $source, float $amount, ?float $original, ?string $currency): array
+    /** The rate basic salary converts at: the employee's fixed rate, else the run's basic rate (or standard). */
+    private function basicRate(EmployeePayProfile $profile): float
+    {
+        $foreign = $profile->currency && strtoupper($profile->currency) !== strtoupper($this->settings['base_currency']);
+        if ($foreign && $profile->fixed_exchange_rate !== null) {
+            return (float) $profile->fixed_exchange_rate;
+        }
+
+        return $this->rate($profile->currency, ExchangeRate::BASIC);
+    }
+
+    /** @param ?float $rate the exchange rate used, when not the standard one (basic salary) */
+    private function line(PayComponent $c, string $source, float $amount, ?float $original, ?string $currency, ?float $rate = null): array
     {
         $currency = $currency ? strtoupper($currency) : null;
         $foreign = $currency && $currency !== strtoupper($this->settings['base_currency']);
@@ -268,7 +408,7 @@ class PayrollCalculator
             'rate'             => null,
             'original_amount'  => $foreign ? $original : null,
             'original_currency'=> $foreign ? $currency : null,
-            'exchange_rate'    => $foreign ? $this->rates[$currency] : null,
+            'exchange_rate'    => $foreign ? ($rate ?? $this->rate($currency)) : null,
             'amount'           => $amount,
             'taxable'          => $c->taxable,
             'is_bonus'         => (bool) $c->is_bonus,

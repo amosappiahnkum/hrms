@@ -37,8 +37,10 @@ class EmployeePayImportTest extends TestCase
             $this->{$who} = $this->userWithRole('staff')->employee;
             $this->{$who}->update(['staff_id' => $staffId]);
         }
-        foreach ([$this->current, $this->raised] as $e) {
-            EmployeePayProfile::create(['employee_id' => $e->id, 'effective_from' => '2026-01-01', 'basic_salary' => 5000, 'payment_method' => 'bank', 'bank_name' => 'GCB', 'account_number' => '1111222233']);
+        // Each with their own account (two employees can't share one).
+        foreach (['1111222233' => $this->current, '1111222244' => $this->raised] as $account => $e) {
+            EmployeePayProfile::create(['employee_id' => $e->id, 'effective_from' => '2026-01-01', 'basic_salary' => 5000, 'payment_method' => 'bank', 'bank_id' => $this->bank('GCB')->id, 'bank_name' => 'GCB', 'account_number' => (string) $account]);
+            $this->bank('Ecobank');
         }
     }
 
@@ -114,11 +116,67 @@ class EmployeePayImportTest extends TestCase
             default => null,
         })->assertStatus(422)
             ->assertJsonPath('errors.rows', fn ($rows) => count($rows) === 2
-                && collect($rows)->contains(fn ($m) => str_starts_with($m, 'P001') && str_contains($m, 'bank name'))
+                && collect($rows)->contains(fn ($m) => str_starts_with($m, 'P001') && str_contains($m, 'Choose the bank'))
                 && collect($rows)->contains(fn ($m) => str_starts_with($m, 'P003') && str_contains($m, 'or later')));
 
         $this->assertSame('5000.00', $this->current->payProfiles()->sole()->basic_salary);
         $this->assertSame(0, $this->newcomer->payProfiles()->count());
+    }
+
+    public function test_a_bank_or_branch_not_on_the_list_is_added_once(): void
+    {
+        $fill = fn ($row) => match ($row['Staff ID']) {
+            'P001'  => ['Basic salary a month' => 3000, 'Paid by' => 'Bank', 'Bank' => 'Fidelity  Bank', 'Branch' => 'Takoradi', 'Account number' => '5550001'],
+            'P002'  => ['Bank' => 'fidelity bank', 'Branch' => 'Harbour Road'],
+            'P003'  => ['Branch' => 'Kumasi'], // a new branch of GCB, which is listed
+            default => null,
+        };
+
+        // The check says what it will add, adding nothing.
+        $this->checking = true;
+        $changes = collect($this->roundTrip($fill)->assertOk()->assertJsonPath('data.new_banks', ['Fidelity Bank'])->json('data.changes'))->keyBy(fn ($c) => substr($c['who'], 0, 4));
+        $this->assertContains('Adds the bank "Fidelity Bank" to the banks list (if it\'s another name for a listed bank, merge it in Payroll → Settings → Banks).', $changes['P001']['warnings']);
+        $this->assertContains('Adds the branch "Kumasi" to GCB\'s branches.', $changes['P003']['warnings']);
+        $this->assertNull(\App\Models\Payroll\Bank::findByName('Fidelity Bank'));
+
+        // Saved: one Fidelity Bank for both rows, with each row's branch.
+        $this->checking = false;
+        $this->roundTrip($fill)->assertOk()->assertJsonPath('message', fn ($m) => str_contains($m, 'Added to the banks list: Fidelity Bank.'));
+        $fidelity = \App\Models\Payroll\Bank::where('name', 'Fidelity Bank')->sole();
+        $this->assertSame(['Harbour Road', 'Takoradi'], $fidelity->branches()->pluck('name')->all());
+        $newcomer = $this->newcomer->payProfiles()->sole();
+        $this->assertSame([$fidelity->id, 'Fidelity Bank', 'Takoradi'], [$newcomer->bank_id, $newcomer->bank_name, $newcomer->branch->name]);
+        $this->assertSame([$fidelity->id, 'Harbour Road'], [$this->current->payProfiles()->sole()->bank_id, $this->current->payProfiles()->sole()->bank_branch]);
+        $this->assertSame('Kumasi', $this->raised->payProfiles()->sole()->branch->name);
+        $this->assertSame($this->bank('GCB')->id, $this->raised->payProfiles()->sole()->branch->bank_id);
+    }
+
+    public function test_two_employees_cant_be_paid_into_the_same_account(): void
+    {
+        // Two rows with one account, and a row with someone else's (not in the file): both refused, nothing saved.
+        $outsider = $this->userWithRole('staff')->employee;
+        EmployeePayProfile::create(['employee_id' => $outsider->id, 'effective_from' => '2026-01-01', 'basic_salary' => 4000, 'payment_method' => 'mobile_money', 'mobile_money_provider' => 'MTN', 'mobile_money_number' => '0244000111']);
+        $this->roundTrip(fn ($row) => match ($row['Staff ID']) {
+            'P001'  => ['Basic salary a month' => 3000, 'Paid by' => 'Mobile money', 'Mobile money provider' => 'MTN', 'Mobile money number' => '+233 24 400 0111'],
+            'P003'  => ['Account number' => '1111-2222-33'], // P002's, typed differently
+            default => null,
+        })->assertStatus(422)
+            ->assertJsonPath('errors.rows', fn ($rows) => count($rows) === 2
+                && collect($rows)->contains(fn ($m) => str_starts_with($m, 'P001') && str_contains($m, 'mobile money number is already used for'))
+                && collect($rows)->contains(fn ($m) => str_starts_with($m, 'P003') && str_contains($m, 'P002') && str_contains($m, '(row')));
+        $this->assertSame(0, $this->newcomer->payProfiles()->count());
+
+        // Two employees swapping accounts in one file is fine: it's the result that counts.
+        $this->roundTrip(fn ($row) => match ($row['Staff ID']) {
+            'P002'  => ['Account number' => '1111222244'],
+            'P003'  => ['Account number' => '1111222233'],
+            default => null,
+        })->assertOk()->assertJsonPath('data.corrected', 2);
+
+        // Two already sharing an account (saved before the check) don't stop an import of something else.
+        EmployeePayProfile::where('employee_id', $this->raised->id)->update(['account_number' => encrypt('1111222244', false), 'account_fingerprint' => EmployeePayProfile::fingerprint('1111222244', 'bank')]);
+        $this->assertSame('1111222244', $this->raised->payProfiles()->sole()->account_number);
+        $this->roundTrip(fn ($row) => $row['Staff ID'] === 'P001' ? ['Basic salary a month' => 3000, 'Paid by' => 'Cash'] : null)->assertOk()->assertJsonPath('data.created', 1);
     }
 
     public function test_rows_are_matched_by_the_hidden_reference_not_the_staff_id(): void
@@ -158,5 +216,11 @@ class EmployeePayImportTest extends TestCase
         $this->assertSame(0, $this->newcomer->payProfiles()->count());
         $this->assertSame('5000.00', $this->current->payProfiles()->sole()->basic_salary);
         \Illuminate\Support\Carbon::setTestNow();
+    }
+
+    /** A bank on the banks list (made the first time). */
+    private function bank(string $name): \App\Models\Payroll\Bank
+    {
+        return \App\Models\Payroll\Bank::firstOrCreate(['name' => $name], ['active' => true]);
     }
 }

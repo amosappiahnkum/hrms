@@ -5,7 +5,6 @@ namespace App\Models\SelfService;
 use App\Models\AppModel;
 use App\Models\Config\Department;
 use App\Models\EmployeeCertification;
-use App\Models\EmployeeSupervisor;
 use App\Models\InformationUpdate;
 use App\Models\JobDetail;
 use App\Models\LeaveRequest;
@@ -59,6 +58,8 @@ class Employee extends AppModel
         'qualification',
         'rank_id',
         'department_id',
+        // Who they report to when it isn't the head of their unit (see ReportingLine).
+        'reports_to_id',
         'user_id',
         'senior_staff',
         'senior_member',
@@ -89,6 +90,7 @@ class Employee extends AppModel
             'gender' => ['show_in_diff' => true],
             'marital_status' => ['show_in_diff' => true],
             'ssnit_number' => ['show_in_diff' => true],
+            'bio' => ['show_in_diff' => true],
             'department_id' => ['show_in_diff' => false],
             'rank_id' => ['show_in_diff' => false],
         ];
@@ -273,9 +275,10 @@ class Employee extends AppModel
         return $this->hasMany(\App\Models\Payroll\EmployeePayComponent::class);
     }
 
-    public function employeeSupervisor(): HasOne
+    /** The person set as their "Reports to"; empty means the head of their unit (see ReportingLine::supervisorOf). */
+    public function reportsTo(): BelongsTo
     {
-        return $this->hasOne(EmployeeSupervisor::class);
+        return $this->belongsTo(self::class, 'reports_to_id');
     }
 
     /**

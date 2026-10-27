@@ -38,6 +38,16 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
         Route::post('/attempts/{attempt}/kpis/sync', [AssessmentAttemptController::class, 'syncKpis']);
     });
 
+    // ── Heads above the appraiser: endorse before HR ──────────────────────────
+    Route::prefix('appraisal/endorsements')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'index']);
+        Route::post('/{attempt}/endorse', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'endorse']);
+        Route::post('/{attempt}/return', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'returnToAppraiser']);
+    });
+    Route::get('appraisal/settings', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'settings']);
+    Route::middleware('permission:manage-appraisal-windows')
+        ->put('appraisal/settings', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'saveSettings']);
+
     // ── HR: finalise confirmed appraisals ─────────────────────────────────────
     Route::prefix('appraisal/hr')->middleware('permission:finalize-appraisals')->group(function () {
         Route::get('/pending', [AssessmentAttemptController::class, 'hrPending']);

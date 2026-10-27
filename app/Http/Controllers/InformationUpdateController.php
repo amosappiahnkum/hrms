@@ -4,11 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Enums\Statuses;
 use App\Helpers\ApiResponse;
+use App\Http\Requests\StoreAchievementRequest;
+use App\Http\Requests\StoreAffiliationRequest;
+use App\Http\Requests\StoreAwardRequest;
+use App\Http\Requests\StoreDependantRequest;
+use App\Http\Requests\StoreEmergencyContactRequest;
+use App\Http\Requests\StoreExperienceRequest;
+use App\Http\Requests\StoreGrantAndFundRequest;
+use App\Http\Requests\StorePreviousPositionRequest;
+use App\Http\Requests\StoreProjectRequest;
+use App\Http\Requests\StorePublicationRequest;
+use App\Http\Requests\StoreQualificationRequest;
 use App\Http\Requests\UpdateInformationUpdateRequest;
 use App\Http\Resources\ApprovalDetailResource;
 use App\Http\Resources\ApprovalResource;
 use App\Http\Resources\InformationUpdateResource;
 use App\Models\InformationUpdate;
+use App\Models\SelfService\Employee;
 use App\Services\UpdateApprovalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +32,23 @@ use Illuminate\Support\Facades\Log;
 
 class InformationUpdateController extends Controller
 {
+    /**
+     * Morph type => the store request used to validate it, for pending "create" requests.
+     */
+    private const PENDING_CREATE_REQUESTS = [
+        'Achievement'      => StoreAchievementRequest::class,
+        'Affiliation'      => StoreAffiliationRequest::class,
+        'Award'            => StoreAwardRequest::class,
+        'Dependant'        => StoreDependantRequest::class,
+        'Education'        => StoreQualificationRequest::class,
+        'EmergencyContact' => StoreEmergencyContactRequest::class,
+        'Experience'       => StoreExperienceRequest::class,
+        'GrantAndFund'     => StoreGrantAndFundRequest::class,
+        'PreviousPosition' => StorePreviousPositionRequest::class,
+        'Project'          => StoreProjectRequest::class,
+        'Publication'      => StorePublicationRequest::class,
+    ];
+
     /**
      * Display a listing of the resource.
      *
@@ -205,6 +234,49 @@ class InformationUpdateController extends Controller
         $updates = $query->paginate($request->per_page ?? 10);
 
         return ApprovalDetailResource::collection($updates);
+    }
+
+    /**
+     * Let the requester correct a new record that is still awaiting approval.
+     * The record's own store request validates the data, so the rules match creating it.
+     *
+     * @throws \Throwable
+     */
+    public function updatePending(Request $request, InformationUpdate $informationUpdate): JsonResponse
+    {
+        abort_unless(
+            (int) $informationUpdate->requested_by === (int) Auth::id(),
+            403,
+            'You can only edit your own update requests.'
+        );
+
+        $requestClass = self::PENDING_CREATE_REQUESTS[$informationUpdate->information_type] ?? null;
+
+        if (!$requestClass) {
+            return ApiResponse::error('This request cannot be edited.', null, 422);
+        }
+
+        // The record stays with the employee it was requested for.
+        $employee = Employee::find($informationUpdate->new_info['employee_id'] ?? null);
+
+        if (!$employee) {
+            return ApiResponse::error('This request cannot be edited.', null, 422);
+        }
+
+        $request->merge(['employee_uuid' => $employee->uuid]);
+
+        try {
+            $validated = app($requestClass)->validated();
+
+            $update = app(UpdateApprovalService::class)->amendCreate($informationUpdate, $validated, Auth::id());
+
+            activity('approvals')->performedOn($update)
+                ->log('Edited pending create request for ' . class_basename($update->information_type));
+
+            return ApiResponse::success(null, 'Request updated');
+        } catch (\Throwable $e) {
+            return ApiResponse::fromException($e);
+        }
     }
 
 }

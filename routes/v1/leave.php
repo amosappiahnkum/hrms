@@ -12,7 +12,6 @@ Route::middleware('feature:leave.enabled')->group(function () {
     Route::get('holidays', [LeaveRequestController::class, 'getHolidays']);
     Route::get('/who-is-out', [HomeController::class, 'getWhoIsOut']);
     Route::middleware('owns.employee')->get('/supervisor/{employee}/pending-actions', [HomeController::class, 'getPendingApprovals']);
-    Route::get('/my-team', [HomeController::class, 'getMyTeam']);
 
     Route::middleware('feature:leave.self_service')->group(function () {
         Route::prefix('leave-requests')->group(function () {
@@ -46,6 +45,10 @@ Route::middleware('feature:leave.enabled')->group(function () {
 
     Route::middleware('feature:leave.types_management')->group(function () {
         Route::apiResource('/leave-types', LeaveTypeController::class)->only(['index', 'show']);
+
+        // Who approves leave before HR (the supervisor, then heads above as set).
+        Route::get('/leave-settings', [\App\Http\Controllers\LeaveSettingsController::class, 'show']);
+        Route::middleware('permission:edit-leave-types')->put('/leave-settings', [\App\Http\Controllers\LeaveSettingsController::class, 'update']);
 
         Route::middleware('permission:edit-leave-types')
             ->patch('/leave-types/config/{id}', [LeaveTypeController::class, 'updateLeaveTypeConfig']);

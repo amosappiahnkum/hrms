@@ -45,7 +45,8 @@ class PayRunReports
 
         $rows = $run->payslips()->get()
             ->filter(fn (Payslip $p) => ($p->payment_snapshot['payment_method'] ?? null) === $layout->payment_method)
-            ->filter(fn (Payslip $p) => !$layout->bank_name || strcasecmp(trim($p->payment_snapshot['bank_name'] ?? ''), trim($layout->bank_name)) === 0)
+            // A layout for a bank: the people paid through that bank (by the bank chosen, not its spelling).
+            ->filter(fn (Payslip $p) => !$layout->bank_id || (int) $p->bank_id === (int) $layout->bank_id)
             ->filter(fn (Payslip $p) => (float) $p->net_pay > 0)
             ->sortBy(fn ($p) => $p->employee_snapshot['name'] ?? '')
             ->map(function (Payslip $p) use ($layout, $narration, $currency, $run) {

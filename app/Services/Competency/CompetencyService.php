@@ -10,7 +10,6 @@ use App\Models\Competency\DevelopmentAction;
 use App\Models\Competency\PositionCompetency;
 use App\Models\Config\Department;
 use App\Models\Config\Setting;
-use App\Models\EmployeeSupervisor;
 use App\Models\SelfService\Employee;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -87,7 +86,7 @@ class CompetencyService
     {
         return $user->employee_id && (
             Department::where('hod', $user->employee_id)->exists()
-            || EmployeeSupervisor::where('supervisor_id', $user->employee_id)->exists()
+            || Employee::where('reports_to_id', $user->employee_id)->exists()
         );
     }
 
@@ -111,7 +110,7 @@ class CompetencyService
 
         $departmentIds = Department::where('hod', $user->employee_id)->get()
             ->flatMap(fn (Department $d) => $this->withSubDepartments($d))->unique();
-        $reportIds = EmployeeSupervisor::where('supervisor_id', $user->employee_id)->pluck('employee_id');
+        $reportIds = Employee::where('reports_to_id', $user->employee_id)->pluck('id');
 
         return $employees->where(fn ($q) => $q->whereIn('department_id', $departmentIds)->orWhereIn('id', $reportIds))
             ->where('id', '!=', $user->employee_id);
@@ -162,15 +161,7 @@ class CompetencyService
     /** A department's id and all its sub-departments' ids. */
     public function withSubDepartments(Department $department): Collection
     {
-        $ids = collect([$department->id]);
-        $frontier = [$department->id];
-
-        while ($frontier) {
-            $frontier = Department::whereIn('parent_department_id', $frontier)->whereNotIn('id', $ids)->pluck('id')->all();
-            $ids = $ids->merge($frontier);
-        }
-
-        return $ids;
+        return collect(Department::subtreeIds($department->id));
     }
 
     // ── Profile ───────────────────────────────────────────────────────────────

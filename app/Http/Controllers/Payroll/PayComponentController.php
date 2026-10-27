@@ -76,11 +76,13 @@ class PayComponentController extends Controller
             'rate'             => ['nullable', 'numeric', 'min:0'],
             'currency'         => ['nullable', \App\Support\Currencies::rule()],
             'unit'             => ['nullable', 'string', 'max:30'],
+            'quantity_source'  => ['sometimes', Rule::in([PayComponent::QUANTITY_INPUT, PayComponent::FROM_DAYS_WORKED])],
             'taxable'          => ['boolean'],
             'is_bonus'         => ['boolean'],
             'ssnit_applicable' => ['boolean'],
             'recurring'        => ['boolean'],
             'prorate'          => ['boolean'],
+            'prorate_basis'    => ['sometimes', Rule::in([PayComponent::PRORATE_EMPLOYMENT, PayComponent::FROM_DAYS_WORKED])],
             'show_on_payslip'  => ['boolean'],
             'sort_order'       => ['nullable', 'integer', 'between:0,1000'],
             'account_code'     => ['nullable', 'string', 'max:50'],
@@ -109,6 +111,16 @@ class PayComponentController extends Controller
         if ($calculation !== ComponentCalculation::RATE_PER_UNIT) {
             $data['unit'] = null;
         }
+        // Per day worked: a per-unit standing item, paid to the employees it's given to.
+        $data['quantity_source'] = $calculation === ComponentCalculation::RATE_PER_UNIT ? ($data['quantity_source'] ?? $component?->quantity_source ?? PayComponent::QUANTITY_INPUT) : PayComponent::QUANTITY_INPUT;
+        if ($data['quantity_source'] === PayComponent::FROM_DAYS_WORKED) {
+            $data['recurring'] = true;
+        }
+        // Shared by days worked: an amount (fixed, entered or % of basic) that is prorated.
+        $basis = $data['prorate_basis'] ?? $component?->prorate_basis ?? PayComponent::PRORATE_EMPLOYMENT;
+        $data['prorate_basis'] = ($data['prorate'] ?? $component?->prorate ?? true)
+            && in_array($calculation, [ComponentCalculation::FIXED, ComponentCalculation::MANUAL, ComponentCalculation::PERCENT_OF_BASIC], true)
+            ? $basis : PayComponent::PRORATE_EMPLOYMENT;
         if ($data['kind'] !== ComponentKind::EARNING->value) {
             $data['ssnit_applicable'] = false;
             $data['is_bonus'] = false;
@@ -148,11 +160,13 @@ class PayComponentController extends Controller
             'rate'             => $c->rate !== null ? (float) $c->rate : null,
             'currency'         => $c->currency,
             'unit'             => $c->unit,
+            'quantity_source'  => $c->quantity_source,
             'taxable'          => $c->taxable,
             'is_bonus'         => $c->is_bonus,
             'ssnit_applicable' => $c->ssnit_applicable,
             'recurring'        => $c->recurring,
             'prorate'          => $c->prorate,
+            'prorate_basis'    => $c->prorate_basis,
             'show_on_payslip'  => $c->show_on_payslip,
             'sort_order'       => $c->sort_order,
             'account_code'     => $c->account_code,

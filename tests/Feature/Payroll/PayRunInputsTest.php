@@ -106,7 +106,7 @@ class PayRunInputsTest extends TestCase
     {
         $other = $this->userWithRole('staff')->employee;
         $other->update(['staff_id' => 'AI002', 'ssnit_number' => 'C2']);
-        EmployeePayProfile::create(['employee_id' => $other->id, 'effective_from' => '2026-01-01', 'basic_salary' => 3000, 'payment_method' => 'bank', 'bank_name' => 'GCB', 'account_number' => '1']);
+        EmployeePayProfile::create(['employee_id' => $other->id, 'effective_from' => '2026-01-01', 'basic_salary' => 3000, 'payment_method' => 'bank', 'bank_id' => $this->bank('GCB')->id, 'bank_name' => 'GCB', 'account_number' => '1']);
         $this->add(['pay_component_uuid' => $this->overtime->uuid, 'quantity' => 10])->assertCreated();
         $this->postJson("/api/v1/payroll/runs/{$this->run}/calculate")->assertOk();
         $list = fn (string $query = '') => $this->getJson("/api/v1/payroll/runs/{$this->run}/payslips?{$query}")->assertOk();
@@ -120,5 +120,11 @@ class PayRunInputsTest extends TestCase
         $list('bank=GCB')->assertJsonPath('data.data.0.employee.staff_id', 'AI002');
         $list('sort=net_asc')->assertJsonPath('data.data.0.employee.staff_id', 'AI002');
         $this->assertSame(round((float) $all->json('data.totals.gross_pay'), 2), round(4775 + 3000, 2));
+    }
+
+    /** A bank on the banks list (made the first time). */
+    private function bank(string $name): \App\Models\Payroll\Bank
+    {
+        return \App\Models\Payroll\Bank::firstOrCreate(['name' => $name], ['active' => true]);
     }
 }

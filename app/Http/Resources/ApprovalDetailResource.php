@@ -38,6 +38,9 @@ class ApprovalDetailResource extends JsonResource
             'created_at' => $this->created_at,
             'reviewed_at' => $this->reviewed_at,
             'diff' => $diff,
+            'new_info' => $this->new_info,
+            // new_info shaped like the form that submitted it, so the requester can correct a pending request.
+            'form_values' => app(UpdateApprovalService::class)->formValues($model, $this->new_info ?? []),
         ];
     }
 }

@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
-class AssessmentAttempt extends ApplicationModel
+class AssessmentAttempt extends ApplicationModel implements \App\Contracts\ApprovalSubject
 {
     use HasUuid;
 
@@ -31,6 +31,8 @@ class AssessmentAttempt extends ApplicationModel
     const string STATUS_COMPLETED = 'completed';
     const string STATUS_RETURNED = 'returned';
     const string STATUS_SUBMITTED = 'submitted'; // non-appraisal final state
+    // After the employee acknowledges, the heads above the appraiser endorse it in turn before HR (when set up).
+    const string STATUS_PENDING_ENDORSEMENT = 'pending_endorsement';
 
     protected $fillable = [
         'assessment_window_id',
@@ -83,6 +85,31 @@ class AssessmentAttempt extends ApplicationModel
     public function responses(): MorphMany
     {
         return $this->morphMany(QuestionResponse::class, 'respondable');
+    }
+
+    /** The endorsement by the heads above the appraiser (the latest, when it was returned and sent again). */
+    public function approval(): \Illuminate\Database\Eloquent\Relations\MorphOne
+    {
+        return $this->morphOne(\App\Models\Payroll\Approval::class, 'subject')->latestOfMany();
+    }
+
+    public function adjustableValues(): array
+    {
+        return [];
+    }
+
+    public function applyAdjustments(array $values): void
+    {
+    }
+
+    public function approvalFinished(\App\Models\Payroll\Approval $approval): void
+    {
+        app(\App\Services\Appraisal\AppraisalEndorsement::class)->finished($this, $approval);
+    }
+
+    public function approvalSummary(): string
+    {
+        return "Appraisal: {$this->window?->title}";
     }
 
     public function events(): HasMany

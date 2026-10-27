@@ -7,7 +7,6 @@ use App\Enums\Payroll\PayRunStatus;
 use App\Exceptions\UserFacingException;
 use App\Models\Payroll\Approval;
 use App\Models\Payroll\EmployeePayProfile;
-use App\Models\Payroll\ExchangeRate;
 use App\Models\Payroll\Loan;
 use App\Models\Payroll\LoanInstalment;
 use App\Models\Payroll\LoanRepayment;
@@ -84,11 +83,11 @@ class LoanService
 
         if ($type->max_times_basic !== null) {
             $profile = EmployeePayProfile::inForceOn(now())->where('employee_id', $employee->id)->first();
-            $rate = $profile ? ExchangeRate::for($profile->currency ?: setting('payroll.base_currency', 'GHS'), now()->year) : null;
+            $rate = $profile?->basicRateOn(now());
             if (!$profile) {
                 $problems[] = 'Your pay details aren\'t set up yet, so the limit can\'t be worked out. Speak to HR.';
             } elseif ($rate === null) {
-                $problems[] = "There's no {$profile->currency} exchange rate for " . now()->year . ' yet. Speak to HR.';
+                $problems[] = "There's no {$profile->currency} exchange rate in force yet. Speak to HR.";
             } else {
                 $byBasic = round((float) $type->max_times_basic * (float) $profile->basic_salary * $rate, 2);
                 $max = $max === null ? $byBasic : min($max, $byBasic);
@@ -413,7 +412,7 @@ class LoanService
             return round((float) $slip->net_pay + (float) $slip->lines->where('code', PayComponent::LOAN_REPAYMENT)->sum('amount'), 2);
         }
         $profile = EmployeePayProfile::inForceOn(now())->where('employee_id', $employee->id)->first();
-        $rate = $profile ? ExchangeRate::for($profile->currency ?: setting('payroll.base_currency', 'GHS'), now()->year) : null;
+        $rate = $profile?->basicRateOn(now());
 
         return $profile && $rate ? round((float) $profile->basic_salary * $rate, 2) : 0.0;
     }

@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('feature:employees.enabled')->group(function () {
     // ── Any staff member ──────────────────────────────────────────────────────
     Route::get('/people', [EmployeeController::class, 'getPeople']);
-    Route::get('/my-colleagues', [EmployeeController::class, 'getMyTeam']);
+    Route::get('/my-colleagues', [EmployeeController::class, 'getMyColleagues']);
     Route::get('/org-colleagues', [EmployeeController::class, 'getEmployeeDirectory']);
     Route::get('employees/search', [EmployeeController::class, 'searchEmployees']);
 
@@ -35,8 +35,13 @@ Route::middleware('feature:employees.enabled')->group(function () {
         Route::post('employees/{employee}/reset-password', [EmployeeController::class, 'resetPassword']);
     });
 
+    // Reporting line: who they report to (set, or the head of their unit by default), and their direct reports.
+    // HR (view-employee), or the employee their own (checked in the controller).
+    Route::get('employees/{employee}/reporting-line', [\App\Http\Controllers\ReportingLineController::class, 'show']);
+
     Route::middleware('permission:edit-employee')->group(function () {
         Route::post('employees/update-level', [EmployeeController::class, 'updateEmployeeLevel']);
+        Route::put('employees/{employee}/reports-to', [\App\Http\Controllers\ReportingLineController::class, 'update']);
         Route::post('employees/update-job-type', [EmployeeController::class, 'updateEmployeeStatus']);
     });
 

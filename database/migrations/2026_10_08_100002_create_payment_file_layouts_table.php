@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('payment_method')->default('bank'); // bank | mobile_money
             // Only employees paid through this bank (e.g. a bank's own upload format); null: everyone.
-            $table->string('bank_name')->nullable();
+            $table->foreignId('bank_id')->nullable()->constrained(indexName: 'payment_layouts_bank_fk')->nullOnDelete();
             $table->string('format')->default('csv'); // csv | xlsx
             $table->string('delimiter', 3)->default(',');
             $table->boolean('include_header')->default(true);

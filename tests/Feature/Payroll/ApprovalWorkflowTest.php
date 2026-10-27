@@ -5,7 +5,6 @@ namespace Tests\Feature\Payroll;
 use App\Enums\Payroll\ApprovalProcess;
 use App\Models\Config\Department;
 use App\Models\Config\Setting;
-use App\Models\EmployeeSupervisor;
 use App\Models\Payroll\ApprovalWorkflow;
 use App\Models\User;
 use App\Notifications\ApprovalRequestNotification;
@@ -44,7 +43,7 @@ class ApprovalWorkflowTest extends TestCase
         $this->unitManager = $this->userWithRole('staff');
         $department = Department::create(['name' => 'Inspection', 'hod' => $this->unitManager->employee_id]);
         $this->requester->employee->update(['department_id' => $department->id]);
-        EmployeeSupervisor::create(['supervisor_id' => $this->supervisor->employee_id, 'employee_id' => $this->requester->employee_id]);
+        $this->requester->employee->update(['reports_to_id' => $this->supervisor->employee_id]);
     }
 
     /** The Apave-style chain, set up through the API: supervisor (may change hours) → unit manager → HR. */
@@ -156,9 +155,11 @@ class ApprovalWorkflowTest extends TestCase
         $this->assertSame(['HR approval'], collect($approval->steps)->pluck('name')->all());
         $this->assertSame([$this->hr->id], $approval->current_approver_ids);
 
-        // A supervisor step for someone without a supervisor: HR is asked instead.
+        // A supervisor step for someone without a supervisor (no Reports to, and no head above them): HR is asked
+        // instead. With a head above them, the head of their unit is their supervisor by default.
         $this->apaveChain();
-        EmployeeSupervisor::query()->delete();
+        \App\Models\SelfService\Employee::query()->update(['reports_to_id' => null]);
+        \App\Models\Config\Department::query()->update(['hod' => null]);
         $this->assertSame([$this->hr->id], $this->start($this->request())->current_approver_ids);
     }
 

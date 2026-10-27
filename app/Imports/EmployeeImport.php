@@ -22,9 +22,9 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
 
     /**
      * @param array $row
-     * @return mixed
+     * @return Employee
      */
-    public function model(array $row)
+    public function model(array $row): Employee
     {
         $department = Department::firstOrCreate([
             'name' => $row['department']

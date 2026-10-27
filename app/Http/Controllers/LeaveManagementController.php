@@ -94,7 +94,7 @@ class LeaveManagementController extends Controller
                         ->orWhere('middle_name', 'like', "%{$search}%");
                 });
             })
-            ->when($request->filled('department_id'), fn($q) => $q->where('department_id', $request->department_id))
+            ->when($request->filled('department_id'), fn($q) => $q->whereIn('department_id', \App\Models\Config\Department::subtreeIds((int) $request->department_id)))
             ->whereHas('jobDetail')
             ->paginate($request->per_page ?? 20);
 
