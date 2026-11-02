@@ -390,7 +390,7 @@
                 <div class="info-sub">{{ $attempt->supervisor->email }}</div>
             </td>
             <td class="info-cell">
-                @if($attempt->supervisor_comment)
+                @if($attempt->supervisor_comment && empty($hideReview))
                     <div class="info-label">Supervisor Comment</div>
                     <div class="answer-text">{{ $attempt->supervisor_comment }}</div>
                 @elseif($attempt->employee_comment)
@@ -412,10 +412,22 @@
                 <span class="score-lbl">Overall Score</span>
             </td>
             @endif
-            @if($attempt->self_score !== null)
+            @if($attempt->self_score !== null && empty($hideReview))
             <td class="score-cell">
                 <span class="score-num">{{ number_format((float)$attempt->self_score, 2) }}</span>
                 <span class="score-lbl">Self Score</span>
+            </td>
+            @endif
+            @if($attempt->employee_section_score !== null && $attempt->supervisor_section_score !== null && empty($hideReview))
+            <td class="score-cell">
+                <span class="score-num">{{ number_format((float)$attempt->employee_section_score, 2) }}</span>
+                <span class="score-lbl">Self-Assessment ({{ 100 - ($attempt->window?->assessment?->supervisor_weight ?? 60) }}%)</span>
+            </td>
+            @endif
+            @if($attempt->supervisor_section_score !== null && $supervisorResponses->isNotEmpty())
+            <td class="score-cell">
+                <span class="score-num">{{ number_format((float)$attempt->supervisor_section_score, 2) }}</span>
+                <span class="score-lbl">Supervisor Assessment ({{ $attempt->window?->assessment?->supervisor_weight ?? 60 }}%)</span>
             </td>
             @endif
             @if($attempt->kpi_score !== null)
@@ -429,7 +441,7 @@
     @endif
 
     {{-- ── Responses grouped by category ────────────────────────── --}}
-    <div class="section-title">Appraisal Responses</div>
+    <div class="section-title">{{ $supervisorResponses->isNotEmpty() ? 'Self-Assessment' : 'Appraisal Responses' }}</div>
 
     @php
         $grouped    = collect($responses)->groupBy('category');
@@ -461,12 +473,52 @@
                 <div class="{{ $effectiveAnswer ? 'answer-text' : 'no-answer' }}">
                     {{ $effectiveAnswer ?? 'No answer provided' }}
                 </div>
+                @if(!empty($resp['revisions']) && $resp['revisions']->isNotEmpty())
+                    <div class="info-label" style="margin-top:6px;">Changed by the appraiser</div>
+                    @foreach($resp['revisions'] as $rev)
+                        <div class="timeline-comment">
+                            {{ $rev->created_at?->format('d M Y, H:i') }} &middot; {{ $rev->reviser?->name ?? 'Supervisor' }}:
+                            "{{ $rev->previous_answer ?? '—' }}"@if($rev->previous_score !== null) ({{ $rev->previous_score }})@endif
+                            &rarr; "{{ $rev->answer ?? '—' }}"@if($rev->score !== null) ({{ $rev->score }})@endif
+                            @if($rev->justification) — {{ $rev->justification }}@endif
+                        </div>
+                    @endforeach
+                @endif
             </div>
         </div>
         @endforeach
     @empty
         <p class="text-muted">No responses recorded.</p>
     @endforelse
+
+    {{-- ── Supervisor's assessment (their own questions) ─────────── --}}
+    @if($supervisorResponses->isNotEmpty())
+    <div class="section-title">Supervisor Assessment</div>
+    @foreach($supervisorResponses->groupBy('category') as $category => $items)
+        <div class="category-heading">{{ $category }}</div>
+        @foreach($items as $resp)
+        <div class="response-item">
+            <div class="response-header">
+                <table class="response-header-table">
+                    <tr>
+                        <td class="question-text-cell">{{ $loop->parent->index + 1 }}.{{ $loop->iteration }} {{ $resp['question_text'] }}</td>
+                        @if($resp['score'] !== null)
+                        <td class="score-badge-cell">
+                            <span class="score-badge">{{ $resp['score'] }}</span>
+                        </td>
+                        @endif
+                    </tr>
+                </table>
+            </div>
+            <div class="response-body">
+                <div class="{{ $resp['answer'] ? 'answer-text' : 'no-answer' }}">
+                    {{ $resp['answer'] ?? 'No answer provided' }}
+                </div>
+            </div>
+        </div>
+        @endforeach
+    @endforeach
+    @endif
 
     {{-- ── KPIs ──────────────────────────────────────────────────── --}}
     @if($kpis->isNotEmpty())

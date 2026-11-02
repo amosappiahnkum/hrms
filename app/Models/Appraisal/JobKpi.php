@@ -26,6 +26,22 @@ class JobKpi extends ApplicationModel
     }
 
     /**
+     * The KPI library for a department, or (for a section or unit without its own) the nearest department above.
+     */
+    public static function libraryFor(?int $departmentId): \Illuminate\Support\Collection
+    {
+        $department = $departmentId ? \App\Models\Config\Department::find($departmentId) : null;
+        foreach ($department ? [$department, ...$department->ancestors()->reverse()->all()] : [] as $d) {
+            $kpis = static::where('department_id', $d->id)->orderBy('description')->get(['uuid', 'description']);
+            if ($kpis->isNotEmpty()) {
+                return $kpis;
+            }
+        }
+
+        return collect();
+    }
+
+    /**
      * Upsert a KPI description for a department, returning the record.
      * Skips insert if an identical description (case-insensitive) already exists for that dept.
      */

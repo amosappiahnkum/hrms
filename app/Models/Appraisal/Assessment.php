@@ -26,6 +26,7 @@ class Assessment extends ApplicationModel
         'is_active',
         'include_training_section',
         'include_next_period_targets',
+        'supervisor_weight',
         'user_id',
     ];
 
@@ -33,6 +34,7 @@ class Assessment extends ApplicationModel
         'is_active' => 'boolean',
         'include_training_section' => 'boolean',
         'include_next_period_targets' => 'boolean',
+        'supervisor_weight' => 'integer',
     ];
 
     public function assignable(): MorphTo
@@ -53,7 +55,7 @@ class Assessment extends ApplicationModel
             ->orderBy('order');
     }
 
-    public function addQuestion(Question $question, int $order = 0, ?float $customWeight = null): QuestionUsage
+    public function addQuestion(Question $question, int $order = 0, ?float $customWeight = null, string $respondent = QuestionUsage::RESPONDENT_EMPLOYEE): QuestionUsage
     {
         return QuestionUsage::firstOrCreate(
             [
@@ -64,6 +66,7 @@ class Assessment extends ApplicationModel
             [
                 'order'         => $order,
                 'custom_weight' => $customWeight,
+                'respondent'    => $respondent,
                 'user_id'       => auth()->id(),
             ]
         );

@@ -50,6 +50,9 @@ class SettingSeeder extends Seeder
         // After the appraiser and the employee: the heads above the appraiser who endorse an appraisal before HR.
         // {stop: none} (default: straight to HR) | {stop: count, count} | {stop: level, level} | {stop: top}.
         $service->setDefault('appraisal.endorsement_chain', ['stop' => 'none'], 'appraisal', 'Appraisal endorsement before HR');
+        // acknowledge (default): the employee accepts or disputes the appraiser's review before it goes on.
+        // direct: appraiser → HR; the employee doesn't see the appraiser's changes or comment.
+        $service->setDefault('appraisal.review_flow', 'acknowledge', 'appraisal', 'Appraisal review flow');
 
         // === TRAINING ===
         $service->setDefault('features.training.enabled', true, 'training');

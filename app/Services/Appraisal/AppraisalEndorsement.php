@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Notification;
 
 /**
  * Endorsement of an appraisal by the heads above the appraiser, before HR. The appraiser is the employee's supervisor
- * (ReportingLine::supervisorOf) and scores it; once the employee acknowledges, each head above endorses it (with an
+ * (ReportingLine::supervisorOf) and scores it; once the employee acknowledges (in the direct review flow: once the
+ * appraiser confirms), each head above endorses it (with an
  * optional comment) or returns it to the appraiser (comment required), in turn. How far up it goes is the setting
  * `appraisal.endorsement_chain`: none (default: straight to HR, as before), a number of heads, up to a level, or the
  * top. Endorsers can't change scores. Runs on the approval engine (process `appraisal`).
@@ -36,6 +37,14 @@ class AppraisalEndorsement
         $stop = in_array($rule['stop'] ?? null, ['none', 'count', 'level', 'top'], true) ? $rule['stop'] : 'none';
 
         return ['stop' => $stop, 'count' => max(1, min(10, (int) ($rule['count'] ?? 1))), 'level' => (int) ($rule['level'] ?? 0)];
+    }
+
+    /** The setting, checked: acknowledge (default) | direct. See AssessmentAttempt::REVIEW_FLOW_*. */
+    public static function reviewFlow(): string
+    {
+        $flow = setting('appraisal.review_flow', AssessmentAttempt::REVIEW_FLOW_ACKNOWLEDGE);
+
+        return $flow === AssessmentAttempt::REVIEW_FLOW_DIRECT ? $flow : AssessmentAttempt::REVIEW_FLOW_ACKNOWLEDGE;
     }
 
     /** The appraiser: the employee's supervisor ("Reports to", else the head of their unit). */
@@ -98,6 +107,21 @@ class AppraisalEndorsement
 
             return $decided;
         });
+    }
+
+    /**
+     * Review done (the employee acknowledged, or in the direct flow the appraiser confirmed): to the endorsers when
+     * there are any (true), else to HR (false).
+     */
+    public function forward(AssessmentAttempt $attempt, ?User $by): bool
+    {
+        if ($this->start($attempt->loadMissing('user.employee', 'supervisor', 'window'), $by)) {
+            return true;
+        }
+        $attempt->update(['status' => AssessmentAttempt::STATUS_SUPERVISOR_CONFIRMED, 'supervisor_confirmed_at' => now()]);
+        $this->notifyHr($attempt);
+
+        return false;
     }
 
     /** Every head endorsed: to HR. Returned: back to the appraiser, who confirms again (restarting endorsement). */

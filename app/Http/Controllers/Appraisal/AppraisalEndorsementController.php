@@ -33,7 +33,7 @@ class AppraisalEndorsementController extends Controller
 
         return AssessmentAttemptResource::collection(AssessmentAttempt::whereIn('id', $ids)
             ->with(['user.employee.department', 'user.employee.photo', 'user.employee.rank', 'supervisor', 'window.assessment', 'window.questionUsages',
-                'responses.question.questionCategory', 'events.actor', 'kpis', 'nextKpis', 'trainings', 'approval'])
+                'responses.question.questionCategory', 'responses.revisions.reviser', 'events.actor', 'kpis', 'nextKpis', 'trainings', 'approval'])
             ->latest('submitted_at')->paginate(min((int) $request->input('per_page', 20), 50)));
     }
 
@@ -56,25 +56,47 @@ class AppraisalEndorsementController extends Controller
 
     public function settings(): JsonResponse
     {
-        return ApiResponse::success(['endorsement_chain' => AppraisalEndorsement::rule(), 'department_levels' => Department::levels()]);
+        return ApiResponse::success($this->settingsData());
     }
 
-    /** How far up endorsement goes: none, a number of heads, up to a level, or the top. For appraisals sent from now on. */
+    /**
+     * How far up endorsement goes (none, a number of heads, up to a level, or the top) and the review flow
+     * (acknowledge | direct). Either or both; for appraisals submitted from now on.
+     */
     public function saveSettings(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'endorsement_chain.stop'  => ['required', Rule::in(['none', 'count', 'level', 'top'])],
+            'endorsement_chain'       => ['required_without:review_flow', 'array'],
+            'endorsement_chain.stop'  => ['required_with:endorsement_chain', Rule::in(['none', 'count', 'level', 'top'])],
             'endorsement_chain.count' => ['nullable', 'required_if:endorsement_chain.stop,count', 'integer', 'between:1,10'],
             'endorsement_chain.level' => ['nullable', 'required_if:endorsement_chain.stop,level', 'integer', 'min:0', 'max:' . max(0, count(Department::levels()) - 1)],
-        ])['endorsement_chain'];
-        $rule = ['stop' => $data['stop']] + match ($data['stop']) {
-            'count' => ['count' => (int) $data['count']],
-            'level' => ['level' => (int) $data['level']],
-            default => [],
-        };
-        app(SettingService::class)->set('appraisal.endorsement_chain', $rule);
-        activity('appraisals')->causedBy($request->user())->withProperties($rule)->log('Appraisal endorsement changed');
+            'review_flow'             => ['nullable', Rule::in([AssessmentAttempt::REVIEW_FLOW_ACKNOWLEDGE, AssessmentAttempt::REVIEW_FLOW_DIRECT])],
+        ]);
 
-        return ApiResponse::success(['endorsement_chain' => AppraisalEndorsement::rule(), 'department_levels' => Department::levels()], 'Saved.');
+        if ($chain = $data['endorsement_chain'] ?? null) {
+            $rule = ['stop' => $chain['stop']] + match ($chain['stop']) {
+                'count' => ['count' => (int) $chain['count']],
+                'level' => ['level' => (int) $chain['level']],
+                default => [],
+            };
+            app(SettingService::class)->set('appraisal.endorsement_chain', $rule);
+            activity('appraisals')->causedBy($request->user())->withProperties($rule)->log('Appraisal endorsement changed');
+        }
+
+        if ($flow = $data['review_flow'] ?? null) {
+            app(SettingService::class)->set('appraisal.review_flow', $flow);
+            activity('appraisals')->causedBy($request->user())->withProperties(['review_flow' => $flow])->log('Appraisal review flow changed');
+        }
+
+        return ApiResponse::success($this->settingsData(), 'Saved.');
+    }
+
+    private function settingsData(): array
+    {
+        return [
+            'endorsement_chain' => AppraisalEndorsement::rule(),
+            'review_flow'       => AppraisalEndorsement::reviewFlow(),
+            'department_levels' => Department::levels(),
+        ];
     }
 }

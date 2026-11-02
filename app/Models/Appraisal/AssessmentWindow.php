@@ -82,6 +82,7 @@ class AssessmentWindow extends ApplicationModel
                 'order'                => $usage->order,
                 'custom_weight'        => $usage->custom_weight,
                 'is_required_override' => $usage->is_required_override,
+                'respondent'           => $usage->respondent,
                 'user_id'              => auth()->id() ?? $this->user_id,
             ]);
         }

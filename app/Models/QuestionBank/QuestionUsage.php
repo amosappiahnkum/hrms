@@ -14,6 +14,10 @@ class QuestionUsage extends ApplicationModel
     /** @use HasFactory<QuestionUsageFactory> */
     use HasFactory, HasUuid;
 
+    // Appraisals: who answers the question, the employee (self-assessment) or their supervisor.
+    const string RESPONDENT_EMPLOYEE = 'employee';
+    const string RESPONDENT_SUPERVISOR = 'supervisor';
+
     protected $fillable = [
         'uuid',
         'question_id',
@@ -22,6 +26,7 @@ class QuestionUsage extends ApplicationModel
         'order',
         'custom_weight',
         'is_required_override',
+        'respondent',
         'user_id',
     ];
 
@@ -45,6 +50,38 @@ class QuestionUsage extends ApplicationModel
     public function usable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    public function isForSupervisor(): bool
+    {
+        return $this->respondent === self::RESPONDENT_SUPERVISOR;
+    }
+
+    /** The question as a form shows it (needs question.options; category and dependsOn when loaded). */
+    public function toQuestionPayload(): array
+    {
+        $question = $this->question;
+
+        return [
+            'uuid'            => $question->uuid,
+            'text'            => $question->text,
+            'description'     => $question->description,
+            'type'            => $question->type,
+            'respondent'      => $this->respondent ?? self::RESPONDENT_EMPLOYEE,
+            'is_required'     => $this->is_required_override ?? $question->is_required,
+            'order'           => $this->order,
+            'depends_on_uuid' => $question->relationLoaded('dependsOn') ? $question->dependsOn?->uuid : null,
+            'show_when_value' => $question->show_when_value,
+            'category'        => $question->relationLoaded('questionCategory') && $question->questionCategory
+                ? ['uuid' => $question->questionCategory->uuid, 'name' => $question->questionCategory->name]
+                : null,
+            'options'         => $question->options->map(fn ($o) => [
+                'uuid'         => $o->uuid,
+                'option_text'  => $o->option_text,
+                'option_value' => $o->option_value,
+                'order'        => $o->order,
+            ]),
+        ];
     }
 
     /**

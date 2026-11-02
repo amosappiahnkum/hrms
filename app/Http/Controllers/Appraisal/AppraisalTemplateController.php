@@ -50,6 +50,7 @@ class AppraisalTemplateController extends Controller
             'is_active'   => $request->input('is_active', true),
             'include_training_section' => $request->boolean('include_training_section'),
             'include_next_period_targets' => $request->boolean('include_next_period_targets'),
+            'supervisor_weight' => $request->input('supervisor_weight', 60),
         ]);
 
         $template->jobCategories()->sync($request->input('job_category_ids', []));
@@ -74,27 +75,13 @@ class AppraisalTemplateController extends Controller
         $questions = $assessment->questionUsages
             ->sortBy('order')
             ->values()
-            ->map(fn ($usage) => [
-                'uuid'            => $usage->question->uuid,
-                'text'            => $usage->question->text,
-                'description'     => $usage->question->description,
-                'type'            => $usage->question->type,
-                'is_required'     => $usage->is_required_override ?? $usage->question->is_required,
-                'order'           => $usage->order,
-                'depends_on_uuid' => $usage->question->dependsOn?->uuid,
-                'show_when_value' => $usage->question->show_when_value,
-                'options'         => $usage->question->options->map(fn ($o) => [
-                    'uuid'         => $o->uuid,
-                    'option_text'  => $o->option_text,
-                    'option_value' => $o->option_value,
-                    'order'        => $o->order,
-                ]),
-            ]);
+            ->map(fn ($usage) => $usage->toQuestionPayload());
 
         return ApiResponse::success([
             'name'      => $assessment->title,
             'type'      => $assessment->type,
             'include_training_section' => (bool) $assessment->include_training_section,
+            'supervisor_weight' => $assessment->supervisor_weight,
             'questions' => $questions,
         ]);
     }
@@ -108,6 +95,7 @@ class AppraisalTemplateController extends Controller
             'is_active'   => $request->input('is_active', $assessment->is_active),
             'include_training_section' => $request->boolean('include_training_section', $assessment->include_training_section),
             'include_next_period_targets' => $request->boolean('include_next_period_targets', $assessment->include_next_period_targets),
+            'supervisor_weight' => $request->input('supervisor_weight', $assessment->supervisor_weight),
         ]);
 
         $assessment->jobCategories()->sync($request->input('job_category_ids', []));
@@ -140,14 +128,16 @@ class AppraisalTemplateController extends Controller
             'question_uuid' => ['required', 'exists:questions,uuid'],
             'order'         => ['nullable', 'integer', 'min:0'],
             'custom_weight' => ['nullable', 'numeric', 'min:0'],
+            'respondent'    => ['nullable', 'in:' . QuestionUsage::RESPONDENT_EMPLOYEE . ',' . QuestionUsage::RESPONDENT_SUPERVISOR],
         ]);
 
         $question = Question::where('uuid', $request->question_uuid)->firstOrFail();
-        $usage    = $assessment->addQuestion($question, $request->input('order', 0), $request->custom_weight);
+        $usage    = $assessment->addQuestion($question, $request->input('order', 0), $request->custom_weight, $request->input('respondent', QuestionUsage::RESPONDENT_EMPLOYEE));
 
         return ApiResponse::success([
             'usage_uuid' => $usage->uuid,
             'order'      => $usage->order,
+            'respondent' => $usage->respondent,
             'question'   => $question->only(['uuid', 'text', 'type']),
         ], 'Question added.');
     }
@@ -185,6 +175,8 @@ class AppraisalTemplateController extends Controller
             'questions.*.uuid'          => ['required', 'exists:questions,uuid'],
             'questions.*.order'         => ['nullable', 'integer', 'min:0'],
             'questions.*.custom_weight' => ['nullable', 'numeric', 'min:0'],
+            // Appraisals: who answers it (default: the employee)
+            'questions.*.respondent'    => ['nullable', 'in:' . QuestionUsage::RESPONDENT_EMPLOYEE . ',' . QuestionUsage::RESPONDENT_SUPERVISOR],
         ]);
 
         QuestionUsage::where('usable_type', Assessment::class)
@@ -199,6 +191,7 @@ class AppraisalTemplateController extends Controller
                 'usable_id'     => $assessment->id,
                 'order'         => $item['order'] ?? $index,
                 'custom_weight' => $item['custom_weight'] ?? null,
+                'respondent'    => $item['respondent'] ?? QuestionUsage::RESPONDENT_EMPLOYEE,
                 'user_id'       => auth()->id(),
             ]);
         }

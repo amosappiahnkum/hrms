@@ -21,6 +21,8 @@ return new class extends Migration
             $table->integer('order')->default(0);
             $table->decimal('custom_weight', 5, 2)->nullable();
             $table->boolean('is_required_override')->nullable();
+            // Appraisals: who answers it, the employee or their supervisor.
+            $table->string('respondent', 10)->default('employee');
             $table->foreignId('user_id')->constrained();
             $table->timestamps();
             $table->unique(['question_id', 'usable_type', 'usable_id'], 'question_usage_unique');

@@ -28,6 +28,10 @@ return new class extends Migration
             // Employee, Department, Role, etc.
 
             $table->boolean('is_active')->default(true);
+            // Appraisal: also set the KPI targets for the next period (into the employee's KPI plan).
+            $table->boolean('include_next_period_targets')->default(false);
+            // Appraisal: share of the overall score from the supervisor's section (the employee's section has the rest).
+            $table->unsignedTinyInteger('supervisor_weight')->default(60);
 
             $table->foreignId('user_id')->constrained();
             $table->timestamps();

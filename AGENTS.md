@@ -44,6 +44,19 @@ All models use UUID primary keys (see `app/Models/AppModel.php`), route model bi
 - **Approval engine** (`App\Services\Payroll\ApprovalWorkflowService`): payroll workflows, and appraisal
   endorsement (process `appraisal`, started with `startWith()` from `App\Services\Appraisal\AppraisalEndorsement`).
   Steps are fixed on the request when it starts (`stepsFor()` expands "Heads up the chain").
+- **Appraisal review flow** (setting `appraisal.review_flow`, fixed on `assessment_attempts.review_flow` at first
+  submit): `acknowledge` = the employee accepts/disputes the appraiser's review; `direct` = appraiser → (endorsers) →
+  HR, and the employee never sees the appraiser's changes or comment (`AssessmentAttempt::hidesReviewFrom()`). Every
+  answer change is kept in `question_response_revisions` for HR.
+- **Appraisal sections**: each template question has a `respondent` (`question_usages.respondent`: employee |
+  supervisor), copied into the session snapshot. The supervisor answers theirs at review
+  (`POST appraisal/supervisor/attempts/{attempt}/assessment`) before confirming. Scores:
+  `AssessmentAttempt::sectionScores()` — overall = employee section × (100 − `assessments.supervisor_weight`)% +
+  supervisor section × `supervisor_weight`% (default 60); one section only when the other has no scores.
+- **KPI plans** (`employee_kpis`, `KpiPlanController`): targets agreed per employee and period ahead of the appraisal;
+  the appraisal copies the plan overlapping its period (`startKpisFromPlan()`); "next period targets" set in an
+  appraisal are written to the next period's plan (`source_attempt_id`). Appraisal and payroll migrations are edited in
+  place (they get rerun).
 - **Leave** (`App\Services\Leave\LeaveApprover`, setting `leave.approval_chain`) keeps its own flow: the chain is on
   `leave_requests.approval_chain`, `supervisor_id` is whose turn it is.
 - User guide: `docs/reporting-lines-guide.md`; design and as-built notes: `docs/reporting-lines-and-approval-chains-plan.md`.

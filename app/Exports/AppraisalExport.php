@@ -39,6 +39,8 @@ class AppraisalExport implements FromCollection, WithMapping, WithHeadings, Shou
             'Finalized Date',
             'Score',
             'Self Score',
+            'Self-Assessment Score',
+            'Supervisor Assessment Score',
             'KPI Score (%)',
             'Status',
         ];
@@ -64,6 +66,8 @@ class AppraisalExport implements FromCollection, WithMapping, WithHeadings, Shou
             $row->finalized_at?->format('d M Y') ?? '—',
             $row->score !== null ? number_format((float) $row->score, 2) : '—',
             $row->self_score !== null ? number_format((float) $row->self_score, 2) : '—',
+            $row->employee_section_score !== null ? number_format((float) $row->employee_section_score, 2) : '—',
+            $row->supervisor_section_score !== null ? number_format((float) $row->supervisor_section_score, 2) : '—',
             $row->kpi_score !== null ? number_format((float) $row->kpi_score, 2) . '%' : '—',
             $statusMap[$row->status] ?? $row->status,
         ];
