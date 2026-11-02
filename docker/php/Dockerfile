@@ -35,8 +35,7 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 # Redis PHP extension
 RUN pecl install redis && docker-php-ext-enable redis
 
-# Opcache (performance)
-RUN docker-php-ext-install opcache
+# Opcache is built into PHP 8.5 (no extension to install) and on by default under FPM
 
 # Raise upload limits
 RUN printf "upload_max_filesize=100M\npost_max_size=105M\nmemory_limit=256M\nmax_execution_time=300\n" \

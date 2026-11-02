@@ -21,8 +21,11 @@ class PayrollAccountFingerprints extends Command
             $count = 0;
             EmployeePayProfile::query()->chunkById(200, function ($profiles) use (&$count) {
                 foreach ($profiles as $p) {
-                    // Saving recomputes them (see EmployeePayProfile::booted); quietly: nothing else changes.
-                    $p->saveQuietly();
+                    // Set here: saving quietly skips the saving hook that keeps them in step, and nothing else changes.
+                    $p->forceFill([
+                        'account_fingerprint'      => EmployeePayProfile::fingerprint($p->account_number, 'bank'),
+                        'mobile_money_fingerprint' => EmployeePayProfile::fingerprint($p->mobile_money_number, 'mobile_money'),
+                    ])->saveQuietly();
                     $count++;
                 }
             });
