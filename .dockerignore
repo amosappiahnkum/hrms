@@ -12,5 +12,5 @@ storage/framework/sessions
 storage/framework/views
 *.md
 .env
-.env.example
+.env.*
 docker-compose.yml

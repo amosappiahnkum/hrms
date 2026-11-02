@@ -1,11 +1,12 @@
 #!/bin/sh
-# Refuse to build or start the production stack with development values in the env file (default: .env).
+# Refuse to build, start or deploy the production stack with development values or an exposed env file
+# (default: .env.production).
 # Usage: sh .scripts/check-prod-env.sh [env-file]
 
-env_file="${1:-.env}"
+env_file="${1:-.env.production}"
 
 if [ ! -f "$env_file" ]; then
-    echo "✗ $env_file not found: copy .env.example and fill in the production values."
+    echo "✗ $env_file not found: run make env-prod, then fill in the production values."
     exit 1
 fi
 
@@ -17,6 +18,16 @@ value() {
 errors=0
 fail() { echo "✗ $1"; errors=$((errors + 1)); }
 warn() { echo "! $1"; }
+
+# The secrets stay out of git and away from other users on the server
+if git ls-files --error-unmatch "$env_file" >/dev/null 2>&1; then
+    fail "$env_file is committed to git: git rm --cached $env_file, then rotate every secret in it."
+fi
+mode=$(stat -c %a "$env_file" 2>/dev/null || stat -f %Lp "$env_file")
+case "$mode" in
+    600|400) ;;
+    *) fail "$env_file can be read by other users (mode $mode): chmod 600 $env_file" ;;
+esac
 
 # Set twice, Laravel reads the first value and Docker's env_file the last: they'd disagree
 for key in APP_ENV APP_DEBUG APP_KEY APP_PORT REDIS_PASSWORD PAYMENT_FINGERPRINT_KEY SESSION_SECURE_COOKIE LOG_LEVEL; do
@@ -34,6 +45,10 @@ case "$redis_password" in
     ""|null) fail "REDIS_PASSWORD must be set (and not 'null'): Redis starts with it." ;;
 esac
 
+case "$(value REDIS_HOST)" in
+    127.0.0.1|localhost|"") warn "REDIS_HOST is '$(value REDIS_HOST)': inside the containers Redis is hrms_redis." ;;
+esac
+[ "$(value DB_USERNAME)" = "root" ] && warn "DB_USERNAME is root: give the app its own database user with rights on its database only."
 [ -n "$(value PAYMENT_FINGERPRINT_KEY)" ] || warn "PAYMENT_FINGERPRINT_KEY is empty: payment fingerprints follow APP_KEY."
 [ "$(value SESSION_SECURE_COOKIE)" = "true" ] || warn "SESSION_SECURE_COOKIE isn't true: session cookies can be sent over plain http."
 case "$(value LOG_LEVEL)" in

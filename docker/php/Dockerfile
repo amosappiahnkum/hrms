@@ -33,7 +33,7 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
        sockets
 
 # Redis PHP extension
-RUN pecl install redis && docker-php-ext-enable redis
+RUN pecl install redis-6.3.0 && docker-php-ext-enable redis
 
 # Opcache is built into PHP 8.5 (no extension to install) and on by default under FPM
 

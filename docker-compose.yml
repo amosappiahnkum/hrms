@@ -38,7 +38,8 @@ services:
     restart: unless-stopped
     container_name: hrms_redis
     ports:
-      - "${REDIS_PORT}:6379"
+      # This machine only: Redis has no password in development
+      - "127.0.0.1:${REDIS_PORT}:6379"
     networks:
       - hrms_app_network
 

@@ -25,11 +25,14 @@ set -e
 
 #php artisan app:setup
 
-# Started as root (the app container): storage/ belongs to www-data, which php-fpm, the queue, the scheduler and
-# Reverb all run as. Group-writable so a deploy user in the www-data group can write logs and caches too.
-if [ "$(id -u)" = "0" ] && [ -d /var/www/storage ]; then
-    find /var/www/storage \( ! -user www-data -o ! -group www-data \) -exec chown www-data:www-data {} +
-    chmod -R ug+rwX /var/www/storage
+# Started as root (the app container): storage/ and bootstrap/cache belong to www-data, which php-fpm, the queue,
+# the scheduler, Reverb and the deploy's artisan commands all run as.
+if [ "$(id -u)" = "0" ]; then
+    for dir in /var/www/storage /var/www/bootstrap/cache; do
+        [ -d "$dir" ] || continue
+        find "$dir" \( ! -user www-data -o ! -group www-data \) -exec chown www-data:www-data {} +
+        chmod -R ug+rwX "$dir"
+    done
 fi
 
 exec "$@"

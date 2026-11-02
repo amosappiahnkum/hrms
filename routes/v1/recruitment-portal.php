@@ -9,9 +9,10 @@ use App\Http\Controllers\Recruitment\CandidateSkillController;
 use Illuminate\Support\Facades\Route;
 
 // Middleware (auth:candidate + feature:recruitment.enabled,recruitment.public_portal) is applied from api.php.
-// This file only defines the route structure under the recruitment/portal prefix.
+// This file only defines the route structure under the recruitment/portal prefix. Names start with portal. so the
+// resources below don't clash with the staff ones (qualifications.index…), which would stop the route cache.
 
-Route::prefix('recruitment/portal')->group(function () {
+Route::prefix('recruitment/portal')->name('portal.')->group(function () {
 
     // Session
     Route::post('logout', [CandidatePortalController::class, 'logout']);

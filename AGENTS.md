@@ -20,7 +20,11 @@ All models use UUID primary keys (see `app/Models/AppModel.php`), route model bi
 - **Frontend Build**: `npm run dev` compiles React via Laravel Mix (`webpack.mix.js`), with Tailwind and Sass.
 
 ## Developer Workflows
-- **Setup**: Use Docker (`docker-compose.yml`) for local dev: `docker-compose up -d` starts app, nginx, redis, reverb, queue worker, scheduler.
+- **Setup**: Use Docker (`docker-compose.yml`) for local dev: `make dev` starts app, nginx, redis, reverb, queue worker, scheduler.
+- **Environments**: development reads `.env` (`docker-compose.yml`); production reads `.env.production`
+  (`docker-compose.prod.yml`, template `.env.production.example`), always through `make` (`make help`): `build-prod`,
+  `deploy`, `artisan-prod`… pass `--env-file .env.production`. Production runs PHP only in containers (deploy included):
+  never run `php artisan`/`composer` on the server's host. `.scripts/check-prod-env.sh` gates every production target.
 - **Build Assets**: `npm run dev` or `npm run watch` for frontend compilation.
 - **Run Tests**: `php artisan test` (PHPUnit config in `phpunit.xml`).
 - **Queues**: `php artisan queue:work` processes jobs like email notifications.

@@ -1,5 +1,9 @@
+# Production reads .env.production, never .env: run it through make (prod, build-prod, deploy…), which passes
+# --env-file .env.production for the ${…} values below too.
+#
 # The code is mounted read-only: a compromised PHP process can't rewrite the app or plant files in it.
-# Only storage/ and bootstrap/cache are writable. Deploys still update the code on the host (git pull, composer).
+# Only storage/ and bootstrap/cache are writable. Deploys update the code from outside: git pull, and composer in a
+# one-off container (.scripts/deploy.sh).
 x-code-volumes: &code-volumes
   - ./:/var/www:ro
   - ./storage:/var/www/storage
@@ -36,7 +40,7 @@ services:
     depends_on:
       - hrms_redis
     env_file:
-      - .env
+      - .env.production
     command: php-fpm
 
   hrms_nginx:
@@ -46,7 +50,7 @@ services:
     container_name: hrms_nginx
     ports:
       # Loopback only: the host nginx is the public entry point
-      - "127.0.0.1:${APP_PORT}:80"
+      - "127.0.0.1:${APP_PORT:?Set APP_PORT in .env.production}:80"
     volumes:
       # nginx only serves public/; PHP requests go to php-fpm
       - ./public:/var/www/public:ro
@@ -67,7 +71,7 @@ services:
     image: redis:alpine
     restart: always
     container_name: hrms_redis
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}"]
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env.production}"]
     cap_add:
       - SETUID
       - SETGID
@@ -91,7 +95,7 @@ services:
     networks:
       - hrms_app_network
     env_file:
-      - .env
+      - .env.production
 
   hrms_queue:
     <<: *hardened
@@ -108,7 +112,7 @@ services:
     networks:
       - hrms_app_network
     env_file:
-      - .env
+      - .env.production
 
   hrms_scheduler:
     <<: *hardened
@@ -124,7 +128,7 @@ services:
     networks:
       - hrms_app_network
     env_file:
-      - .env
+      - .env.production
 
   hrms_gotenberg:
     <<: *hardened

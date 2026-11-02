@@ -1,12 +1,16 @@
-COMPOSE      := docker compose
-COMPOSE_PROD := docker compose -f docker-compose.prod.yml
+# Development reads .env (docker-compose.yml); production reads .env.production (docker-compose.prod.yml), for the
+# containers and for the ${…} values in the compose file alike.
+ENV_DEV      := .env
+ENV_PROD     := .env.production
+COMPOSE      := docker compose --env-file $(ENV_DEV)
+COMPOSE_PROD := docker compose --env-file $(ENV_PROD) -f docker-compose.prod.yml
 
 .DEFAULT_GOAL := help
 
 .PHONY: help dev build down restart logs shell \
         install key \
         artisan tinker migrate fresh seed test clear-cache optimize \
-        check-prod prod build-prod down-prod logs-prod \
+        env-prod check-prod prod build-prod down-prod logs-prod shell-prod artisan-prod \
         deploy
 
 help: ## Show available targets
@@ -75,13 +79,17 @@ optimize: ## Cache config/routes/views for production
 
 # ── Prod (docker-compose.prod.yml) ────────────────────────────────────────────
 
-check-prod: ## Check .env holds production values (APP_ENV, APP_DEBUG, REDIS_PASSWORD…)
-	@sh ./.scripts/check-prod-env.sh
+env-prod: ## Create .env.production from .env.production.example (owner-only), if it doesn't exist
+	@if [ -f $(ENV_PROD) ]; then echo "$(ENV_PROD) already exists."; \
+	else cp .env.production.example $(ENV_PROD) && chmod 600 $(ENV_PROD) && echo "Created $(ENV_PROD): fill in every empty value."; fi
+
+check-prod: ## Check .env.production is safe to run with (values, duplicates, permissions, not in git)
+	@sh ./.scripts/check-prod-env.sh $(ENV_PROD)
 
 prod: check-prod ## Start the production stack
 	$(COMPOSE_PROD) up -d
 
-build-prod: check-prod ## Build the production image on the latest base and recreate the stack with it and .env
+build-prod: check-prod ## Build the production image on the latest base and recreate the stack with it and .env.production
 	$(COMPOSE_PROD) build --pull
 	$(COMPOSE_PROD) up -d --force-recreate --remove-orphans
 	$(COMPOSE_PROD) ps
@@ -92,7 +100,13 @@ down-prod: ## Stop and remove production containers
 logs-prod: ## Tail production logs — pass service=<name> to filter
 	$(COMPOSE_PROD) logs -f $(service)
 
+shell-prod: ## Open a shell in the production app container, as www-data
+	$(COMPOSE_PROD) exec -u www-data app bash
+
+artisan-prod: ## Run artisan in production, as www-data: make artisan-prod cmd="migrate:status"
+	$(COMPOSE_PROD) exec -u www-data app php artisan $(cmd)
+
 # ── Deploy ─────────────────────────────────────────────────────────────────────
 
-deploy: ## Run the production deploy script — intended for the app server, not local dev
-	sh ./.scripts/deploy.sh
+deploy: ## Deploy to production (on the app server): audit, pull, composer, migrate, caches — all in the app image
+	bash ./.scripts/deploy.sh
