@@ -48,14 +48,30 @@ class StoreAffiliationRequest extends FormRequest
         }
 
         $this->merge([
-            'start' => Carbon::parse($this->date)->format('Y'),
             'user_id' => auth()->id()
         ]);
 
-        if ($this->end) {
+        if ($this->start) {
             $this->merge([
-                'end' => Carbon::parse($this->date)->format('Y'),
+                'start' => self::toYear($this->start),
             ]);
         }
+
+        if ($this->end) {
+            $this->merge([
+                'end' => self::toYear($this->end),
+            ]);
+        }
+    }
+
+    /**
+     * The form sends a full date (YYYY-MM-DD); a bare year is kept as is,
+     * since Carbon would read "2020" as a time of day.
+     */
+    private static function toYear(mixed $value): string
+    {
+        return preg_match('/^\d{4}$/', (string) $value)
+            ? (string) $value
+            : Carbon::parse($value)->format('Y');
     }
 }

@@ -2,7 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\Competency\DevelopmentMethod;
+use App\Enums\Competency\DevelopmentStatus;
+use App\Models\Competency\DevelopmentAction;
 use App\Models\EmployeeCertification;
+use App\Services\Competency\CertificationStatusService;
 use App\Models\User;
 use App\Notifications\CertificationExpiryNotification;
 use Carbon\Carbon;
@@ -28,6 +32,7 @@ class SendCertificationExpiryReminders extends Command
     public function handle(): void
     {
         $today = Carbon::today();
+        $this->createRenewalNeeds($today);
 
         $certifications = EmployeeCertification::with(['employee.userAccount', 'provider'])
             ->where('does_not_expire', false)
@@ -80,6 +85,60 @@ class SendCertificationExpiryReminders extends Command
 
         $this->info("Done. Reminders dispatched for {$sent} certification(s).");
         Log::info("SendCertificationExpiryReminders: {$sent} dispatched on " . $today->toDateString());
+    }
+
+    /**
+     * A typed certificate that evidences a competency and expires within the renewal window (or has
+     * expired) becomes a training need: an open "certification" development action, which lands in
+     * the training team's needs queue. Skipped once renewed (a later certificate of the same type) or
+     * while a renewal action is already open.
+     */
+    private function createRenewalNeeds(Carbon $today): void
+    {
+        if (!feature('competency.enabled')) {
+            return;
+        }
+
+        $created = 0;
+        $expiring = EmployeeCertification::with(['type', 'employee'])
+            ->where('does_not_expire', false)
+            ->whereNotNull('expiry_date')
+            ->whereDate('expiry_date', '<=', $today->copy()->addDays(CertificationStatusService::EXPIRING_DAYS))
+            ->whereHas('type', fn ($t) => $t->whereNotNull('competency_id')->whereHas('competency'))
+            ->whereHas('employee')
+            ->orderByDesc('expiry_date')
+            ->get()
+            ->unique(fn ($c) => "{$c->employee_id}:{$c->certification_type_id}");
+
+        foreach ($expiring as $cert) {
+            $renewed = EmployeeCertification::where('employee_id', $cert->employee_id)
+                ->where('certification_type_id', $cert->certification_type_id)
+                ->where(fn ($q) => $q->where('does_not_expire', true)->orWhereDate('expiry_date', '>', $cert->expiry_date))
+                ->exists();
+            $open = DevelopmentAction::open()
+                ->where('employee_id', $cert->employee_id)
+                ->where('competency_id', $cert->type->competency_id)
+                ->where('method', DevelopmentMethod::CERTIFICATION)
+                ->exists();
+
+            if ($renewed || $open) {
+                continue;
+            }
+
+            DevelopmentAction::create([
+                'employee_id'   => $cert->employee_id,
+                'competency_id' => $cert->type->competency_id,
+                'method'        => DevelopmentMethod::CERTIFICATION,
+                'status'        => DevelopmentStatus::PLANNED,
+                'description'   => "Renew {$cert->type->name} (" . ($cert->expiry_date->isPast() ? 'expired' : 'expires') . " {$cert->expiry_date->format('j M Y')})",
+                'due_on'        => $cert->expiry_date->toDateString(),
+            ]);
+            $created++;
+        }
+
+        if ($created) {
+            $this->info("Created {$created} certificate renewal need(s).");
+        }
     }
 
     /**

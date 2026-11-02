@@ -16,7 +16,8 @@ Route::prefix('v1')->group(function () {
         require $file;
     }
 
-    Route::prefix('public')->middleware('throttle:30,1')->group(function () {
+    // Public job board and candidate sign-up/login.
+    Route::prefix('public')->middleware(['throttle:30,1', 'feature:recruitment.enabled,recruitment.public_portal'])->group(function () {
         Route::get('jobs', [PublicJobController::class, 'index']);
         Route::get('jobs/{jobOpening}', [PublicJobController::class, 'show']);
         Route::middleware('throttle:5,1')->group(function () {
@@ -27,7 +28,7 @@ Route::prefix('v1')->group(function () {
 });
 
 Route::prefix('v1')
-    ->middleware(['auth:candidate', 'feature:recruitment.enabled'])
+    ->middleware(['auth:candidate', 'feature:recruitment.enabled,recruitment.public_portal'])
     ->group(function () {
         require __DIR__ . '/v1/recruitment-portal.php';
     });

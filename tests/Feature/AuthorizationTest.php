@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\Statuses;
 use App\Models\Config\Department;
-use App\Models\EmployeeSupervisor;
 use App\Models\InformationUpdate;
 use App\Models\SelfService\Award;
 use App\Models\User;
@@ -319,27 +318,6 @@ class AuthorizationTest extends TestCase
         $this->assertTrue($recipients->contains($hr->id));
         $this->assertTrue($recipients->contains($delegate->id));
         $this->assertFalse($recipients->contains($staff->id));
-    }
-
-    public function test_staff_cannot_delete_reporting_lines_or_list_other_supervisors_reports(): void
-    {
-        $supervisor = $this->userWithRole('staff');
-        $report = $this->userWithRole('staff');
-        $link = EmployeeSupervisor::create([
-            'supervisor_id' => $supervisor->employee_id,
-            'employee_id'   => $report->employee_id,
-        ]);
-
-        Sanctum::actingAs($this->userWithRole('staff'));
-        $this->deleteJson("/api/v1/direct-reports/{$link->id}")->assertForbidden();
-        $this->getJson("/api/v1/direct-reports?supervisorId={$supervisor->employee_id}")->assertForbidden();
-        $this->assertModelExists($link);
-
-        Sanctum::actingAs($supervisor);
-        $this->getJson("/api/v1/direct-reports?supervisorId={$supervisor->employee_id}")->assertOk();
-
-        Sanctum::actingAs($this->userWithRole('hr'));
-        $this->deleteJson("/api/v1/direct-reports/{$link->id}")->assertOk();
     }
 
     private function onboardingPayload(User $user, array $overrides = []): array

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Traits\RecordsActivity;
 use App\Models\SelfService\Employee;
+use App\Models\TrainingPlan\TrainingPlanItem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -15,7 +16,9 @@ class EmployeeCertification extends Model
 
     protected $fillable = [
         'employee_id',
+        'training_plan_item_id',
         'certification_provider_id',
+        'certification_type_id',
         'title',
         'description',
         'date_received',
@@ -39,9 +42,26 @@ class EmployeeCertification extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    public function trainingPlanItem(): BelongsTo
+    {
+        return $this->belongsTo(TrainingPlanItem::class);
+    }
+
     public function provider(): BelongsTo
     {
         return $this->belongsTo(CertificationProvider::class, 'certification_provider_id');
+    }
+
+    /** The kind of certificate, when HR has set it (needed to meet a position's requirements). */
+    public function type(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Competency\CertificationType::class, 'certification_type_id');
+    }
+
+    /** Valid on the given day: received, and not expired. */
+    public function isValidOn(\DateTimeInterface $day): bool
+    {
+        return $this->does_not_expire || !$this->expiry_date || $this->expiry_date->gte(\Carbon\Carbon::instance($day)->startOfDay());
     }
 
     public function uploader(): BelongsTo

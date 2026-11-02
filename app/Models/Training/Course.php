@@ -52,7 +52,7 @@ class Course extends ApplicationModel
 
     public function assignments(): HasMany
     {
-        return $this->hasMany(CourseAssignment::class);
+        return $this->hasMany(CourseAssignment::class)->orderBy('id');
     }
 
     public function enrollments(): HasMany

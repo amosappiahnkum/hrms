@@ -4,6 +4,7 @@ namespace App\Models\Appraisal;
 
 use App\Models\ApplicationModel;
 use App\Models\EmployeeCertification;
+use App\Models\QuestionBank\QuestionUsage;
 use App\Models\QuestionResponse;
 use App\Models\Training\ChapterProgress;
 use App\Models\Training\CourseEnrollment;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
-class AssessmentAttempt extends ApplicationModel
+class AssessmentAttempt extends ApplicationModel implements \App\Contracts\ApprovalSubject
 {
     use HasUuid;
 
@@ -31,6 +32,19 @@ class AssessmentAttempt extends ApplicationModel
     const string STATUS_COMPLETED = 'completed';
     const string STATUS_RETURNED = 'returned';
     const string STATUS_SUBMITTED = 'submitted'; // non-appraisal final state
+    // After the employee acknowledges, the heads above the appraiser endorse it in turn before HR (when set up).
+    const string STATUS_PENDING_ENDORSEMENT = 'pending_endorsement';
+
+    // Review flow, fixed when the appraisal is first submitted (setting `appraisal.review_flow`):
+    //   acknowledge (also null): the appraiser's review goes back to the employee to accept or dispute, then on.
+    //   direct: the appraiser confirms and it goes on (endorsement, then HR); the employee never sees the
+    //   appraiser's changes or comment. HR sees every change (QuestionResponseRevision).
+    const string REVIEW_FLOW_ACKNOWLEDGE = 'acknowledge';
+    const string REVIEW_FLOW_DIRECT = 'direct';
+
+    /** Events the employee doesn't see in the direct flow, and the ones whose comment they still see. */
+    private const array REVIEW_ONLY_EVENTS = ['answers_edited', 'endorsement_returned'];
+    private const array EMPLOYEE_VISIBLE_COMMENTS = ['submitted', 'returned'];
 
     protected $fillable = [
         'assessment_window_id',
@@ -39,6 +53,7 @@ class AssessmentAttempt extends ApplicationModel
         'course_chapter_id',
         'user_id',
         'status',
+        'review_flow',
         'started_at',
         'submitted_at',
         'employee_comment',
@@ -48,6 +63,8 @@ class AssessmentAttempt extends ApplicationModel
         'score',
         'self_score',
         'kpi_score',
+        'employee_section_score',
+        'supervisor_section_score',
         'finalized_at',
         'employee_signed_at',
         'supervisor_signed_at',
@@ -63,6 +80,8 @@ class AssessmentAttempt extends ApplicationModel
         'score'                   => 'decimal:2',
         'self_score'              => 'decimal:2',
         'kpi_score'               => 'decimal:2',
+        'employee_section_score'  => 'decimal:2',
+        'supervisor_section_score' => 'decimal:2',
     ];
 
     public function window(): BelongsTo
@@ -85,26 +104,58 @@ class AssessmentAttempt extends ApplicationModel
         return $this->morphMany(QuestionResponse::class, 'respondable');
     }
 
+    /** The endorsement by the heads above the appraiser (the latest, when it was returned and sent again). */
+    public function approval(): \Illuminate\Database\Eloquent\Relations\MorphOne
+    {
+        return $this->morphOne(\App\Models\Payroll\Approval::class, 'subject')->latestOfMany();
+    }
+
+    public function adjustableValues(): array
+    {
+        return [];
+    }
+
+    public function applyAdjustments(array $values): void
+    {
+    }
+
+    public function approvalFinished(\App\Models\Payroll\Approval $approval): void
+    {
+        app(\App\Services\Appraisal\AppraisalEndorsement::class)->finished($this, $approval);
+    }
+
+    public function approvalSummary(): string
+    {
+        return "Appraisal: {$this->window?->title}";
+    }
+
     public function events(): HasMany
     {
         return $this->hasMany(AssessmentAttemptEvent::class, 'assessment_attempt_id')
             ->orderBy('created_at');
     }
 
-    /** Targets for the period under review — the only KPIs that are scored. */
+    /** Targets for the period under review, with the actuals the supervisor records — the KPIs that are scored. */
     public function kpis(): HasMany
     {
         return $this->hasMany(AppraisalKpi::class, 'assessment_attempt_id')
-            ->where('period', AppraisalKpi::PERIOD_CURRENT)
             ->orderBy('order');
     }
 
-    /** Targets agreed for the next appraisal period (target only, never scored). */
+    /** Targets agreed in this appraisal for the next period: the employee's KPI plan for it. */
     public function nextKpis(): HasMany
     {
-        return $this->hasMany(AppraisalKpi::class, 'assessment_attempt_id')
-            ->where('period', AppraisalKpi::PERIOD_NEXT)
+        return $this->hasMany(EmployeeKpi::class, 'source_attempt_id')
             ->orderBy('order');
+    }
+
+    /** The period after the one under review, of the same length (in whole months). */
+    public function nextPeriod(): array
+    {
+        [$from, $to] = $this->window->appraisalPeriod();
+        $start = $to->addDay()->startOfDay();
+
+        return [$start, $start->addMonths(max(1, (int) round($from->diffInMonths($to))))->subDay()];
     }
 
     public function trainings(): HasMany
@@ -162,42 +213,26 @@ class AssessmentAttempt extends ApplicationModel
     }
 
     /**
-     * Start this appraisal's KPIs from the targets set for "the next period" in the
-     * employee's most recent reviewed appraisal. Actuals start empty for the supervisor
-     * to record. Runs only while the attempt has no KPIs of its own.
+     * Start this appraisal's KPIs from the employee's KPI plan for the period under review. Actuals start empty for the
+     * supervisor to record. Runs only while the attempt has no KPIs of its own.
      */
-    public function carryOverNextPeriodTargets(): void
+    public function startKpisFromPlan(): void
     {
-        if ($this->kpis()->exists()) {
+        $employeeId = $this->user?->employee_id;
+        if (!$employeeId || $this->kpis()->exists()) {
             return;
         }
 
-        $previous = self::query()
-            ->where('user_id', $this->user_id)
-            ->where('id', '!=', $this->id)
-            ->whereNotIn('status', [
-                self::STATUS_DRAFT,
-                self::STATUS_RETURNED,
-                self::STATUS_PENDING_SUPERVISOR,
-                self::STATUS_SUBMITTED,
-            ])
-            ->whereHas('window.assessment', fn ($q) => $q->where('type', 'appraisal'))
-            ->whereHas('nextKpis')
-            ->with('nextKpis')
-            ->latest('submitted_at')
-            ->latest('id')
-            ->first();
-
-        foreach ($previous?->nextKpis ?? [] as $kpi) {
-            AppraisalKpi::create([
+        [$from, $to] = $this->window->appraisalPeriod();
+        EmployeeKpi::where('employee_id', $employeeId)->overlapping($from, $to)
+            ->orderBy('period_start')->orderBy('order')->get()
+            ->each(fn (EmployeeKpi $kpi, int $i) => AppraisalKpi::create([
                 'assessment_attempt_id' => $this->id,
-                'period'                => AppraisalKpi::PERIOD_CURRENT,
                 'description'           => $kpi->description,
                 'target'                => $kpi->target,
                 'actual'                => null,
-                'order'                 => $kpi->order,
-            ]);
-        }
+                'order'                 => $i,
+            ]));
     }
 
     // ── Training quiz relations ───────────────────────────────────────────────
@@ -222,6 +257,111 @@ class AssessmentAttempt extends ApplicationModel
     public function isEditable(): bool
     {
         return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_RETURNED]);
+    }
+
+    public function isDirectReview(): bool
+    {
+        return $this->review_flow === self::REVIEW_FLOW_DIRECT;
+    }
+
+    /** Whether the appraiser's changes and comments are kept from this viewer: the employee, in the direct flow. */
+    public function hidesReviewFrom(?int $viewerId): bool
+    {
+        return $this->isDirectReview() && $viewerId !== null && $viewerId === $this->user_id;
+    }
+
+    /**
+     * The supervisor's comment as this viewer may see it. In the direct flow the employee sees it only while it's the
+     * reason the appraisal was returned to them.
+     */
+    public function supervisorCommentFor(?int $viewerId): ?string
+    {
+        if ($this->hidesReviewFrom($viewerId) && $this->status !== self::STATUS_RETURNED) {
+            return null;
+        }
+
+        return $this->supervisor_comment;
+    }
+
+    /** The timeline as this viewer may see it (needs `events` loaded). */
+    public function eventsVisibleTo(?int $viewerId): \Illuminate\Support\Collection
+    {
+        if (!$this->hidesReviewFrom($viewerId)) {
+            return $this->events;
+        }
+
+        return $this->events
+            ->reject(fn ($e) => in_array($e->event_type, self::REVIEW_ONLY_EVENTS, true))
+            ->map(fn ($e) => in_array($e->event_type, self::EMPLOYEE_VISIBLE_COMMENTS, true) ? $e : (clone $e)->setAttribute('comment', null))
+            ->values();
+    }
+
+    /** The window's questions by section: who answers them (QuestionUsage::RESPONDENT_*). */
+    public function questionUsagesFor(string $respondent): \Illuminate\Support\Collection
+    {
+        $this->loadMissing('window.questionUsages');
+
+        return ($this->window?->questionUsages ?? collect())
+            ->filter(fn (QuestionUsage $u) => ($u->respondent ?? QuestionUsage::RESPONDENT_EMPLOYEE) === $respondent)
+            ->values();
+    }
+
+    /**
+     * Whether this viewer sees the supervisor's own section. Everyone but the employee does; the employee only in the
+     * acknowledge flow, once the supervisor has finished it.
+     */
+    public function showsSupervisorSectionTo(?int $viewerId): bool
+    {
+        if ($viewerId === null || $viewerId !== $this->user_id) {
+            return true;
+        }
+
+        return !$this->isDirectReview()
+            && !in_array($this->status, [self::STATUS_DRAFT, self::STATUS_RETURNED, self::STATUS_PENDING_SUPERVISOR], true);
+    }
+
+    /**
+     * The scores, live: the employee's section (their answers, with the supervisor's changes), the employee's own
+     * answers alone (self), the supervisor's section, and the overall score — the two sections split by the template's
+     * supervisor_weight (default 60%). With only one section scored (no supervisor questions, or nobody above the
+     * employee to answer them), the overall score is that section's. Weighted by each question's weight.
+     */
+    public function sectionScores(): array
+    {
+        $this->loadMissing(['responses.question', 'window.questionUsages', 'window.assessment']);
+        $usages = ($this->window?->questionUsages ?? collect())->keyBy('question_id');
+        $sums = ['employee' => [0.0, 0.0], 'self' => [0.0, 0.0], 'supervisor' => [0.0, 0.0]];
+        $add = function (string $key, ?int $score, float $weight) use (&$sums) {
+            if ($score !== null) {
+                $sums[$key][0] += $score * $weight;
+                $sums[$key][1] += $weight;
+            }
+        };
+
+        foreach ($this->responses as $r) {
+            $usage  = $usages->get($r->question_id);
+            $weight = (float) ($usage?->custom_weight ?? $r->question?->weight ?? 1);
+            if ($usage?->isForSupervisor()) {
+                $add('supervisor', $r->score, $weight);
+                continue;
+            }
+            $add('employee', $r->supervisor_score ?? $r->score, $weight);
+            $add('self', $r->score, $weight);
+        }
+
+        $avg = fn (array $sum) => $sum[1] > 0 ? round($sum[0] / $sum[1], 2) : null;
+        $employee   = $avg($sums['employee']);
+        $supervisor = $avg($sums['supervisor']);
+        $share      = ($this->window?->assessment?->supervisor_weight ?? 60) / 100;
+
+        return [
+            'score'                    => $employee !== null && $supervisor !== null
+                ? round($employee * (1 - $share) + $supervisor * $share, 2)
+                : ($employee ?? $supervisor),
+            'self_score'               => $avg($sums['self']),
+            'employee_section_score'   => $employee,
+            'supervisor_section_score' => $supervisor,
+        ];
     }
 
     public function isTrainingQuiz(): bool
@@ -303,36 +443,10 @@ class AssessmentAttempt extends ApplicationModel
         $events    = $this->relationLoaded('events') ? $this->events : collect();
         $kpis      = $this->relationLoaded('kpis') ? $this->kpis : collect();
 
-        $usagesByQId = ($this->relationLoaded('window') && $this->window?->relationLoaded('questionUsages'))
-            ? $this->window->questionUsages->keyBy('question_id')
-            : collect();
-
-        // ── Weighted scores ──────────────────────────────────────────────────
-        $totalWeight   = 0;
-        $weightedScore = 0;
-        $selfWeighted  = 0;
-        $hasScores     = false;
-
-        foreach ($responses as $r) {
-            $effective = $r->supervisor_score ?? $r->score;
-            $self      = $r->score;
-            if ($effective === null && $self === null) continue;
-
-            $weight = (float) ($usagesByQId[$r->question_id]?->custom_weight ?? $r->question?->weight ?? 1);
-
-            $totalWeight   += $weight;
-            $weightedScore += ($effective ?? 0) * $weight;
-            $selfWeighted  += ($self ?? 0) * $weight;
-            $hasScores      = true;
-        }
-
-        $overallScore = $hasScores && $totalWeight > 0
-            ? round($weightedScore / $totalWeight, 2)
-            : $this->score;
-
-        $selfScoreVal = $hasScores && $totalWeight > 0
-            ? round($selfWeighted / $totalWeight, 2)
-            : $this->self_score;
+        // ── Weighted scores (both sections) ─────────────────────────────────
+        $scores       = $this->sectionScores();
+        $overallScore = $scores['score'] ?? $this->score;
+        $selfScoreVal = $scores['self_score'] ?? $this->self_score;
 
         // ── Self vs Supervisor Gap ───────────────────────────────────────────
         $scoreGap = ($overallScore !== null && $selfScoreVal !== null)
@@ -365,13 +479,17 @@ class AssessmentAttempt extends ApplicationModel
             : null;
 
         // ── Supervisor Override Rate ─────────────────────────────────────────
-        $total          = $responses->count();
-        $overriddenCount = $responses->filter(fn ($r) => $r->supervisor_score !== null)->count();
+        $supervisorQuestionIds = $this->questionUsagesFor(QuestionUsage::RESPONDENT_SUPERVISOR)->pluck('question_id')->all();
+        $employeeResponses = $responses->reject(fn ($r) => in_array($r->question_id, $supervisorQuestionIds, true));
+        $total          = $employeeResponses->count();
+        $overriddenCount = $employeeResponses->filter(fn ($r) => $r->supervisor_score !== null)->count();
         $overrideRate   = $total > 0 ? round(($overriddenCount / $total) * 100, 1) : null;
 
         return [
             'overall_score'            => $overallScore,
             'self_score'               => $selfScoreVal,
+            'employee_section_score'   => $scores['employee_section_score'],
+            'supervisor_section_score' => $scores['supervisor_section_score'],
             'score_gap'                => $scoreGap,
             'category_scores'          => $categoryScores,
             'kpi_achievement_rate'     => $kpiAchievementRate,

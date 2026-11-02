@@ -15,7 +15,8 @@ class EmployeeFilter
     {
         return $query
             ->when($this->archived(), fn ($q) => $q->onlyTrashed())
-            ->when($this->department(), fn ($q, $value) => $q->where('department_id', $value))
+            // The department and its sub-departments.
+            ->when($this->department(), fn ($q, $value) => $q->whereIn('department_id', \App\Models\Config\Department::subtreeIds((int) $value)))
             ->when($this->gender(), fn ($q, $value) => $q->where('gender', $value))
             ->when($this->maritalStatus(), fn ($q, $value) => $q->where('marital_status', $value))
             ->when($this->rank(), fn ($q, $value) => $q->where('rank_id', $value))

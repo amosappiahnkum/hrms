@@ -6,11 +6,13 @@ use App\Models\Config\Department;
 use App\Models\Config\Setting;
 use App\Models\SelfService\Employee;
 use App\Models\User;
+use App\Services\SettingService;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Database\Seeders\SettingSeeder;
 use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
 
-/** Roles, permissions and feature flags as a fresh install has them, plus user factories. */
+/** Roles, permissions, settings and feature flags as a deploy leaves them, plus user factories. */
 trait SetsUpAccess
 {
     protected function setUpAccess(array $features): void
@@ -18,9 +20,13 @@ trait SetsUpAccess
         $this->seed(RolesAndPermissionsSeeder::class);
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
+        // Deploys run SettingSeeder after migrating; tests start from the same settings.
+        $this->seed(SettingSeeder::class);
+
         foreach ($features as $feature) {
-            Setting::create(['key' => "features.{$feature}", 'value' => true, 'group' => 'features']);
+            Setting::updateOrCreate(['key' => "features.{$feature}"], ['value' => true, 'group' => 'features']);
         }
+        app(SettingService::class)->refreshCache();
     }
 
     protected function userWithRole(string $role): User

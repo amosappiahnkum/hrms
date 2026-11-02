@@ -30,6 +30,8 @@ return new class extends Migration
                 'submitted',
                 'pending_signatures',
             ])->default('draft');
+            // Fixed on first submission (setting appraisal.review_flow): null/acknowledge | direct.
+            $table->string('review_flow', 20)->nullable();
 
             $table->timestamp('started_at')->nullable();
             $table->timestamp('submitted_at')->nullable();
@@ -49,6 +51,9 @@ return new class extends Migration
             $table->decimal('score', 5, 2)->nullable();
             $table->decimal('self_score', 5, 2)->nullable();
             $table->decimal('kpi_score', 5, 2)->nullable();
+            // The two sections: the employee's (with the supervisor's changes) and the supervisor's own questions.
+            $table->decimal('employee_section_score', 5, 2)->nullable();
+            $table->decimal('supervisor_section_score', 5, 2)->nullable();
             $table->timestamp('finalized_at')->nullable();
 
             $table->timestamp('employee_signed_at')->nullable();

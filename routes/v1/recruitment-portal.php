@@ -8,7 +8,7 @@ use App\Http\Controllers\Recruitment\CandidateQualificationController;
 use App\Http\Controllers\Recruitment\CandidateSkillController;
 use Illuminate\Support\Facades\Route;
 
-// Middleware (auth:candidate + feature:recruitment.enabled) is applied from api.php.
+// Middleware (auth:candidate + feature:recruitment.enabled,recruitment.public_portal) is applied from api.php.
 // This file only defines the route structure under the recruitment/portal prefix.
 
 Route::prefix('recruitment/portal')->group(function () {

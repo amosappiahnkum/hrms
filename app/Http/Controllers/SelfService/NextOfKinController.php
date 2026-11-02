@@ -13,7 +13,6 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class NextOfKinController extends Controller
 {
@@ -58,8 +57,8 @@ class NextOfKinController extends Controller
             DB::commit();
             return ApiResponse::success([]);
         } catch (Exception $exception) {
-            Log::error('Update Next OF Kin Error', ['error' => $exception]);
-            return response()->json(['message' => 'Something went wrong'], 400);
+            DB::rollBack();
+            return ApiResponse::fromException($exception);
         }
     }
 }

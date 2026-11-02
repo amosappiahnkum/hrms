@@ -17,6 +17,7 @@ class AppraisalTemplateResource extends JsonResource
             'is_active'   => $this->is_active,
             'include_training_section' => (bool) $this->include_training_section,
             'include_next_period_targets' => (bool) $this->include_next_period_targets,
+            'supervisor_weight' => $this->supervisor_weight,
             'job_categories' => $this->whenLoaded('jobCategories', fn () =>
                 $this->jobCategories->map(fn ($c) => ['uuid' => $c->uuid, 'name' => $c->name])->values()
             ),
@@ -29,6 +30,7 @@ class AppraisalTemplateResource extends JsonResource
                     'usage_uuid'    => $usage->uuid,
                     'order'         => $usage->order,
                     'custom_weight' => $usage->custom_weight,
+                    'respondent'    => $usage->respondent,
                     'question'      => QuestionResource::make($usage->question),
                 ])
             ),

@@ -19,8 +19,11 @@ class DepartmentResource extends JsonResource
             "head" => new MiniEmployeeResource($this->headOfDepartment),
             "parent_id" => $this->parent?->uuid,
             "parent_name" => $this->parent?->name,
-            "employees" => $this->employees->count(),
+            "employees" => $this->employees_count ?? $this->employees()->count(),
             "children_count" => $this->children_count ?? 0,
+            // Its level in the structure (an index into the level names), and that name, e.g. "Section".
+            "level" => $this->level,
+            "level_name" => $this->levelName(),
         ];
     }
 }

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Appraisal\AppraisalTemplateController;
 use App\Http\Controllers\Appraisal\AssessmentAttemptController;
 use App\Http\Controllers\Appraisal\AssessmentWindowController;
+use App\Http\Controllers\Appraisal\KpiPlanController;
 use App\Http\Controllers\JobCategoryController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,6 +25,14 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
         Route::post('/attempts/{attempt}/sign', [AssessmentAttemptController::class, 'employeeSign']);
     });
 
+    // ── KPI plans: targets agreed ahead of the appraisal (employee: theirs; supervisor/HR: set them) ──
+    Route::get('my/kpis', [KpiPlanController::class, 'mine']);
+    Route::prefix('appraisal/kpi-plans')->group(function () {
+        Route::get('/team', [KpiPlanController::class, 'team']);
+        Route::get('/{employee}', [KpiPlanController::class, 'show']);
+        Route::put('/{employee}', [KpiPlanController::class, 'update']);
+    });
+
     // ── Shared: PDF download (employee, supervisor, HR — internal auth check) ───
     Route::get('/appraisal/attempts/{attempt}/pdf', [AssessmentAttemptController::class, 'printPdf']);
 
@@ -33,10 +42,21 @@ Route::middleware('feature:appraisal.enabled')->group(function () {
         Route::post('/attempts/{attempt}/confirm', [AssessmentAttemptController::class, 'supervisorConfirm']);
         Route::post('/attempts/{attempt}/return', [AssessmentAttemptController::class, 'supervisorReturn']);
         Route::post('/attempts/{attempt}/responses/override', [AssessmentAttemptController::class, 'supervisorOverrideResponses']);
+        Route::post('/attempts/{attempt}/assessment', [AssessmentAttemptController::class, 'supervisorAssessment']);
         Route::post('/attempts/{attempt}/sign', [AssessmentAttemptController::class, 'supervisorSign']);
         Route::get('/attempts/{attempt}/kpis/department', [AssessmentAttemptController::class, 'departmentKpis']);
         Route::post('/attempts/{attempt}/kpis/sync', [AssessmentAttemptController::class, 'syncKpis']);
     });
+
+    // ── Heads above the appraiser: endorse before HR ──────────────────────────
+    Route::prefix('appraisal/endorsements')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'index']);
+        Route::post('/{attempt}/endorse', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'endorse']);
+        Route::post('/{attempt}/return', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'returnToAppraiser']);
+    });
+    Route::get('appraisal/settings', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'settings']);
+    Route::middleware('permission:manage-appraisal-windows')
+        ->put('appraisal/settings', [\App\Http\Controllers\Appraisal\AppraisalEndorsementController::class, 'saveSettings']);
 
     // ── HR: finalise confirmed appraisals ─────────────────────────────────────
     Route::prefix('appraisal/hr')->middleware('permission:finalize-appraisals')->group(function () {

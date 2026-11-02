@@ -5,7 +5,6 @@ namespace App\Models\SelfService;
 use App\Models\AppModel;
 use App\Models\Config\Department;
 use App\Models\EmployeeCertification;
-use App\Models\EmployeeSupervisor;
 use App\Models\InformationUpdate;
 use App\Models\JobDetail;
 use App\Models\LeaveRequest;
@@ -59,6 +58,8 @@ class Employee extends AppModel
         'qualification',
         'rank_id',
         'department_id',
+        // Who they report to when it isn't the head of their unit (see ReportingLine).
+        'reports_to_id',
         'user_id',
         'senior_staff',
         'senior_member',
@@ -89,6 +90,7 @@ class Employee extends AppModel
             'gender' => ['show_in_diff' => true],
             'marital_status' => ['show_in_diff' => true],
             'ssnit_number' => ['show_in_diff' => true],
+            'bio' => ['show_in_diff' => true],
             'department_id' => ['show_in_diff' => false],
             'rank_id' => ['show_in_diff' => false],
         ];
@@ -215,6 +217,25 @@ class Employee extends AppModel
     /**
      * @return HasOne
      */
+    /**
+     * The user who heads this employee's department; for an HOD, the head of the parent department
+     * (same rule appraisals use). Null when there is none.
+     */
+    public function hodUser(): ?User
+    {
+        $this->loadMissing('department.parent');
+        $department = $this->department;
+
+        if (!$department) {
+            return null;
+        }
+
+        $isHod = (int) $department->hod === (int) $this->id;
+        $hodEmployeeId = ($isHod && $department->parent) ? $department->parent->hod : $department->hod;
+
+        return $hodEmployeeId ? User::where('employee_id', $hodEmployeeId)->first() : null;
+    }
+
     public function userAccount(): HasOne
     {
         return $this->hasOne(User::class);
@@ -223,6 +244,17 @@ class Employee extends AppModel
     /**
      * @return HasMany
      */
+    /** The approved leave the employee is on today, if any. */
+    public function currentLeave(): HasOne
+    {
+        // Fully approved leave ends HR's step as hr_approved.
+        return $this->hasOne(LeaveRequest::class)
+            ->where('status', 'hr_approved')
+            ->whereDate('start_date', '<=', today())
+            ->whereDate('end_date', '>=', today())
+            ->latest('start_date');
+    }
+
     public function leaveRequests(): HasMany
     {
         return $this->hasMany(LeaveRequest::class);
@@ -231,9 +263,22 @@ class Employee extends AppModel
     /**
      * @return HasOne
      */
-    public function employeeSupervisor(): HasOne
+    /** Pay details from each effective date (payroll). */
+    public function payProfiles(): HasMany
     {
-        return $this->hasOne(EmployeeSupervisor::class);
+        return $this->hasMany(\App\Models\Payroll\EmployeePayProfile::class);
+    }
+
+    /** Recurring pay components given to the employee (payroll). */
+    public function payComponents(): HasMany
+    {
+        return $this->hasMany(\App\Models\Payroll\EmployeePayComponent::class);
+    }
+
+    /** The person set as their "Reports to"; empty means the head of their unit (see ReportingLine::supervisorOf). */
+    public function reportsTo(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reports_to_id');
     }
 
     /**

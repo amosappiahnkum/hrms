@@ -1,4 +1,5 @@
-FROM php:8.4-fpm
+# Pinned to a release patched for CVE-2026-109618 / CVE-2026-109619 (php2shell)
+FROM php:8.5.12-fpm
 
 # Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -40,6 +41,10 @@ RUN docker-php-ext-install opcache
 # Raise upload limits
 RUN printf "upload_max_filesize=100M\npost_max_size=105M\nmemory_limit=256M\nmax_execution_time=300\n" \
     > /usr/local/etc/php/conf.d/uploads.ini
+
+# Hardening: hide the PHP version, and switch off the features the php2shell advisories name as exposure
+RUN printf "expose_php=Off\nsession.upload_progress.enabled=0\nfatal_error_backtraces=0\n" \
+    > /usr/local/etc/php/conf.d/hardening.ini
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

@@ -22,6 +22,9 @@ php artisan optimize
 # Run database migrations
 php artisan migrate --force
 
+# Add any new settings and feature flags (existing values are never overwritten)
+php artisan db:seed --class=SettingSeeder --force
+
 # Exit maintenance mode
 php artisan up
 

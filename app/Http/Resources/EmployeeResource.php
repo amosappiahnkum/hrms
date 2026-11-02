@@ -48,9 +48,25 @@ class EmployeeResource extends JsonResource
                 'location' => $this->jobDetail->location ?? 'Not Updated',
                 'room' => $this->jobDetail->room ?? 'Not Updated'
             ],
-            'supervisor'   => $this->employeeSupervisor?->supervisor->name,
+            // Quick-glance details for the employee list.
+            'position'          => $this->jobDetail?->position?->name,
+            'job_category'      => $this->jobDetail?->jobCategory?->name,
+            'joined_date'       => $this->jobDetail?->joined_date ? Carbon::parse($this->jobDetail->joined_date)->toDateString() : null,
+            'years_of_service'  => $this->jobDetail?->joined_date ? (int) Carbon::parse($this->jobDetail->joined_date)->diffInYears(now()) : null,
+            'contract_end_date' => $this->jobDetail?->contract_end_date ? Carbon::parse($this->jobDetail->contract_end_date)->toDateString() : null,
+            'on_leave'          => $this->currentLeave ? [
+                'type'  => $this->currentLeave->leaveType?->name,
+                'until' => Carbon::parse($this->currentLeave->end_date)->toDateString(),
+            ] : null,
+            'pending_update'    => $this->informationUpdate !== null,
+            // Their "Reports to", else the head of their unit (by default).
+            'supervisor'   => ($supervisor = app(\App\Services\Org\ReportingLine::class)->supervisorOf($this->resource))?->name,
+            'supervisor_by_default' => $supervisor !== null && $this->reports_to_id !== $supervisor->id,
             'has_account'  => $this->userAccount !== null,
             'work_email'   => $this->contactDetail?->work_email,
+            'other_email'  => $this->contactDetail?->other_email,
+            'telephone'    => $this->contactDetail?->telephone,
+            'work_telephone' => $this->contactDetail?->work_telephone,
         ];
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -19,11 +20,11 @@ class EducationExport implements FromCollection, WithMapping, WithHeadings, Shou
     }
 
     /**
-     * @return AnonymousResourceCollection
+     * @return Collection
      */
-    public function collection(): AnonymousResourceCollection
+    public function collection(): Collection
     {
-        return $this->collection;
+        return $this->collection->collection;
     }
 
     public function headings(): array

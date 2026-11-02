@@ -5,12 +5,17 @@ namespace App\Http\Controllers;
 use App\Helpers\ApiResponse;
 use App\Http\Resources\EmployeeCertificationResource;
 use App\Models\CertificationProvider;
+use App\Models\Competency\CertificationType;
 use App\Models\EmployeeCertification;
 use App\Models\SelfService\Employee;
+use App\Models\TrainingPlan\TrainingPlanItem;
+use App\Enums\TrainingPlan\TrainingStatus;
+use Illuminate\Validation\ValidationException;
 use App\Notifications\CertificationActionNotification;
 use App\Services\MinioUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
 
@@ -22,11 +27,12 @@ class EmployeeCertificationController extends Controller
     {
         abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
-        $query = EmployeeCertification::with(['provider', 'employee', 'uploader'])
+        $query = EmployeeCertification::with(['provider', 'type', 'employee', 'uploader', 'trainingPlanItem.plan'])
             ->when($request->employee_id, fn($q, $v) => $q->whereHas(
                 'employee', fn($eq) => $eq->where('uuid', $v)
             ))
             ->when($request->provider_id, fn($q, $v) => $q->where('certification_provider_id', $v))
+            ->when($request->training_plan_item_uuid, fn($q, $v) => $q->whereHas('trainingPlanItem', fn($t) => $t->where('uuid', $v)))
             ->when($request->status === 'expired', fn($q) => $q->expired())
             ->when($request->status === 'expiring_soon', fn($q) => $q->expiringSoon())
             ->when($request->search, fn($q, $v) => $q->where('title', 'like', "%{$v}%"))
@@ -80,15 +86,21 @@ class EmployeeCertificationController extends Controller
             'certification_provider_id' => ['nullable', 'exists:certification_providers,id'],
             'provider_name'            => ['nullable', 'string', 'max:255', 'required_without:certification_provider_id'],
             'file'                     => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:20480'],
+            'certification_type_uuid'  => ['nullable', 'string', Rule::exists('certification_types', 'uuid')->whereNull('deleted_at')],
+            'training_plan_item_uuid'  => ['nullable', 'string'],
+            'mark_training_completed'  => ['boolean'],
         ]);
 
         $providerId = $this->resolveProvider($request);
         $employee   = Employee::where('uuid', $request->employee_uuid)->firstOrFail();
+        $training   = $this->resolveTraining($request->training_plan_item_uuid, $employee);
         $uploaded   = app(MinioUploadService::class)->upload($request->file('file'), null, 'employee-certifications');
 
         $cert = EmployeeCertification::create([
             'employee_id'               => $employee->id,
+            'training_plan_item_id'     => $training?->id,
             'certification_provider_id' => $providerId,
+            'certification_type_id'     => $this->typeId($request->certification_type_uuid),
             'title'                     => $request->title,
             'description'               => $request->description,
             'date_received'             => $request->date_received,
@@ -103,7 +115,9 @@ class EmployeeCertificationController extends Controller
 
         activity('certifications')->performedOn($cert)->log("Uploaded certification: {$cert->title} for employee #{$employee->staff_id}");
 
-        $cert->load(['provider', 'employee', 'uploader']);
+        $this->completeTraining($training, $request, $cert);
+
+        $cert->load(['provider', 'type', 'employee', 'uploader', 'trainingPlanItem.plan']);
         $this->notifyEmployee($cert, 'uploaded');
 
         return ApiResponse::success(
@@ -118,7 +132,7 @@ class EmployeeCertificationController extends Controller
         abort_unless($this->can('manage-certifications'), 403, 'Unauthorized.');
 
         return ApiResponse::success(
-            EmployeeCertificationResource::make($employeeCertification->load(['provider', 'employee', 'uploader']))
+            EmployeeCertificationResource::make($employeeCertification->load(['provider', 'type', 'employee', 'uploader', 'trainingPlanItem.plan']))
         );
     }
 
@@ -134,7 +148,15 @@ class EmployeeCertificationController extends Controller
             'does_not_expire'          => ['boolean'],
             'certification_provider_id' => ['nullable', 'exists:certification_providers,id'],
             'provider_name'            => ['nullable', 'string', 'max:255'],
+            'certification_type_uuid'  => ['nullable', 'string', Rule::exists('certification_types', 'uuid')->whereNull('deleted_at')],
+            'training_plan_item_uuid'  => ['nullable', 'string'],
+            'mark_training_completed'  => ['boolean'],
         ]);
+
+        // Linking is optional: omit to keep, send null/empty to unlink, or a uuid to (re)link.
+        $training = $request->exists('training_plan_item_uuid')
+            ? $this->resolveTraining($request->training_plan_item_uuid, $employeeCertification->employee)
+            : $employeeCertification->trainingPlanItem;
 
         $providerId = $request->filled('provider_name')
             ? $this->resolveProvider($request)
@@ -149,11 +171,18 @@ class EmployeeCertificationController extends Controller
             'date_received'             => $request->input('date_received', $employeeCertification->date_received),
             'expiry_date'               => $doesNotExpire ? null : $request->input('expiry_date', $employeeCertification->expiry_date),
             'does_not_expire'           => $doesNotExpire,
+            'training_plan_item_id'     => $training?->id,
+            // Omit to keep; null to clear.
+            'certification_type_id'     => $request->exists('certification_type_uuid')
+                ? $this->typeId($request->certification_type_uuid)
+                : $employeeCertification->certification_type_id,
         ]);
+
+        $this->completeTraining($training, $request, $employeeCertification);
 
         activity('certifications')->performedOn($employeeCertification)->log("Updated certification: {$employeeCertification->title}");
 
-        $employeeCertification->load(['provider', 'employee', 'uploader']);
+        $employeeCertification->load(['provider', 'type', 'employee', 'uploader', 'trainingPlanItem.plan']);
         $this->notifyEmployee($employeeCertification, 'updated');
 
         return ApiResponse::success(
@@ -201,7 +230,7 @@ class EmployeeCertificationController extends Controller
 
         abort_unless($employee, 403);
 
-        $certs = EmployeeCertification::with('provider')
+        $certs = EmployeeCertification::with(['provider', 'trainingPlanItem.plan'])
             ->where('employee_id', $employee->id)
             ->when($request->search, fn($q, $v) => $q->where('title', 'like', "%{$v}%"))
             ->latest()
@@ -231,6 +260,53 @@ class EmployeeCertificationController extends Controller
         ));
     }
 
+    /**
+     * The planned training a certificate is linked to: it must be an approved training of the same
+     * employee.
+     */
+    private function resolveTraining(?string $uuid, Employee $employee): ?TrainingPlanItem
+    {
+        if (!$uuid) {
+            return null;
+        }
+
+        if (!feature('training_plan.enabled')) {
+            throw ValidationException::withMessages([
+                'training_plan_item_uuid' => 'Training plans are switched off, so a certificate can\'t be linked to one.',
+            ]);
+        }
+
+        $training = TrainingPlanItem::where('uuid', $uuid)->with('plan')->first();
+
+        if (!$training || (int) $training->employee_id !== (int) $employee->id) {
+            throw ValidationException::withMessages([
+                'training_plan_item_uuid' => 'Choose a planned training of this employee.',
+            ]);
+        }
+
+        // Approved trainings stay approved (and certifiable) while their plan is being revised.
+        if (!$training->isApproved()) {
+            throw ValidationException::withMessages([
+                'training_plan_item_uuid' => 'Only an approved planned training can be linked.',
+            ]);
+        }
+
+        return $training;
+    }
+
+    /** Optionally mark the linked training completed, dated when the certificate was received. */
+    private function completeTraining(?TrainingPlanItem $training, Request $request, EmployeeCertification $cert): void
+    {
+        if (!$training || !$request->boolean('mark_training_completed') || $training->status === TrainingStatus::COMPLETED) {
+            return;
+        }
+
+        $training->update([
+            'status'       => TrainingStatus::COMPLETED,
+            'completed_at' => $cert->date_received ?? now(),
+        ]);
+    }
+
     private function resolveProvider(Request $request): int
     {
         if ($request->filled('certification_provider_id')) {
@@ -240,5 +316,10 @@ class EmployeeCertificationController extends Controller
         return CertificationProvider::firstOrCreate(
             ['name' => trim($request->provider_name)]
         )->id;
+    }
+
+    private function typeId(?string $uuid): ?int
+    {
+        return $uuid ? CertificationType::where('uuid', $uuid)->value('id') : null;
     }
 }

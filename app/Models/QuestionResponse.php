@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\QuestionBank\Question;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class QuestionResponse extends ApplicationModel
@@ -39,5 +40,11 @@ class QuestionResponse extends ApplicationModel
     public function respondable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /** The appraiser's changes to this answer, oldest first. */
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(QuestionResponseRevision::class)->orderBy('id');
     }
 }

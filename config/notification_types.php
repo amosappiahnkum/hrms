@@ -121,4 +121,80 @@ return [
             ],
         ],
     ],
+
+    'training_plan' => [
+        'label'       => 'Training Plan',
+        'description' => 'Training plan approvals and upcoming planned trainings.',
+        'icon'        => 'training',
+        'types'       => [
+            'training_plan_approval' => [
+                'label'          => 'Training Plan Approvals',
+                'description'    => 'When a training plan reaches your approval level, or when one you prepared is approved or returned.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'training_plan_collection' => [
+                'label'          => 'Training Needs Requests',
+                'description'    => 'When HR opens the training plan for heads of department to add their staff\'s training needs.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'training_plan_reminder' => [
+                'label'          => 'Upcoming Training Reminder',
+                'description'    => 'Reminders before a planned training starts, and when a past training still needs its status updated.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'training_evaluation' => [
+                'label'          => 'Training Feedback & Reviews',
+                'description'    => 'When a training you completed needs your feedback, or a training your staff completed needs your review.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+        ],
+    ],
+    'competency' => [
+        'label'       => 'Competency Matrix',
+        'description' => 'Effectiveness checks of development, and the authorization register.',
+        'icon'        => 'competency',
+        'types'       => [
+            'competency_authorization' => [
+                'label'          => 'Authorizations',
+                'description'    => 'Recommendations to review, and authorizations granted, declined, suspended, revoked or expiring.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'competency_evaluation' => [
+                'label'          => 'Effectiveness Checks',
+                'description'    => 'When development you planned (e.g. a training) has taken place and the competency needs re-rating.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+        ],
+    ],
+    'payroll' => [
+        'label'       => 'Payroll',
+        'description' => 'Overtime, loans and pay runs waiting for your approval.',
+        'icon'        => 'payroll',
+        'types'       => [
+            'payslip_available' => [
+                'label'          => 'Payslips',
+                'description'    => 'When your payslip for a month is ready.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'payroll_decided' => [
+                'label'          => 'Decisions on my requests',
+                'description'    => 'When your overtime or loan request is approved or rejected.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+            'payroll_approval' => [
+                'label'          => 'Approvals',
+                'description'    => 'When an overtime request, loan or pay run reaches a step you approve.',
+                'default_email'  => true,
+                'default_in_app' => true,
+            ],
+        ],
+    ],
 ];

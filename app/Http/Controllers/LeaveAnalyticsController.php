@@ -20,7 +20,7 @@ class LeaveAnalyticsController extends Controller
         if ($request->filled('department')) {
             $dept = Department::where('uuid', $request->department)->first();
             if ($dept) {
-                $base->where('department_id', $dept->id);
+                $base->whereIn('department_id', Department::subtreeIds($dept->id));
             }
         }
 

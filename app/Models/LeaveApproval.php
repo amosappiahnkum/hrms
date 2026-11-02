@@ -14,6 +14,8 @@ class LeaveApproval extends Model
         'leave_request_id',
         'approved_by',
         'role',
+        // Which head in a chain of heads decided (0 = the supervisor).
+        'step',
         'decision',
         'comment',
         'days_approved',

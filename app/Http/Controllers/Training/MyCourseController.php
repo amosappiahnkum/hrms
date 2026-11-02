@@ -19,6 +19,7 @@ class MyCourseController extends Controller
         $userId = auth()->id();
 
         $enrollments = CourseEnrollment::with(['course' => fn ($q) => $q->withCount('chapters')->with('category')])
+            ->withCount(['chapterProgress as completed_chapters_count' => fn ($q) => $q->whereNotNull('completed_at')])
             ->where('user_id', $userId)
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
             ->when($request->search, fn ($q, $v) => $q->whereHas('course', fn ($cq) => $cq->where('title', 'like', "%{$v}%")))
@@ -34,6 +35,7 @@ class MyCourseController extends Controller
                 'due_date'     => $enrollment->due_date?->toDateTimeString(),
                 'completed_at' => $enrollment->completed_at?->toDateTimeString(),
                 'final_score'  => $enrollment->final_score,
+                'completed_chapters' => $enrollment->completed_chapters_count,
             ];
             return $course;
         });

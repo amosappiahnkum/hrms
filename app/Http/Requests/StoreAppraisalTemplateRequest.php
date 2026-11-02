@@ -22,6 +22,8 @@ class StoreAppraisalTemplateRequest extends FormRequest
             'is_active'           => ['nullable', 'boolean'],
             'include_training_section' => ['nullable', 'boolean'],
             'include_next_period_targets' => ['nullable', 'boolean'],
+            // Share of the overall score from the supervisor's section (the employee's section has the rest)
+            'supervisor_weight'   => ['nullable', 'integer', 'between:0,100'],
         ];
     }
 }
