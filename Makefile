@@ -6,7 +6,7 @@ COMPOSE_PROD := docker compose -f docker-compose.prod.yml
 .PHONY: help dev build down restart logs shell \
         install key \
         artisan tinker migrate fresh seed test clear-cache optimize \
-        prod build-prod down-prod logs-prod \
+        check-prod prod build-prod down-prod logs-prod \
         deploy
 
 help: ## Show available targets
@@ -75,11 +75,16 @@ optimize: ## Cache config/routes/views for production
 
 # ── Prod (docker-compose.prod.yml) ────────────────────────────────────────────
 
-prod: ## Start the production stack
+check-prod: ## Check .env holds production values (APP_ENV, APP_DEBUG, REDIS_PASSWORD…)
+	@sh ./.scripts/check-prod-env.sh
+
+prod: check-prod ## Start the production stack
 	$(COMPOSE_PROD) up -d
 
-build-prod: ## Build the production image
-	$(COMPOSE_PROD) build
+build-prod: check-prod ## Build the production image on the latest base and recreate the stack with it and .env
+	$(COMPOSE_PROD) build --pull
+	$(COMPOSE_PROD) up -d --force-recreate --remove-orphans
+	$(COMPOSE_PROD) ps
 
 down-prod: ## Stop and remove production containers
 	$(COMPOSE_PROD) down
