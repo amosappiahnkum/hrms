@@ -18,6 +18,12 @@ errors=0
 fail() { echo "✗ $1"; errors=$((errors + 1)); }
 warn() { echo "! $1"; }
 
+# Set twice, Laravel reads the first value and Docker's env_file the last: they'd disagree
+for key in APP_ENV APP_DEBUG APP_KEY APP_PORT REDIS_PASSWORD PAYMENT_FINGERPRINT_KEY SESSION_SECURE_COOKIE LOG_LEVEL; do
+    count=$(grep -cE "^$key=" "$env_file")
+    [ "$count" -gt 1 ] && fail "$key is set $count times: keep one."
+done
+
 [ "$(value APP_ENV)" = "production" ] || fail "APP_ENV must be production (is '$(value APP_ENV)')."
 [ "$(value APP_DEBUG)" = "false" ] || fail "APP_DEBUG must be false (is '$(value APP_DEBUG)')."
 [ -n "$(value APP_KEY)" ] || fail "APP_KEY is empty."
