@@ -34,6 +34,9 @@ class UpdateJobDetailRequest extends FormRequest
             'joined_date' => 'nullable|date',
             'room' => 'nullable|string',
             'location' => 'string',
+            // HR only (the controller drops them for anyone else): when a fixed-term contract runs.
+            'contract_start_date' => 'nullable|date',
+            'contract_end_date' => 'nullable|date|after_or_equal:contract_start_date',
         ];
     }
 

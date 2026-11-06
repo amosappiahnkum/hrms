@@ -59,6 +59,7 @@ class EmployeeController extends Controller
             ->maritalStatus($request->marital_status)
             ->rank($request->rank_id)
             ->jobCategory($request->job_category_id)
+            ->jobType($request->job_type)
             ->search($request->search);
 
         // Everything the list shows at a glance, loaded up front (no query per row).

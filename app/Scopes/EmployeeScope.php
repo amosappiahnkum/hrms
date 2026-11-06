@@ -11,41 +11,62 @@ trait EmployeeScope
         return $archived ? $query->onlyTrashed() : $query;
     }
 
-    public function scopeDepartment(Builder $query, ?string $department): Builder
+    /**
+     * A filter's values: an array (department[]=3&department[]=5) or a comma list (department=3,5), without empties
+     * and "all". Empty: no filter.
+     */
+    private static function filterValues(array|string|int|null $value): array
     {
-        return $department && $department !== 'all'
-            // The department and its sub-departments.
-            ? $query->whereIn('department_id', \App\Models\Config\Department::subtreeIds((int) $department))
+        $values = is_array($value) ? $value : explode(',', (string) $value);
+
+        return array_values(array_filter(array_map(fn ($v) => trim((string) $v), $values), fn ($v) => $v !== '' && $v !== 'all'));
+    }
+
+    public function scopeDepartment(Builder $query, array|string|int|null $department): Builder
+    {
+        $ids = self::filterValues($department);
+
+        return $ids
+            // Each department and its sub-departments.
+            ? $query->whereIn('department_id', collect($ids)->flatMap(fn ($id) => \App\Models\Config\Department::subtreeIds((int) $id))->unique()->all())
             : $query;
     }
 
-    public function scopeGender(Builder $query, ?string $gender): Builder
+    public function scopeGender(Builder $query, array|string|null $gender): Builder
     {
-        return $gender && $gender !== 'all'
-            ? $query->where('gender', $gender)
+        $values = self::filterValues($gender);
+
+        return $values ? $query->whereIn('gender', $values) : $query;
+    }
+
+    public function scopeMaritalStatus(Builder $query, array|string|null $status): Builder
+    {
+        $values = self::filterValues($status);
+
+        return $values ? $query->whereIn('marital_status', $values) : $query;
+    }
+
+    public function scopeRank(Builder $query, array|string|int|null $rank): Builder
+    {
+        $ids = self::filterValues($rank);
+
+        return $ids ? $query->whereIn('rank_id', $ids) : $query;
+    }
+
+    public function scopeJobCategory(Builder $query, array|string|int|null $jobCategory): Builder
+    {
+        $ids = self::filterValues($jobCategory);
+
+        return $ids
+            ? $query->whereHas('jobDetail', fn ($q) => $q->whereIn('job_category_id', $ids))
             : $query;
     }
 
-    public function scopeMaritalStatus(Builder $query, ?string $status): Builder
+    public function scopeJobType(Builder $query, array|string|null $jobType): Builder
     {
-        return $status && $status !== 'all'
-            ? $query->where('marital_status', $status)
-            : $query;
-    }
+        $values = self::filterValues($jobType);
 
-    public function scopeRank(Builder $query, ?string $rank): Builder
-    {
-        return $rank && $rank !== 'all'
-            ? $query->where('rank_id', $rank)
-            : $query;
-    }
-
-    public function scopeJobCategory(Builder $query, ?string $jobCategory): Builder
-    {
-        return $jobCategory && $jobCategory !== 'all'
-            ? $query->whereHas('jobDetail', fn($q) => $q->where('job_category_id', $jobCategory)
-            )
-            : $query;
+        return $values ? $query->whereIn('job_type', $values) : $query;
     }
 
     public function scopeSearch(Builder $query, ?string $search): Builder

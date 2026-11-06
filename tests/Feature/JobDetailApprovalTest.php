@@ -92,4 +92,38 @@ class JobDetailApprovalTest extends TestCase
             $data['pending_changes']
         );
     }
+
+    public function test_hr_sets_contract_dates_and_the_list_shows_when_it_ends(): void
+    {
+        Event::fake([ApprovalRequested::class]);
+        $this->setUpAccess([]);
+        $hr = $this->userWithRole('hr');
+        $hr->givePermissionTo('edit-employee');
+        $staff = $this->userWithRole('staff');
+        $employee = $staff->employee;
+        $employee->update(['job_type' => 'contract']);
+        $employee->jobDetail()->update([
+            'joined_date' => '2025-01-06', 'room' => 'A1', 'location' => 'Main Campus',
+            'job_category_id' => JobCategory::create(['name' => 'Senior Staff', 'leave_entitlement' => 30])->id,
+        ]);
+        $url = "/api/v1/employees/{$employee->uuid}/job-detail";
+
+        Sanctum::actingAs($hr);
+        $this->putJson($url, $this->payload($employee, ['contract_start_date' => '2026-01-01', 'contract_end_date' => '2025-12-31']))
+            ->assertJsonValidationErrors('contract_end_date');
+        $this->putJson($url, $this->payload($employee, ['contract_start_date' => '2026-01-01', 'contract_end_date' => '2027-12-31']))
+            ->assertOk();
+
+        $this->getJson($url)->assertJsonPath('data.contract_start_date', '2026-01-01')
+            ->assertJsonPath('data.contract_end_date', '2027-12-31')
+            ->assertJsonPath('data.job_type', 'contract');
+        $row = collect($this->getJson('/api/v1/employees?per_page=50')->json('data'))->firstWhere('uuid', $employee->uuid);
+        $this->assertSame('2027-12-31', $row['contract_end_date']);
+
+        // The employee can't move their own contract's end: it's dropped, not sent for approval.
+        Sanctum::actingAs($staff);
+        $this->putJson($url, $this->payload($employee, ['contract_end_date' => '2030-12-31']))->assertOk();
+        $this->assertSame('2027-12-31', $employee->jobDetail->fresh()->contract_end_date->toDateString());
+        $this->assertSame(0, InformationUpdate::where('information_type', 'JobDetail')->count());
+    }
 }

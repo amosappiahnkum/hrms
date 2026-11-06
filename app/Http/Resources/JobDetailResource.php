@@ -26,6 +26,10 @@ class JobDetailResource extends JsonResource
             'room' => $this->room,
             'location' => $this->location,
             'joined_date' => Carbon::parse($this->joined_date)->format('Y-m-d'),
+            'contract_start_date' => $this->contract_start_date?->format('Y-m-d'),
+            'contract_end_date' => $this->contract_end_date?->format('Y-m-d'),
+            // Whether contract dates apply (fixed-term job types).
+            'job_type' => $this->employee->job_type,
             'employee_uuid' => $this->employee->uuid,
             'job_category_uuid' => $this->jobCategory->uuid,
             'job_category' => $this->jobCategory->name,

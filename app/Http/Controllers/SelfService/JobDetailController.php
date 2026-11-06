@@ -52,6 +52,11 @@ class JobDetailController extends Controller
 
             $changes = $request->validated();
 
+            // Contract dates are HR's to set: an employee can't change when their own contract ends.
+            if (!$this->can('edit-employee')) {
+                unset($changes['contract_start_date'], $changes['contract_end_date']);
+            }
+
             if ($this->can('edit-employee')) {
                 $jobDetail->update($changes);
             } else {

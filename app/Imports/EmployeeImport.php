@@ -68,6 +68,9 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
         $employee->jobDetail()->create([
             'status' => null,
             'position_id' => $position->id,
+            // Optional columns: when a fixed-term contract runs.
+            'contract_start_date' => $this->date($row['contract_start_date'] ?? null),
+            'contract_end_date' => $this->date($row['contract_end_date'] ?? null),
         ]);
 
         if (!empty($email)) {
@@ -94,5 +97,17 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
         }
 
         return $employee;
+    }
+
+    /** A date cell, whether Excel stored it as a date (a serial number) or as text; empty: null. */
+    private function date(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return is_numeric($value)
+            ? Carbon::parse(Date::excelToDateTimeObject($value))->format('Y-m-d')
+            : Carbon::parse($value)->format('Y-m-d');
     }
 }
