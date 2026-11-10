@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Helpers\Helper;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -31,7 +32,7 @@ class ArchivedEmployeeResource extends JsonResource
             'other_email' => $this->contactDetail->other_email,
             'rank' => $this->rank?->name,
             'department' => $this->department?->name,
-            'photo' => $this->photo ? '/storage/images/employees/' . $this->photo->file_name : null,
+            'photo' => Helper::getTempPhoto($this->photo),
             'termination_reason' => $this->terminationReason?->reason,
             'termination_date' => $this->termination_date,
             'terminated_by' => $this->terminated_by,
