@@ -34,13 +34,18 @@ class LeaveHelper
             return $daysRequested;
         }
 
-        $daysCount = $this->getLeaveDays($startDate, $daysRequested);
+        // A half day takes up its calendar day: dates are worked out on whole days, the half is kept.
+        $requested = (float) $daysRequested;
+        $whole = (int) ceil($requested);
+        $half = $requested - $whole;
 
-        if ($daysCount < $daysRequested) {
-            $daysRequested = $this->getLeaveDays($startDate, $daysRequested + ($daysRequested - $daysCount));
+        $daysCount = $this->getLeaveDays($startDate, $whole);
+
+        if ($daysCount < $whole) {
+            $whole = $this->getLeaveDays($startDate, $whole + ($whole - $daysCount));
         }
 
-        return $daysRequested;
+        return $whole + $half;
     }
 
     /**

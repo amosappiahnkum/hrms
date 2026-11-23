@@ -7,6 +7,7 @@ use App\Helpers\Helper;
 use App\Http\Requests\UpdateContactDetailRequest;
 use App\Http\Resources\ContactDetailResource;
 use App\Models\SelfService\Employee;
+use App\Services\Employee\WorkEmail;
 use App\Services\UpdateApprovalService;
 use App\Traits\InformationUpdate;
 use App\Traits\Notifier;
@@ -14,6 +15,7 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class ContactDetailController extends Controller
@@ -58,6 +60,24 @@ class ContactDetailController extends Controller
         try {
 
             $changes = $request->validated();
+
+            // The work email is the login email: HR changes it, through WorkEmail so both stay in step.
+            $workEmail = app(WorkEmail::class);
+            $newWorkEmail = $changes['work_email'] ?? null;
+            unset($changes['work_email']);
+
+            if (array_key_exists('work_email', $request->validated()) && $workEmail->differs($employee, $newWorkEmail)) {
+                if (!$this->can('edit-employee')) {
+                    throw ValidationException::withMessages(['work_email' => 'Only HR can change your work email.']);
+                }
+                if ($newWorkEmail) {
+                    $workEmail->change($employee, $newWorkEmail);
+                } elseif ($employee->userAccount) {
+                    throw ValidationException::withMessages(['work_email' => 'The work email is this employee\'s login and cannot be removed.']);
+                } else {
+                    $changes['work_email'] = null;
+                }
+            }
 
             if ($this->can('edit-employee')) {
                 $contact->update($changes);

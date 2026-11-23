@@ -22,6 +22,7 @@ class LeaveTypeLevelConfigResource extends JsonResource
             'start_of_annual_cycle' => $this->start_of_annual_cycle,
             'allow_half_day' => $this->allow_half_day,
             'allow_carry_forward' => $this->allow_carry_forward,
+            'max_carry_forward_days' => $this->max_carry_forward_days,
             'maximum_allotment' => $this->maximum_allotment,
             'maximum_consecutive_days' => $this->maximum_consecutive_days,
             'should_request_before' => $this->should_request_before,

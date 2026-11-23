@@ -49,6 +49,8 @@ class LeaveRequest extends AppModel
         'status' => Statuses::class,
         'approval_chain' => 'array',
         'approval_step' => 'integer',
+        'days_requested' => 'float',
+        'days_approved' => 'float',
     ];
 
     /** The head after the current one, if the chain goes on. */

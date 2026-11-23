@@ -23,7 +23,17 @@ class LeaveTypeLevelConfig extends Model
         'allow_carry_forward',
         'maximum_allotment',
         'maximum_consecutive_days',
-        'should_request_before'
+        'should_request_before',
+        'max_carry_forward_days',
+    ];
+
+    protected $casts = [
+        'number_of_days' => 'float',
+        'allow_half_day' => 'boolean',
+        'allow_carry_forward' => 'boolean',
+        'maximum_consecutive_days' => 'integer',
+        'should_request_before' => 'integer',
+        'max_carry_forward_days' => 'integer',
     ];
 
     public function leaveType(): BelongsTo

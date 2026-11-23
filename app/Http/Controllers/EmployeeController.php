@@ -19,6 +19,7 @@ use App\Models\TerminationReason;
 use App\Models\User;
 use App\Notifications\EmailLinkedNotification;
 use App\Notifications\PasswordResetNotification;
+use App\Services\Employee\WorkEmail;
 use App\Services\MinioUploadService;
 use App\Services\SettingService;
 use App\Services\UpdateApprovalService;
@@ -213,7 +214,10 @@ class EmployeeController extends Controller
     {
         $plainPassword = Str::random(12);
 
-        $employee->contactDetail?->update(['work_email' => $email]);
+        $email = WorkEmail::normalize($email);
+        app(WorkEmail::class)->assertAvailable($email, $employee);
+
+        $employee->contactDetail()->updateOrCreate([], ['work_email' => $email]);
 
         $user = User::create([
             'name'        => $employee->name,
@@ -320,31 +324,29 @@ class EmployeeController extends Controller
 
     public function updateStaffMail(Request $request): JsonResponse
     {
-        $contact = ContactDetail::find($request->id);
+        $request->validate(['work_email' => ['required', 'email']]);
 
-        $email = $request->work_email;
+        $employee = ContactDetail::findOrFail($request->id)->employee;
 
-        $employee = $contact->employee;
+        DB::beginTransaction();
+        try {
+            if ($employee->userAccount) {
+                // Their login email changes with it (WorkEmail).
+                app(WorkEmail::class)->change($employee, $request->work_email);
+                $email = $employee->userAccount->fresh()->email;
 
-        $contact->update($request->only(['work_email']));
+                Notification::route('mail', $email)->notify(
+                    new EmailLinkedNotification(name: $employee->first_name, email: $email)
+                );
+            } else {
+                $this->provisionUserAccount($employee, $request->work_email);
+            }
 
-        $user = User::updateOrCreate([
-            'email' => $email
-        ], [
-            'name' => $employee->name,
-            'username' => $email,
-            'email' => $email,
-            'password' => Hash::make(Str::random()),
-            'provider' => null,
-            'provider_id' => null,
-            'employee_id' => $employee->id
-        ]);
-
-        $user->assignRole('staff');
-
-        Notification::route('mail', $email)->notify(
-            new EmailLinkedNotification(name: $employee->first_name, email: $email)
-        );
+            DB::commit();
+        } catch (Exception $exception) {
+            DB::rollBack();
+            return ApiResponse::fromException($exception);
+        }
 
         return response()->json(["message" => "Email updated successfully"]);
     }

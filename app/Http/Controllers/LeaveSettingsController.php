@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Leave\LeaveApprover;
+use App\Services\Leave\LeaveBalance;
 use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,11 +17,31 @@ class LeaveSettingsController extends Controller
 {
     public function show(): JsonResponse
     {
-        return response()->json(['data' => ['approval_chain' => LeaveApprover::rule(), 'department_levels' => \App\Models\Config\Department::levels()]]);
+        return response()->json(['data' => $this->data()]);
+    }
+
+    private function data(): array
+    {
+        [$month, $day] = LeaveBalance::cycleStart();
+
+        return [
+            'approval_chain' => LeaveApprover::rule(),
+            'department_levels' => \App\Models\Config\Department::levels(),
+            'cycle_start' => sprintf('%02d-%02d', $month, $day),
+        ];
     }
 
     public function update(Request $request): JsonResponse
     {
+        // The leave year: saved on its own, from its own card.
+        if ($request->has('cycle_start') && !$request->has('approval_chain')) {
+            $value = $request->validate(['cycle_start' => ['required', 'date_format:m-d']])['cycle_start'];
+            app(SettingService::class)->set('leave.cycle_start', $value);
+            activity('leave-settings')->causedBy($request->user())->withProperties(['cycle_start' => $value])->log('Leave year start changed');
+
+            return response()->json(['data' => $this->data(), 'message' => 'Saved.']);
+        }
+
         $levels = count(\App\Models\Config\Department::levels());
         $data = $request->validate([
             'approval_chain.stop'  => ['required', Rule::in(['count', 'level', 'top'])],
@@ -35,6 +56,6 @@ class LeaveSettingsController extends Controller
         app(SettingService::class)->set('leave.approval_chain', $rule);
         activity('leave-settings')->causedBy($request->user())->withProperties($rule)->log('Leave approvers changed');
 
-        return response()->json(['data' => ['approval_chain' => LeaveApprover::rule(), 'department_levels' => \App\Models\Config\Department::levels()], 'message' => 'Saved.']);
+        return response()->json(['data' => $this->data(), 'message' => 'Saved.']);
     }
 }

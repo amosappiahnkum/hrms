@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SelfService\ContactDetail;
 use App\Models\User;
+use App\Services\Employee\WorkEmail;
 use Exception;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -30,7 +31,11 @@ class SocialAuthController
                 return redirect($frontendURL . '/login?error=invalid_token');
             }
 
-            $contactDetail = ContactDetail::where('work_email', $socialUser->getEmail())->first();
+            $googleEmail = WorkEmail::normalize($socialUser->getEmail());
+
+            // The login email is the work email; the contact copy covers employees without an account yet.
+            $contactDetail = User::query()->whereRaw('LOWER(email) = ?', [$googleEmail])->first()?->employee?->contactDetail
+                ?? ContactDetail::query()->whereRaw('LOWER(work_email) = ?', [$googleEmail])->first();
 
             if (!$contactDetail) {
                 return redirect($frontendURL . '/account-not-found?error=account_not_found');
@@ -38,11 +43,11 @@ class SocialAuthController
 
             if (!$contactDetail->employee->userAccount) {
                 $user = User::updateOrCreate([
-                    'email' => $socialUser->getEmail()
+                    'email' => $googleEmail
                 ], [
                     'name' => $socialUser->getName(),
-                    'username' => $socialUser->getEmail(),
-                    'email' => $socialUser->getEmail(),
+                    'username' => $googleEmail,
+                    'email' => $googleEmail,
                     'password' => Hash::make(Str::random()),
                     'provider' => 'google',
                     'provider_id' => $socialUser->getId(),

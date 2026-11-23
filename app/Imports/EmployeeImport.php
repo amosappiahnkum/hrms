@@ -6,6 +6,7 @@ use App\Models\Config\Department;
 use App\Models\Position;
 use App\Models\SelfService\Employee;
 use App\Models\User;
+use App\Services\Employee\WorkEmail;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -34,7 +35,7 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
             'name' => $row['position']
         ]);
 
-        $email = $row['work_email'];
+        $email = WorkEmail::normalize($row['work_email'] ?? null);
         $employee = Employee::updateOrCreate([
             'first_name' => $row['first_name'] ?: '',
             'middle_name' => $row['other_names'] ?: '',
@@ -76,21 +77,20 @@ class EmployeeImport implements ToModel, WithHeadingRow, WithProgressBar
         if (!empty($email)) {
             $staffRole = Role::query()->where('name', 'staff')->first();
 
-            $cleanEmail = Str::of($email)
-                ->trim()
-                ->replace(' ', '')
-                ->lower();
-//            $username = Str::before($cleanEmail, '@');
-
-            $user = User::updateOrcreate(['username' => $cleanEmail], [
-                'name' => $employee->name,
-                'username' => $cleanEmail,
-                'email' => $cleanEmail,
-                'password' => Hash::make('password'),
-                'phone_number' => $row['phone_number'] ?: '',
-                'employee_id' => $employee->id,
-                'uuid' => Str::uuid(),
-            ]);
+            if ($user = $employee->userAccount) {
+                // Already has an account (re-import): its email follows the sheet, through WorkEmail.
+                app(WorkEmail::class)->change($employee, $email);
+            } else {
+                $user = User::updateOrCreate(['username' => $email], [
+                    'name' => $employee->name,
+                    'username' => $email,
+                    'email' => $email,
+                    'password' => Hash::make('password'),
+                    'phone_number' => $row['phone_number'] ?: '',
+                    'employee_id' => $employee->id,
+                    'uuid' => Str::uuid(),
+                ]);
+            }
 
             $employee->update(['user_id' => $user->id]);
             $user->assignRole($staffRole);

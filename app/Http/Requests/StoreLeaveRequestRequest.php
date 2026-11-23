@@ -25,7 +25,7 @@ class StoreLeaveRequestRequest extends FormRequest
     {
         return [
             'leave_type_id'   => 'required|string',
-            'number_of_days'  => 'required|integer|min:1',
+            'number_of_days'  => 'required|numeric|min:0.5|max:1000',
             'start_date'      => 'required|date',
             'reason'          => 'required|string',
             'reliever_id'     => 'nullable|string',

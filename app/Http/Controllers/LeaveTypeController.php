@@ -95,7 +95,15 @@ class LeaveTypeController extends Controller
     {
         $config = LeaveTypeLevelConfig::query()->where('uuid', $leaveTypeId)->firstOrFail();
 
-        $config->update($request->all());
+        $config->update($request->validate([
+            'number_of_days' => ['sometimes', 'required', 'integer', 'min:0'],
+            'maximum_consecutive_days' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'should_request_before' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'allow_half_day' => ['sometimes', 'boolean'],
+            'allow_carry_forward' => ['sometimes', 'boolean'],
+            // Most unused days carried into the next leave year; empty = all of them.
+            'max_carry_forward_days' => ['sometimes', 'nullable', 'integer', 'min:0'],
+        ]));
 
         return new LeaveTypeResource($config->leaveType);
     }

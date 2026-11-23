@@ -56,8 +56,8 @@ class LeaveAnalyticsController extends Controller
 
         return [
             'total'               => (int) $row->total,
-            'total_days_requested' => (int) ($row->total_days_requested ?? 0),
-            'total_days_approved'  => (int) ($row->total_days_approved ?? 0),
+            'total_days_requested' => (float) ($row->total_days_requested ?? 0),
+            'total_days_approved'  => (float) ($row->total_days_approved ?? 0),
             'avg_days_requested'  => (float) ($row->avg_days_requested ?? 0),
             'avg_days_approved'   => (float) ($row->avg_days_approved ?? 0),
             'approval_rate'       => $approvalRate,
@@ -121,8 +121,8 @@ class LeaveAnalyticsController extends Controller
             'id'             => $r->uuid,
             'name'           => $r->name,
             'count'          => (int) $r->count,
-            'days_requested' => (int) ($r->days_requested ?? 0),
-            'days_approved'  => (int) ($r->days_approved ?? 0),
+            'days_requested' => (float) ($r->days_requested ?? 0),
+            'days_approved'  => (float) ($r->days_approved ?? 0),
         ])->concat($zeroTypes)->values()->all();
     }
 
@@ -144,7 +144,7 @@ class LeaveAnalyticsController extends Controller
             'id'             => $r->uuid,
             'name'           => $r->name,
             'count'          => (int) $r->count,
-            'days_requested' => (int) ($r->days_requested ?? 0),
+            'days_requested' => (float) ($r->days_requested ?? 0),
         ])->all();
     }
 
@@ -169,8 +169,8 @@ class LeaveAnalyticsController extends Controller
             return [
                 'month'          => $monthNames[$m - 1],
                 'count'          => (int) ($row?->count ?? 0),
-                'days_requested' => (int) ($row?->days_requested ?? 0),
-                'days_approved'  => (int) ($row?->days_approved ?? 0),
+                'days_requested' => (float) ($row?->days_requested ?? 0),
+                'days_approved'  => (float) ($row?->days_approved ?? 0),
             ];
         })->all();
     }

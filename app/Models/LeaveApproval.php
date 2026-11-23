@@ -23,7 +23,8 @@ class LeaveApproval extends Model
     ];
 
     protected $casts = [
-        'decided_at' => 'datetime'
+        'decided_at' => 'datetime',
+        'days_approved' => 'float',
     ];
 
     /**

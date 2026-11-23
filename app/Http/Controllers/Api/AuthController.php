@@ -9,6 +9,7 @@ use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Requests\GetMiniProfileRequest;
 use App\Http\Resources\AuthResponseResource;
 use App\Models\SelfService\ContactDetail;
+use App\Services\Employee\WorkEmail;
 use App\Models\SelfService\Employee;
 use App\Models\User;
 use Exception;
@@ -246,16 +247,16 @@ class AuthController extends Controller
     public function getMiniProfile(GetMiniProfileRequest $request): JsonResponse
     {
         try {
-            $contact = ContactDetail::where('work_email', $request->email)->firstOrFail();
+            $email = WorkEmail::normalize($request->email);
+            $employee = User::query()->whereRaw('LOWER(email) = ?', [$email])->first()?->employee
+                ?? ContactDetail::query()->whereRaw('LOWER(work_email) = ?', [$email])->first()?->employee;
 
-            if (!$contact) {
+            if (!$employee) {
                 return response()->json([
                     'data' => null,
                     'message' => 'User not found'
                 ], 404);
             }
-
-            $employee = $contact->employee;
 
             $department = $employee?->department;
 

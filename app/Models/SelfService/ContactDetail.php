@@ -4,6 +4,7 @@ namespace App\Models\SelfService;
 
 use App\Models\ApplicationModel;
 use App\Models\InformationUpdate;
+use App\Services\Employee\WorkEmail;
 use App\Traits\HasApprovalUpdates;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -87,6 +88,11 @@ class ContactDetail extends ApplicationModel
 
     public function afterApproval(array $changes): void
     {
+        // Requests raised before work email became HR-only: apply to the login email too.
+        if (!empty($changes['work_email']) && $this->employee) {
+            app(WorkEmail::class)->change($this->employee, $changes['work_email']);
+        }
+
         if (array_key_exists('telephone', $changes)) {
 //            $phone = app(YourService::class)->cleanPhoneNumber($changes['telephone']);
 //            Helper::updateSRMS($this->employee->staff_id, $phone);

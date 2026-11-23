@@ -21,6 +21,8 @@ class LeaveBalanceAdjustment extends Model
         'adjusted_by',
     ];
 
+    protected $casts = ['days' => 'float'];
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);

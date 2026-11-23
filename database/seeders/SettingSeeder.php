@@ -43,6 +43,8 @@ class SettingSeeder extends Seeder
         // Who approves leave before HR: the employee's supervisor, then (optionally) heads above them. Default: the
         // supervisor only. Rule as for approval workflows: {stop: count | level | top, count?, level?}.
         $service->setDefault('leave.approval_chain', ['stop' => 'count', 'count' => 0], 'leave', 'Leave approvers before HR');
+        // The day (MM-DD) the leave year starts: balances, and carry forward of unused days, run per leave year.
+        $service->setDefault('leave.cycle_start', '01-01', 'leave', 'Leave year starts on');
 
         // === APPRAISAL ===
         $service->setDefault('features.appraisal.enabled', true, 'appraisal');

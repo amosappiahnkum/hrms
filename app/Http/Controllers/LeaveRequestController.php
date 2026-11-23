@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\Statuses;
 use App\Services\Leave\LeaveApprover;
+use App\Services\Leave\LeaveBalance;
 
 use App\Exports\LeaveRequestExport;
 use App\Helpers\LeaveHelper;
@@ -13,7 +14,6 @@ use App\Http\Resources\LeaveRequestResource;
 use App\Http\Resources\UpcomingLeaveResource;
 use App\Models\Config\LeaveType;
 use App\Models\Config\LeaveTypeLevelConfig;
-use App\Models\LeaveBalanceAdjustment;
 use App\Models\LeaveRequest;
 use App\Models\SelfService\Employee;
 use App\Models\User;
@@ -106,7 +106,7 @@ class LeaveRequestController extends Controller
 
 
             $startDate = Carbon::parse($request->start_date)->format('Y-m-d');
-            $daysRequested = (int) $request->number_of_days;
+            $daysRequested = (float) $request->number_of_days;
 
             $leaveType = LeaveType::where('uuid', $request->leave_type_id)->first();
 
@@ -143,11 +143,15 @@ class LeaveRequestController extends Controller
 
             $this->leaveHelper->validateLeaveDays($startDate, $daysRequested, $leaveType->request_type);
 
-            $balance = $this->calculateBalance($employee, $leaveType->id);
-            if ($balance['available'] < $daysRequested) {
+            $balances = app(LeaveBalance::class);
+            $config = $balances->configFor($employee, $leaveType->id);
+            if (!$config) {
                 return response()->json([
-                    'message' => "Insufficient leave balance. You have {$balance['available']} {$leaveType->request_type}(s) available for {$leaveType->name}.",
+                    'message' => "{$leaveType->name} isn't set up for your employee category. Please contact HR.",
                 ], 422);
+            }
+            if ($problem = $balances->violation($employee, $config, Carbon::parse($startDate), $daysRequested)) {
+                return response()->json(['message' => $problem], 422);
             }
 
             $relieverId = null;
@@ -653,47 +657,9 @@ class LeaveRequestController extends Controller
         $balances = LeaveTypeLevelConfig::with('leaveType')
             ->where('job_category_id', $employee->jobDetail->job_category_id)
             ->get()
-            ->map(function ($config) use ($employee) {
-                return $this->calculateBalance($employee, $config->leave_type_id, $config);
-            });
+            ->map(fn ($config) => app(LeaveBalance::class)->for($employee, $config));
 
         return response()->json($balances);
-    }
-
-    private function calculateBalance(Employee $employee, int $leaveTypeId, ?LeaveTypeLevelConfig $config = null): array
-    {
-        if (!$config) {
-            $config = LeaveTypeLevelConfig::with('leaveType')
-                ->where('job_category_id', $employee->jobDetail->job_category_id)
-                ->where('leave_type_id', $leaveTypeId)
-                ->first();
-        }
-
-        $adjustment = LeaveBalanceAdjustment::where('employee_id', $employee->id)
-            ->where('leave_type_id', $leaveTypeId)
-            ->sum('days');
-
-        $total = $config->number_of_days + $adjustment;
-
-        $used = LeaveRequest::where('employee_id', $employee->id)
-            ->where('leave_type_id', $leaveTypeId)
-            ->where('status', 'hr_approved')
-            ->sum('days_approved');
-
-        $pending = LeaveRequest::where('employee_id', $employee->id)
-            ->where('leave_type_id', $leaveTypeId)
-            ->whereIn('status', ['pending', 'hod_approved'])
-            ->sum('days_requested');
-
-        return [
-            'leave_type_id' => $leaveTypeId,
-            'type' => $config->leaveType->name,
-            'total' => $total,
-            'used' => $used,
-            'pending' => $pending,
-            'remaining' => max(0, $total - $used),
-            'available' => max(0, $total - $used - $pending),
-        ];
     }
 
     public function getUpcomingLeave(): AnonymousResourceCollection

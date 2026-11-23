@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\Employee\WorkEmail;
+use Illuminate\Validation\ValidationException;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -68,7 +70,7 @@ class UserController extends Controller
         $validated = $request->validate([
             'first_name'   => ['required', 'string', 'max:255'],
             'last_name'    => ['required', 'string', 'max:255'],
-            'email'        => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email'        => ['required', 'email', 'max:255', 'unique:users,email', 'unique:users,username'],
             'phone_number' => ['nullable', 'string', 'max:30'],
         ]);
 
@@ -83,7 +85,7 @@ class UserController extends Controller
             $user = User::create([
                 'name'         => $validated['first_name'] . ' ' . $validated['last_name'],
                 'username'     => strtolower($username),
-                'email'        => $validated['email'],
+                'email'        => WorkEmail::normalize($validated['email']),
                 'phone_number' => $validated['phone_number'] ?? null,
                 'password'     => Hash::make(Str::random(32)),
             ]);
@@ -116,12 +118,24 @@ class UserController extends Controller
 
         DB::beginTransaction();
         try {
-            User::findOrFail($id)->update($validated);
+            $user = User::findOrFail($id);
+
+            // For an employee's account this is their work email too: WorkEmail keeps both in step.
+            if (array_key_exists('email', $validated)) {
+                app(WorkEmail::class)->changeForUser($user, $validated['email']);
+                unset($validated['email']);
+            }
+
+            $user->update($validated);
             DB::commit();
 
             $user = User::find($id);
 
             return \response(new UserResource($user));
+        } catch (ValidationException $exception) {
+            DB::rollBack();
+
+            throw $exception;
         } catch (Exception $exception) {
             DB::rollBack();
 

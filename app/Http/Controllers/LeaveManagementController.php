@@ -8,6 +8,7 @@ use App\Models\Config\LeaveTypeLevelConfig;
 use App\Models\LeaveBalanceAdjustment;
 use App\Models\LeaveRequest;
 use App\Models\SelfService\Employee;
+use App\Services\Leave\LeaveBalance;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -82,7 +83,7 @@ class LeaveManagementController extends Controller
             return response()->json(['message' => 'Insufficient permissions.'], 403);
         }
 
-        $leaveTypes = LeaveType::all(['id', 'name']);
+        $leaveTypes = LeaveType::all(['id', 'name', 'request_type']);
 
         $employees = Employee::query()
             ->with(['jobDetail', 'department'])
@@ -109,32 +110,7 @@ class LeaveManagementController extends Controller
                     return null;
                 }
 
-                $adjustment = LeaveBalanceAdjustment::where('employee_id', $employee->id)
-                    ->where('leave_type_id', $type->id)
-                    ->sum('days');
-
-                $total = $config->number_of_days + $adjustment;
-
-                $used = LeaveRequest::where('employee_id', $employee->id)
-                    ->where('leave_type_id', $type->id)
-                    ->where('status', 'hr_approved')
-                    ->sum('days_approved');
-
-                $pending = LeaveRequest::where('employee_id', $employee->id)
-                    ->where('leave_type_id', $type->id)
-                    ->whereIn('status', ['pending', 'hod_approved'])
-                    ->sum('days_requested');
-
-                return [
-                    'leave_type_id' => $type->id,
-                    'type' => $type->name,
-                    'total' => $total,
-                    'used' => $used,
-                    'pending' => $pending,
-                    'remaining' => max(0, $total - $used),
-                    'available' => max(0, $total - $used - $pending),
-                    'adjustment' => $adjustment,
-                ];
+                return app(LeaveBalance::class)->for($employee, $config->setRelation('leaveType', $type));
             })->filter()->values();
 
             return [
@@ -159,7 +135,7 @@ class LeaveManagementController extends Controller
         $request->validate([
             'employee_id' => 'required|exists:employees,uuid',
             'leave_type_id' => 'required|exists:leave_types,id',
-            'days' => 'required|integer|not_in:0',
+            'days' => 'required|numeric|not_in:0|multiple_of:0.5',
             'reason' => 'required|string|max:500',
         ]);
 
