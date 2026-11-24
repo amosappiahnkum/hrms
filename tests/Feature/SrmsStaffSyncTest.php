@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 class SrmsStaffSyncTest extends TestCase
@@ -81,5 +82,22 @@ class SrmsStaffSyncTest extends TestCase
         app(SettingService::class)->set('features.integrations.srms', true, 'integrations');
         config(['srms.url' => null]);
         $this->assertFalse(SrmsStaffSync::enabled());
+    }
+
+    public function test_the_first_fill_waits_when_srms_says_too_many_and_sends_again(): void
+    {
+        Sleep::fake();
+        $this->employee();
+        Http::fake([
+            'srms.test/*' => Http::sequence()
+                ->push(['message' => 'Too Many Attempts.'], 429, ['Retry-After' => '7'])
+                ->push(['message' => 'Staff details updated.']),
+        ]);
+
+        $this->artisan('srms:push-staff')
+            ->expectsOutputToContain('Updated in SRMS: 1. Not in SRMS (skipped): 0. Failed: 0.')
+            ->assertSuccessful();
+        Sleep::assertSlept(fn ($duration) => $duration->totalSeconds === 7.0, 1);
+        Http::assertSentCount(2);
     }
 }

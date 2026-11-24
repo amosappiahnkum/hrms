@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Models\SelfService\Employee;
 use App\Services\Srms\SrmsStaffSync;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Sleep;
 use Throwable;
 
 /**
@@ -31,7 +33,7 @@ class PushStaffToSrmsCommand extends Command
             ->chunkById(100, function ($employees) use ($sync, &$counts): void {
                 foreach ($employees as $employee) {
                     try {
-                        $counts[$sync->push($employee, biodataUpdated: false)]++;
+                        $counts[$this->pushPaced($sync, $employee)]++;
                     } catch (Throwable $e) {
                         $counts['failed']++;
                         $this->warn("{$employee->staff_id}: {$e->getMessage()}");
@@ -42,5 +44,22 @@ class PushStaffToSrmsCommand extends Command
         $this->info("Updated in SRMS: {$counts['updated']}. Not in SRMS (skipped): {$counts['not_in_srms']}. Failed: {$counts['failed']}.");
 
         return $counts['failed'] > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /** SRMS takes a limited number of calls a minute: when it says "too many", wait as long as it asks and send again. */
+    private function pushPaced(SrmsStaffSync $sync, Employee $employee): string
+    {
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return $sync->push($employee, biodataUpdated: false);
+            } catch (RequestException $e) {
+                if ($e->response->status() !== 429 || $attempt >= 5) {
+                    throw $e;
+                }
+                $wait = max(1, (int) ($e->response->header('Retry-After') ?: 10));
+                $this->line("SRMS asked to slow down; waiting {$wait}s…");
+                Sleep::for($wait)->seconds();
+            }
+        }
     }
 }
