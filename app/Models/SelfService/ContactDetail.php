@@ -57,6 +57,24 @@ class ContactDetail extends ApplicationModel
         ];
     }
 
+    protected static function booted()
+    {
+        parent::booted();
+
+        static::saving(static function (ContactDetail $contact) {
+            if ($contact->isDirty('work_email')) {
+                $contact->work_email = WorkEmail::normalize($contact->work_email);
+            }
+        });
+
+        // The work email is the login email: keep the account in step however this was saved.
+        static::saved(static function (ContactDetail $contact) {
+            if ($contact->wasChanged('work_email') || $contact->wasRecentlyCreated) {
+                WorkEmail::syncFromContact($contact);
+            }
+        });
+    }
+
     /**
      * @return BelongsTo
      */

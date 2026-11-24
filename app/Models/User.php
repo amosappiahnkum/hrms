@@ -6,6 +6,7 @@ use App\Traits\RecordsActivity;
 use App\Models\SelfService\Employee;
 use App\Models\SelfService\GrantAndFund;
 use App\Models\Training\CourseEnrollment;
+use App\Services\Employee\WorkEmail;
 use App\Traits\HasActivityLogs;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -70,6 +71,30 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'last_login_at'     => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(static function (User $user) {
+            if (!$user->isDirty('email')) {
+                return;
+            }
+
+            $user->email = WorkEmail::normalize($user->email);
+
+            // A username that was the old email is the login name people know: it follows.
+            $old = $user->getOriginal('email');
+            if ($user->exists && $old && WorkEmail::normalize($user->getOriginal('username')) === WorkEmail::normalize($old)) {
+                $user->username = $user->email;
+            }
+        });
+
+        // An employee's email is their work email: keep their contact details in step however this was saved.
+        static::saved(static function (User $user) {
+            if ($user->wasChanged('email') || $user->wasRecentlyCreated) {
+                WorkEmail::syncFromUser($user);
+            }
+        });
+    }
 
     /**
      * @return BelongsTo

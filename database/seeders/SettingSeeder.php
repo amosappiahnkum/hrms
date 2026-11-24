@@ -202,6 +202,10 @@ class SettingSeeder extends Seeder
         $service->setDefault('features.staff_directory.grants', true, 'staff_directory');
         $service->setDefault('features.staff_directory.projects', true, 'staff_directory');
 
+        // === INTEGRATIONS ===
+        // TTU only: send staff names, contacts, rank and job title to TTU's SRMS (also needs SRMS_API_URL/KEY).
+        $service->setDefault('features.integrations.srms', false, 'integrations', 'Send staff details to TTU SRMS (TTU only)');
+
         // === SOCIAL AUTH ===
         $service->setDefault('features.social_auth.google', true, 'social_auth', isPublic: true);
         $service->setDefault('features.auth.password', true, 'auth', isPublic: true);

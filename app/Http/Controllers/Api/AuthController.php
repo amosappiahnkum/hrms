@@ -248,7 +248,8 @@ class AuthController extends Controller
     {
         try {
             $email = WorkEmail::normalize($request->email);
-            $employee = User::query()->whereRaw('LOWER(email) = ?', [$email])->first()?->employee
+            $user = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
+            $employee = ($user ? WorkEmail::employeeOf($user) : null)
                 ?? ContactDetail::query()->whereRaw('LOWER(work_email) = ?', [$email])->first()?->employee;
 
             if (!$employee) {

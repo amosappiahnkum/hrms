@@ -125,12 +125,58 @@ class WorkEmailTest extends TestCase
     public function test_sync_command_makes_the_contact_copy_follow_the_login_email(): void
     {
         $staff = $this->staff();
-        $staff->employee->contactDetail->update(['work_email' => 'old.address@ttu.edu.gh']);
+        // Drift from before the hooks: only a raw write gets past them now.
+        \Illuminate\Support\Facades\DB::table('contact_details')
+            ->where('employee_id', $staff->employee_id)->update(['work_email' => 'old.address@ttu.edu.gh']);
 
         $this->artisan('employees:sync-work-emails')->assertSuccessful();
         $this->assertSame('old.address@ttu.edu.gh', $staff->employee->contactDetail->fresh()->work_email, 'reports only');
 
         $this->artisan('employees:sync-work-emails --apply')->assertSuccessful();
         $this->assertSame('ama.owusu@ttu.edu.gh', $staff->employee->contactDetail->fresh()->work_email);
+    }
+
+    public function test_saving_the_contact_directly_moves_the_login_email(): void
+    {
+        $staff = $this->staff();
+
+        $staff->employee->contactDetail->update(['work_email' => 'Ama.Mensah@ttu.edu.gh']);
+
+        $staff->refresh();
+        $this->assertSame('ama.mensah@ttu.edu.gh', $staff->email);
+        $this->assertSame('ama.mensah@ttu.edu.gh', $staff->username);
+    }
+
+    public function test_saving_the_user_directly_moves_the_work_email(): void
+    {
+        $staff = $this->staff();
+
+        $staff->update(['email' => 'AMA.MENSAH@ttu.edu.gh']);
+
+        $this->assertSame('ama.mensah@ttu.edu.gh', $staff->employee->contactDetail->fresh()->work_email);
+        $this->assertSame('ama.mensah@ttu.edu.gh', $staff->fresh()->username);
+    }
+
+    public function test_clearing_the_contact_copy_does_not_clear_the_login(): void
+    {
+        $staff = $this->staff();
+
+        $staff->employee->contactDetail->update(['work_email' => null]);
+
+        $this->assertSame('ama.owusu@ttu.edu.gh', $staff->fresh()->email);
+    }
+
+    public function test_a_user_without_an_employee_only_changes_their_own_email(): void
+    {
+        $admin = User::create([
+            'name' => 'Admin', 'username' => 'admin@ttu.edu.gh', 'email' => 'admin@ttu.edu.gh', 'password' => bcrypt('x'),
+        ]);
+        $contacts = \App\Models\SelfService\ContactDetail::count();
+
+        app(WorkEmail::class)->changeForUser($admin, 'it.admin@ttu.edu.gh');
+
+        $this->assertSame('it.admin@ttu.edu.gh', $admin->fresh()->email);
+        $this->assertSame('it.admin@ttu.edu.gh', $admin->fresh()->username);
+        $this->assertSame($contacts, \App\Models\SelfService\ContactDetail::count());
     }
 }

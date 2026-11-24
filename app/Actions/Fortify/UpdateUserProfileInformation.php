@@ -35,7 +35,7 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
         $emailChanged = WorkEmail::normalize($input['email']) !== WorkEmail::normalize($user->email);
 
         // An employee's email is their work email, which only HR changes (employee profile › Contact).
-        if ($emailChanged && $user->employee && !$user->can('edit-employee')) {
+        if ($emailChanged && WorkEmail::employeeOf($user) && !$user->can('edit-employee')) {
             throw ValidationException::withMessages(['email' => 'Only HR can change your work email.'])
                 ->errorBag('updateProfileInformation');
         }

@@ -34,7 +34,8 @@ class SocialAuthController
             $googleEmail = WorkEmail::normalize($socialUser->getEmail());
 
             // The login email is the work email; the contact copy covers employees without an account yet.
-            $contactDetail = User::query()->whereRaw('LOWER(email) = ?', [$googleEmail])->first()?->employee?->contactDetail
+            $account = User::query()->whereRaw('LOWER(email) = ?', [$googleEmail])->first();
+            $contactDetail = ($account ? WorkEmail::employeeOf($account)?->contactDetail : null)
                 ?? ContactDetail::query()->whereRaw('LOWER(work_email) = ?', [$googleEmail])->first();
 
             if (!$contactDetail) {

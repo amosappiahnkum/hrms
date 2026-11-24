@@ -39,6 +39,8 @@ All models use UUID primary keys (see `app/Models/AppModel.php`), route model bi
 - **Work email = login email**: `users.email` is the source of truth; `contact_details.work_email` mirrors it. Change
   either only through `App\Services\Employee\WorkEmail` (`change()` / `changeForUser()`): it lowercases, checks
   uniqueness, updates both, and moves a `username` that was the old email. Only HR (`edit-employee`) can change it.
+  Model hooks on `User` and `ContactDetail` copy any saved change to the other side; only raw `DB::table()` /
+  query-builder updates get past them. `User::employee()` has a default, so use `WorkEmail::employeeOf($user)`.
   Reconcile old data with `php artisan employees:sync-work-emails [--apply]`.
 - **External Integrations**: Sync with SRMS via `Helper::updateSRMS()` (HTTP call to external API).
 

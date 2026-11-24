@@ -11,16 +11,26 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * An employee's work email is their login email: `users.email` is the source of truth and
- * `contact_details.work_email` mirrors it. Every change goes through here so the two never drift,
- * and a username that was the old email follows to the new one.
+ * `contact_details.work_email` mirrors it. Changes go through change() / changeForUser(), which check the
+ * address; the model hooks (syncFromContact / syncFromUser) keep the two in step whatever saves them, and
+ * User moves a username that was the old email.
  */
 class WorkEmail
 {
+    /** Set while one side is being copied to the other, so the other side's hook doesn't copy it back. */
+    private static bool $syncing = false;
+
     public static function normalize(?string $email): ?string
     {
         $email = Str::of((string) $email)->replace(' ', '')->lower()->value();
 
         return $email === '' ? null : $email;
+    }
+
+    /** The user's employee, or null: User::employee() has a default, so it is never null itself. */
+    public static function employeeOf(User $user): ?Employee
+    {
+        return $user->employee_id && $user->employee?->exists ? $user->employee : null;
     }
 
     /**
@@ -90,7 +100,7 @@ class WorkEmail
     /** Change a user's email; for an employee's account, their work email changes too. */
     public function changeForUser(User $user, string $email, string $field = 'email'): void
     {
-        if ($employee = $user->employee) {
+        if ($employee = self::employeeOf($user)) {
             $this->change($employee, $email, $field);
 
             return;
@@ -103,13 +113,44 @@ class WorkEmail
 
     private function applyToUser(User $user, string $email): void
     {
-        $changes = ['email' => $email];
+        // User's saving hook moves a username that was the old email.
+        $user->forceFill(['email' => $email])->save();
+    }
 
-        // A username that was the old email is the login name people know: it follows.
-        if ($user->username && self::normalize($user->username) === self::normalize($user->email)) {
-            $changes['username'] = $email;
+    /** ContactDetail saved: copy its work email to the employee's account. */
+    public static function syncFromContact(ContactDetail $contact): void
+    {
+        $email = self::normalize($contact->work_email);
+        $user = $contact->employee?->userAccount;
+
+        // Clearing the contact copy never clears a login (change() refuses that for HR).
+        if (self::$syncing || !$email || !$user || self::normalize($user->email) === $email) {
+            return;
         }
 
-        $user->forceFill($changes)->save();
+        self::copying(fn () => $user->forceFill(['email' => $email])->save());
+    }
+
+    /** User saved: copy their email to their employee's contact details. */
+    public static function syncFromUser(User $user): void
+    {
+        $email = self::normalize($user->email);
+        $contact = $user->employee_id ? Employee::find($user->employee_id)?->contactDetail : null;
+
+        if (self::$syncing || !$email || !$contact || self::normalize($contact->work_email) === $email) {
+            return;
+        }
+
+        self::copying(fn () => $contact->forceFill(['work_email' => $email])->save());
+    }
+
+    private static function copying(callable $write): void
+    {
+        self::$syncing = true;
+        try {
+            $write();
+        } finally {
+            self::$syncing = false;
+        }
     }
 }

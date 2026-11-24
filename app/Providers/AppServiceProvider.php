@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Jobs\PushStaffToSrms;
 use App\Models\Appraisal\Assessment;
 use App\Models\JobDetail;
 use App\Models\LeaveRequest;
@@ -56,6 +57,8 @@ class AppServiceProvider extends ServiceProvider
             $this->loadMigrationsFrom(base_path('tests/database/migrations'));
         }
 
+        $this->pushStaffToSrms();
+
 //        if (env('APP_ENV') != 'local') {
 //            URL::forceScheme('https');
 //        }
@@ -94,5 +97,31 @@ class AppServiceProvider extends ServiceProvider
             'Appraisal' => Appraisal::class,
             'Assessment' => Assessment::class,
         ]);
+    }
+
+    /**
+     * SRMS keeps staff names, contacts, rank and job title as HRMS has them: whenever one of those changes (however
+     * it is saved, an approved update request too), or someone leaves or comes back, SRMS is sent their details.
+     */
+    private function pushStaffToSrms(): void
+    {
+        $employeeFields = ['title', 'first_name', 'middle_name', 'last_name', 'staff_id', 'rank_id', 'termination_date'];
+        Employee::saved(static function (Employee $employee) use ($employeeFields): void {
+            if ($employee->wasRecentlyCreated || $employee->wasChanged($employeeFields)) {
+                PushStaffToSrms::for($employee);
+            }
+        });
+        Employee::deleted(static fn (Employee $employee) => PushStaffToSrms::for($employee, false));
+        Employee::restored(static fn (Employee $employee) => PushStaffToSrms::for($employee, false));
+        ContactDetail::saved(static function (ContactDetail $contact): void {
+            if ($contact->wasRecentlyCreated || $contact->wasChanged(['work_email', 'telephone'])) {
+                PushStaffToSrms::for($contact->employee);
+            }
+        });
+        JobDetail::saved(static function (JobDetail $job): void {
+            if ($job->wasRecentlyCreated || $job->wasChanged('position_id')) {
+                PushStaffToSrms::for($job->employee);
+            }
+        });
     }
 }
